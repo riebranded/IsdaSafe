@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
@@ -44,8 +43,10 @@ void main() {
       find.text('Location unavailable. Pan the map to position the pin.'),
       findsOneWidget,
     );
-    await tester.enterText(find.byType(TextField), 'Pond D');
-    await tester.drag(find.byType(FlutterMap), const Offset(40, 0));
+    await tester.enterText(find.byType(TextField).first, 'Pond D');
+    // Desktop test runs hit the manual lat/lng fallback (no Android/iOS/web
+    // platform view); editing a coordinate simulates picking a location.
+    await tester.enterText(find.byType(TextField).at(1), '10.3000');
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Add pond'));
     await tester.pumpAndSettle();

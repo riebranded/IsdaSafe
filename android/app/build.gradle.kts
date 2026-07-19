@@ -1,8 +1,20 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
+
+// Loaded from the repo-root .env (gitignored) rather than committed to
+// AndroidManifest.xml directly.
+val dotenv = Properties().apply {
+    val envFile = rootProject.file("../.env")
+    if (envFile.exists()) {
+        envFile.reader().use { load(it) }
+    }
+}
+val mapsApiKey: String = dotenv.getProperty("ISDASAFE_ANDROID_MAPS_KEY", "")
 
 android {
     namespace = "com.example.isdasafev2"
@@ -23,6 +35,7 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders["mapsApiKey"] = mapsApiKey
     }
 
     buildTypes {

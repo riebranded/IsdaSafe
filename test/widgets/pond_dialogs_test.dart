@@ -1,11 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
-import 'package:isdasafev2/widgets/location_picker_map.dart';
 import 'package:isdasafev2/widgets/pond_dialogs.dart';
 
 void main() {
@@ -35,22 +33,24 @@ void main() {
 
     expect(find.text('14.5995, 120.9842'), findsOneWidget);
     expect(find.text("You're here"), findsOneWidget);
+    // Desktop test runs hit the manual lat/lng fallback (no Android/iOS/web
+    // platform view), which shows the resolved location's coordinates.
     expect(
-      tester.widget<FlutterMap>(find.byType(FlutterMap)).options.initialZoom,
-      kUserLocationMapZoom,
+      tester
+          .widget<TextField>(find.byType(TextField).at(1))
+          .controller
+          ?.text,
+      '14.5995',
     );
-    final tileLayer = tester.widget<TileLayer>(find.byType(TileLayer));
-    expect(tileLayer.panBuffer, 0);
-    expect(tileLayer.keepBuffer, 1);
     expect(
-      tileLayer.tileDisplay.when(
-        instantaneous: (_) => true,
-        fadeIn: (_) => false,
-      ),
-      isTrue,
+      tester
+          .widget<TextField>(find.byType(TextField).at(2))
+          .controller
+          ?.text,
+      '120.9842',
     );
 
-    await tester.enterText(find.byType(TextField), 'Located pond');
+    await tester.enterText(find.byType(TextField).first, 'Located pond');
     await tester.pump();
 
     final addButton = tester.widget<FilledButton>(
@@ -91,14 +91,16 @@ void main() {
     await tester.tap(find.text('Open picker'));
     await tester.pump();
 
-    expect(find.byType(FlutterMap), findsOneWidget);
+    // Desktop test runs hit the manual lat/lng fallback (no Android/iOS/web
+    // platform view).
+    expect(find.byType(TextField), findsNWidgets(3));
     expect(
       find.text('Finding your location… You can adjust the map now.'),
       findsOneWidget,
     );
 
-    await tester.enterText(find.byType(TextField), 'Manual pond');
-    await tester.drag(find.byType(FlutterMap), const Offset(60, 0));
+    await tester.enterText(find.byType(TextField).first, 'Manual pond');
+    await tester.enterText(find.byType(TextField).at(1), '15.0000');
     await tester.pump();
 
     location.complete(const LatLng(14.5995, 120.9842));
@@ -107,10 +109,6 @@ void main() {
 
     expect(find.text('14.5995, 120.9842'), findsNothing);
     expect(find.text("You're here"), findsNothing);
-    expect(
-      tester.widget<FlutterMap>(find.byType(FlutterMap)).options.initialZoom,
-      kDefaultMapZoom,
-    );
 
     await tester.tap(find.widgetWithText(FilledButton, 'Add pond'));
     await tester.pumpAndSettle();

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../services/current_location_service.dart';
 import '../theme/app_spacing.dart';
@@ -71,16 +70,14 @@ typedef CurrentLocationLoader = Future<LatLng?> Function();
 /// The picker first requests a foreground location and opens centered on that
 /// fix. If location is unavailable or permission is rejected, it uses the
 /// Philippines-wide fallback and requires the user to move the map manually.
-/// [currentLocationLoader] and [tileProvider] allow deterministic tests.
+/// [currentLocationLoader] allows deterministic tests.
 Future<NewPondDraft?> showAddPondDialog(
   BuildContext context, {
-  TileProvider? tileProvider,
   CurrentLocationLoader? currentLocationLoader,
 }) {
   return showDialog<NewPondDraft>(
     context: context,
     builder: (context) => _AddPondDialog(
-      tileProvider: tileProvider,
       currentLocationLoader:
           currentLocationLoader ?? CurrentLocationService.getCurrentLocation,
     ),
@@ -88,13 +85,9 @@ Future<NewPondDraft?> showAddPondDialog(
 }
 
 class _AddPondDialog extends StatefulWidget {
-  const _AddPondDialog({
-    required this.currentLocationLoader,
-    this.tileProvider,
-  });
+  const _AddPondDialog({required this.currentLocationLoader});
 
   final CurrentLocationLoader currentLocationLoader;
-  final TileProvider? tileProvider;
 
   @override
   State<_AddPondDialog> createState() => _AddPondDialogState();
@@ -203,7 +196,6 @@ class _AddPondDialogState extends State<_AddPondDialog> {
                   initialCenter: _center.value,
                   initialZoom: _mapZoom,
                   centerLabel: _isAtUserLocation ? "You're here" : null,
-                  tileProvider: widget.tileProvider,
                   onUserInteraction: _handleUserInteraction,
                   onCenterChanged: _handleCenterChanged,
                 ),
@@ -263,7 +255,6 @@ Future<LocationDraft?> showEditLocationDialog(
   BuildContext context, {
   required double initialLatitude,
   required double initialLongitude,
-  TileProvider? tileProvider,
 }) async {
   final center = ValueNotifier(LatLng(initialLatitude, initialLongitude));
 
@@ -286,7 +277,6 @@ Future<LocationDraft?> showEditLocationDialog(
                   child: LocationPickerMap(
                     initialCenter: center.value,
                     initialZoom: kFocusedMapZoom,
-                    tileProvider: tileProvider,
                     onCenterChanged: (newCenter) => center.value = newCenter,
                   ),
                 ),

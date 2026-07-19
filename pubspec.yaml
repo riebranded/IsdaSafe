@@ -39,11 +39,10 @@ dependencies:
   # Typography (Lexend + Source Sans 3).
   google_fonts: ^6.2.1
 
-  # Pond location picker (OpenStreetMap tiles — free, no API key, and the
-  # only map option with official support across all 6 platforms this app
-  # targets, including Windows/Linux desktop).
-  flutter_map: ^8.3.1
-  latlong2: ^0.10.1
+  # Pond location picker. Uses Google Maps on Android/iOS/Web; Windows/Linux/
+  # macOS fall back to manual latitude/longitude entry since google_maps_flutter
+  # has no official desktop support.
+  google_maps_flutter: ^2.10.1
   geolocator: 14.0.3
 
 dev_dependencies:

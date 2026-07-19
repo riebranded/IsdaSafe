@@ -1,6 +1,8 @@
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 /// Country-wide default view (roughly the geographic center of the
 /// Philippines) shown when a pond has no prior location to anchor on.
@@ -13,6 +15,11 @@ const double kUserLocationMapZoom = 12;
 /// Closer zoom used when editing an existing pond location.
 const double kFocusedMapZoom = 14;
 
+/// google_maps_flutter has no official Windows/Linux/macOS support, so those
+/// platforms fall back to manual coordinate entry instead of a map view.
+bool get isMapViewSupported =>
+    kIsWeb || Platform.isAndroid || Platform.isIOS;
+
 /// A map with a pin fixed at the center of the viewport. The user pans and
 /// zooms the map underneath it to position the pin precisely.
 ///
@@ -21,6 +28,9 @@ const double kFocusedMapZoom = 14;
 /// initial/programmatic movement. A changed [initialCenter] recenters the
 /// existing controller instead of replacing the map. [centerLabel] identifies
 /// a programmatically supplied location and is hidden after manual movement.
+///
+/// On platforms where [isMapViewSupported] is false, renders a manual
+/// latitude/longitude entry form instead.
 class LocationPickerMap extends StatefulWidget {
   const LocationPickerMap({
     super.key,
@@ -29,7 +39,6 @@ class LocationPickerMap extends StatefulWidget {
     required this.onCenterChanged,
     this.centerLabel,
     this.onUserInteraction,
-    this.tileProvider,
   });
 
   final LatLng initialCenter;
@@ -37,15 +46,15 @@ class LocationPickerMap extends StatefulWidget {
   final ValueChanged<LatLng> onCenterChanged;
   final String? centerLabel;
   final VoidCallback? onUserInteraction;
-  final TileProvider? tileProvider;
 
   @override
   State<LocationPickerMap> createState() => _LocationPickerMapState();
 }
 
 class _LocationPickerMapState extends State<LocationPickerMap> {
-  final _mapController = MapController();
+  GoogleMapController? _mapController;
   late bool _showCenterLabel;
+  var _isProgrammaticMove = false;
 
   @override
   void initState() {
@@ -65,61 +74,77 @@ class _LocationPickerMapState extends State<LocationPickerMap> {
         oldWidget.initialCenter.longitude != widget.initialCenter.longitude;
     if (!centerChanged && oldWidget.initialZoom == widget.initialZoom) return;
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _mapController.move(widget.initialCenter, widget.initialZoom);
-      }
-    });
+    final controller = _mapController;
+    if (controller == null) return;
+    _isProgrammaticMove = true;
+    controller.moveCamera(
+      CameraUpdate.newLatLngZoom(widget.initialCenter, widget.initialZoom),
+    );
   }
 
-  void _handlePositionChanged(MapCamera camera, bool hasGesture) {
-    if (hasGesture) {
-      if (_showCenterLabel) setState(() => _showCenterLabel = false);
-      widget.onUserInteraction?.call();
-    }
-    widget.onCenterChanged(camera.center);
+  void _handleCameraMoveStarted() {
+    if (_isProgrammaticMove) return;
+    if (_showCenterLabel) setState(() => _showCenterLabel = false);
+    widget.onUserInteraction?.call();
   }
 
-  @override
-  void dispose() {
-    _mapController.dispose();
-    super.dispose();
+  void _handleCameraMove(CameraPosition position) {
+    widget.onCenterChanged(position.target);
+  }
+
+  void _handleCameraIdle() {
+    _isProgrammaticMove = false;
+  }
+
+  void _handleManualInteraction() {
+    if (_showCenterLabel) setState(() => _showCenterLabel = false);
+    widget.onUserInteraction?.call();
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
+    debugPrint(
+      'LocationPickerMap.build: kIsWeb=$kIsWeb '
+      'isMapViewSupported=$isMapViewSupported '
+      'initialCenter=${widget.initialCenter} initialZoom=${widget.initialZoom}',
+    );
+
+    if (!isMapViewSupported) {
+      debugPrint('LocationPickerMap: rendering manual entry fallback');
+      return _ManualLocationEntry(
+        initialCenter: widget.initialCenter,
+        centerLabel: _showCenterLabel ? widget.centerLabel : null,
+        onCenterChanged: widget.onCenterChanged,
+        onUserInteraction: _handleManualInteraction,
+      );
+    }
+
+    debugPrint('LocationPickerMap: building GoogleMap widget');
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
       child: Stack(
         alignment: Alignment.center,
         children: [
-          FlutterMap(
-            mapController: _mapController,
-            options: MapOptions(
-              initialCenter: widget.initialCenter,
-              initialZoom: widget.initialZoom,
-              onPositionChanged: _handlePositionChanged,
+          GoogleMap(
+            initialCameraPosition: CameraPosition(
+              target: widget.initialCenter,
+              zoom: widget.initialZoom,
             ),
-            children: [
-              TileLayer(
-                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName: 'com.example.isdasafe',
-                tileProvider: widget.tileProvider ?? NetworkTileProvider(),
-                panBuffer: 0,
-                keepBuffer: 1,
-                tileDisplay: const TileDisplay.instantaneous(),
-                tileUpdateTransformer: TileUpdateTransformers.throttle(
-                  const Duration(milliseconds: 100),
-                ),
-              ),
-              const RichAttributionWidget(
-                attributions: [
-                  TextSourceAttribution('OpenStreetMap contributors'),
-                ],
-              ),
-            ],
+            onMapCreated: (controller) {
+              debugPrint(
+                'LocationPickerMap: onMapCreated fired '
+                '(platform view + JS API ready)',
+              );
+              _mapController = controller;
+            },
+            onCameraMoveStarted: _handleCameraMoveStarted,
+            onCameraMove: _handleCameraMove,
+            onCameraIdle: _handleCameraIdle,
+            myLocationButtonEnabled: false,
+            zoomControlsEnabled: false,
+            mapToolbarEnabled: false,
           ),
           IgnorePointer(
             child: Padding(
@@ -171,6 +196,117 @@ class _LocationPickerMapState extends State<LocationPickerMap> {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// Fallback used on platforms without a supported map view (currently
+/// Windows, Linux, and macOS — see [isMapViewSupported]).
+class _ManualLocationEntry extends StatefulWidget {
+  const _ManualLocationEntry({
+    required this.initialCenter,
+    required this.onCenterChanged,
+    this.centerLabel,
+    this.onUserInteraction,
+  });
+
+  final LatLng initialCenter;
+  final ValueChanged<LatLng> onCenterChanged;
+  final String? centerLabel;
+  final VoidCallback? onUserInteraction;
+
+  @override
+  State<_ManualLocationEntry> createState() => _ManualLocationEntryState();
+}
+
+class _ManualLocationEntryState extends State<_ManualLocationEntry> {
+  late final _latController = TextEditingController(
+    text: widget.initialCenter.latitude.toStringAsFixed(4),
+  );
+  late final _lngController = TextEditingController(
+    text: widget.initialCenter.longitude.toStringAsFixed(4),
+  );
+
+  @override
+  void didUpdateWidget(covariant _ManualLocationEntry oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialCenter.latitude != widget.initialCenter.latitude ||
+        oldWidget.initialCenter.longitude != widget.initialCenter.longitude) {
+      _latController.text = widget.initialCenter.latitude.toStringAsFixed(4);
+      _lngController.text = widget.initialCenter.longitude.toStringAsFixed(4);
+    }
+  }
+
+  void _handleChanged(String _) {
+    final lat = double.tryParse(_latController.text);
+    final lng = double.tryParse(_lngController.text);
+    if (lat == null || lng == null) return;
+    widget.onUserInteraction?.call();
+    widget.onCenterChanged(LatLng(lat, lng));
+  }
+
+  @override
+  void dispose() {
+    _latController.dispose();
+    _lngController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (widget.centerLabel != null) ...[
+              Text(
+                widget.centerLabel!,
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: theme.colorScheme.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+            Text(
+              "Map view isn't available on this platform. "
+              'Enter coordinates manually.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _latController,
+              keyboardType: const TextInputType.numberWithOptions(
+                signed: true,
+                decimal: true,
+              ),
+              decoration: const InputDecoration(labelText: 'Latitude'),
+              onChanged: _handleChanged,
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _lngController,
+              keyboardType: const TextInputType.numberWithOptions(
+                signed: true,
+                decimal: true,
+              ),
+              decoration: const InputDecoration(labelText: 'Longitude'),
+              onChanged: _handleChanged,
+            ),
+          ],
+        ),
       ),
     );
   }
