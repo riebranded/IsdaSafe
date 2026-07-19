@@ -99,6 +99,7 @@ class _AddPondDialogState extends State<_AddPondDialog> {
   final _canSubmit = ValueNotifier<bool>(false);
 
   var _isLocating = true;
+  var _isLocatingMe = false;
   var _hasName = false;
   var _hasPickedLocation = false;
   var _userAdjustedMap = false;
@@ -128,6 +129,57 @@ class _AddPondDialogState extends State<_AddPondDialog> {
     }
     _updateCanSubmit();
     setState(() => _isLocating = false);
+  }
+
+  Future<void> _handleLocateMe() async {
+    if (_isLocatingMe) return;
+    setState(() => _isLocatingMe = true);
+
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text('Finding your location…'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+
+    LatLng? location;
+    try {
+      location = await widget.currentLocationLoader();
+    } catch (_) {
+      location = null;
+    } finally {
+      if (mounted) setState(() => _isLocatingMe = false);
+    }
+    if (!mounted) return;
+
+    if (location == null) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Couldn't get your location. Check that location access is "
+            'allowed for this site/app.',
+          ),
+        ),
+      );
+      return;
+    }
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          'Located: ${location.latitude.toStringAsFixed(4)}, '
+          '${location.longitude.toStringAsFixed(4)}',
+        ),
+      ),
+    );
+
+    _userAdjustedMap = false;
+    _center.value = location;
+    _hasPickedLocation = true;
+    _isAtUserLocation = true;
+    _mapZoom = kUserLocationMapZoom;
+    _updateCanSubmit();
+    setState(() {});
   }
 
   void _updateCanSubmit() {
@@ -198,6 +250,8 @@ class _AddPondDialogState extends State<_AddPondDialog> {
                   centerLabel: _isAtUserLocation ? "You're here" : null,
                   onUserInteraction: _handleUserInteraction,
                   onCenterChanged: _handleCenterChanged,
+                  onLocateMe: _handleLocateMe,
+                  isLocatingMe: _isLocatingMe,
                 ),
               ),
               const SizedBox(height: AppSpacing.sm),
@@ -257,65 +311,118 @@ Future<LocationDraft?> showEditLocationDialog(
   required double initialLongitude,
 }) async {
   final center = ValueNotifier(LatLng(initialLatitude, initialLongitude));
+  // Only reassigned (via setState) when "locate me" fires a deliberate
+  // recenter — plain panning updates `center` above without rebuilding,
+  // so the map isn't recreated on every drag frame.
+  var mapCenter = center.value;
+  var isLocatingMe = false;
 
   final result = await showDialog<LocationDraft>(
     context: context,
     builder: (context) {
       final theme = Theme.of(context);
-      return Dialog(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 480, maxHeight: 600),
-          child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.lg),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text('Edit location', style: theme.textTheme.titleLarge),
-                const SizedBox(height: AppSpacing.md),
-                Expanded(
-                  child: LocationPickerMap(
-                    initialCenter: center.value,
-                    initialZoom: kFocusedMapZoom,
-                    onCenterChanged: (newCenter) => center.value = newCenter,
+      return StatefulBuilder(
+        builder: (context, setState) {
+          Future<void> handleLocateMe() async {
+            if (isLocatingMe) return;
+            setState(() => isLocatingMe = true);
+
+            final messenger = ScaffoldMessenger.of(context);
+            messenger.showSnackBar(
+              const SnackBar(
+                content: Text('Finding your location…'),
+                duration: Duration(seconds: 2),
+              ),
+            );
+
+            LatLng? location;
+            try {
+              location = await CurrentLocationService.getCurrentLocation();
+            } finally {
+              setState(() => isLocatingMe = false);
+            }
+            if (location == null) {
+              messenger.showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    "Couldn't get your location. Check that location access "
+                    'is allowed for this site/app.',
                   ),
                 ),
-                const SizedBox(height: AppSpacing.sm),
-                ValueListenableBuilder<LatLng>(
-                  valueListenable: center,
-                  builder: (context, value, _) => Text(
-                    '${value.latitude.toStringAsFixed(4)}, '
-                    '${value.longitude.toStringAsFixed(4)}',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
+              );
+              return;
+            }
+            messenger.showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Located: ${location.latitude.toStringAsFixed(4)}, '
+                  '${location.longitude.toStringAsFixed(4)}',
                 ),
-                const SizedBox(height: AppSpacing.md),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
+              ),
+            );
+            center.value = location;
+            setState(() => mapCenter = location!);
+          }
+
+          return Dialog(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 480, maxHeight: 600),
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('Cancel'),
+                    Text('Edit location', style: theme.textTheme.titleLarge),
+                    const SizedBox(height: AppSpacing.md),
+                    Expanded(
+                      child: LocationPickerMap(
+                        initialCenter: mapCenter,
+                        initialZoom: kFocusedMapZoom,
+                        onCenterChanged: (newCenter) =>
+                            center.value = newCenter,
+                        onLocateMe: handleLocateMe,
+                        isLocatingMe: isLocatingMe,
+                      ),
                     ),
-                    const SizedBox(width: AppSpacing.sm),
-                    FilledButton(
-                      onPressed: () {
-                        final value = center.value;
-                        Navigator.of(context).pop((
-                          latitude: value.latitude,
-                          longitude: value.longitude,
-                        ));
-                      },
-                      child: const Text('Save location'),
+                    const SizedBox(height: AppSpacing.sm),
+                    ValueListenableBuilder<LatLng>(
+                      valueListenable: center,
+                      builder: (context, value, _) => Text(
+                        '${value.latitude.toStringAsFixed(4)}, '
+                        '${value.longitude.toStringAsFixed(4)}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          child: const Text('Cancel'),
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        FilledButton(
+                          onPressed: () {
+                            final value = center.value;
+                            Navigator.of(context).pop((
+                              latitude: value.latitude,
+                              longitude: value.longitude,
+                            ));
+                          },
+                          child: const Text('Save location'),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ],
+              ),
             ),
-          ),
-        ),
+          );
+        },
       );
     },
   );

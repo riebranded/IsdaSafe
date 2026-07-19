@@ -45,6 +45,11 @@ dependencies:
   google_maps_flutter: ^2.10.1
   geolocator: 14.0.3
 
+  # google_maps_flutter_web renders the map as a real browser platform view,
+  # so taps on Flutter widgets stacked on top of it (e.g. the locate-me
+  # button) pass straight through to the map underneath unless intercepted.
+  pointer_interceptor: ^0.10.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -3,14 +3,17 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:pointer_interceptor/pointer_interceptor.dart';
 
 /// Country-wide default view (roughly the geographic center of the
 /// Philippines) shown when a pond has no prior location to anchor on.
 const LatLng kDefaultMapCenter = LatLng(12.8797, 121.7740);
 const double kDefaultMapZoom = 5.5;
 
-/// Wider neighborhood view used when first centering on the user's location.
-const double kUserLocationMapZoom = 12;
+/// Closest zoom Google Maps supports, used when first centering on the
+/// user's location. If imagery isn't available at this level for a given
+/// spot, the SDK automatically clamps down to whatever it does support.
+const double kUserLocationMapZoom = 21;
 
 /// Closer zoom used when editing an existing pond location.
 const double kFocusedMapZoom = 14;
@@ -39,6 +42,8 @@ class LocationPickerMap extends StatefulWidget {
     required this.onCenterChanged,
     this.centerLabel,
     this.onUserInteraction,
+    this.onLocateMe,
+    this.isLocatingMe = false,
   });
 
   final LatLng initialCenter;
@@ -46,6 +51,16 @@ class LocationPickerMap extends StatefulWidget {
   final ValueChanged<LatLng> onCenterChanged;
   final String? centerLabel;
   final VoidCallback? onUserInteraction;
+
+  /// Shows a "my location" button when non-null; pressing it asks the
+  /// caller to re-fetch the current position and pass it back through a
+  /// new [initialCenter], which recenters the map.
+  final VoidCallback? onLocateMe;
+
+  /// Swaps the button's icon for a spinner and disables it, so the tap
+  /// gets an immediate visual response even while the location fetch
+  /// itself (GPS/network) is still in flight.
+  final bool isLocatingMe;
 
   @override
   State<LocationPickerMap> createState() => _LocationPickerMapState();
@@ -118,6 +133,8 @@ class _LocationPickerMapState extends State<LocationPickerMap> {
         centerLabel: _showCenterLabel ? widget.centerLabel : null,
         onCenterChanged: widget.onCenterChanged,
         onUserInteraction: _handleManualInteraction,
+        onLocateMe: widget.onLocateMe,
+        isLocatingMe: widget.isLocatingMe,
       );
     }
 
@@ -195,6 +212,30 @@ class _LocationPickerMapState extends State<LocationPickerMap> {
                 ),
               ),
             ),
+          if (widget.onLocateMe != null)
+            // Positioned top-right so it can't overlap the center pin, the
+            // "You're here" label (which floats below-center), or the
+            // Cancel/Save buttons below the map. Wrapped in PointerInterceptor
+            // because google_maps_flutter_web renders the map as a real
+            // browser platform view — without this, taps here would pass
+            // straight through to the map underneath instead of the button.
+            Positioned(
+              right: 8,
+              top: 8,
+              child: PointerInterceptor(
+                child: FloatingActionButton.small(
+                  heroTag: null,
+                  onPressed: widget.isLocatingMe ? null : widget.onLocateMe,
+                  child: widget.isLocatingMe
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.my_location),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -209,12 +250,16 @@ class _ManualLocationEntry extends StatefulWidget {
     required this.onCenterChanged,
     this.centerLabel,
     this.onUserInteraction,
+    this.onLocateMe,
+    this.isLocatingMe = false,
   });
 
   final LatLng initialCenter;
   final ValueChanged<LatLng> onCenterChanged;
   final String? centerLabel;
   final VoidCallback? onUserInteraction;
+  final VoidCallback? onLocateMe;
+  final bool isLocatingMe;
 
   @override
   State<_ManualLocationEntry> createState() => _ManualLocationEntryState();
@@ -305,6 +350,20 @@ class _ManualLocationEntryState extends State<_ManualLocationEntry> {
               decoration: const InputDecoration(labelText: 'Longitude'),
               onChanged: _handleChanged,
             ),
+            if (widget.onLocateMe != null) ...[
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: widget.isLocatingMe ? null : widget.onLocateMe,
+                icon: widget.isLocatingMe
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.my_location),
+                label: const Text('Use my current location'),
+              ),
+            ],
           ],
         ),
       ),
