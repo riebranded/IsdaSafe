@@ -46,12 +46,6 @@ dependencies:
   # desktop implementation).
   image_picker: ^1.1.2
 
-  # Phone OTP via Firebase Phone Auth (see docs/AUTH_SETUP.md Part 2).
-  # Used only transiently to prove phone ownership — Supabase remains the
-  # single source of truth for the app's session; see AuthService.
-  firebase_core: ^3.8.0
-  firebase_auth: ^5.3.3
-
   # Typography (Lexend + Source Sans 3).
   google_fonts: ^6.2.1
 

@@ -15,7 +15,7 @@ const _kPhCountryCode = '+63';
 /// PH mobile numbers are commonly typed with their local trunk prefix
 /// ("09171234567"), but E.164 drops it — the country code replaces it, not
 /// precedes it. Concatenating "+63" directly onto a leading-0 number
-/// produces an invalid "+6309171234567" that Firebase rejects outright.
+/// produces an invalid "+6309171234567" that send-semaphore-otp rejects.
 String _stripLeadingTrunkZero(String digits) => digits.startsWith('0') ? digits.substring(1) : digits;
 
 class RegisterScreen extends StatefulWidget {
@@ -159,27 +159,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
       // to key its Storage path off of.
       final photoUrl = await _resolvePhotoUrl();
 
-      debugPrint('RegisterScreen: requesting Firebase OTP for $e164Phone...');
-      final outcome = await AuthService.requestFirebasePhoneOtp(e164Phone);
-      debugPrint('RegisterScreen: OTP request outcome — autoVerified=${outcome.autoVerified}');
+      debugPrint('RegisterScreen: requesting Semaphore OTP for $e164Phone...');
+      await AuthService.requestSemaphoreOtp(e164Phone);
+      debugPrint('RegisterScreen: OTP request succeeded');
       if (!mounted) return;
-
-      if (outcome.autoVerified) {
-        // Android auto-retrieved the SMS itself — the phone is already
-        // verified, so there's no code left for the user to enter.
-        await AuthService.upsertProfile(
-          fullName: fullName,
-          email: email,
-          phone: e164Phone,
-          phoneVerified: true,
-          photoUrl: photoUrl,
-        );
-        await AuthService.refreshAuthState();
-        AuthService.isManagingPhoneVerification = false;
-        if (!mounted) return;
-        Navigator.of(context).popUntil((route) => route.isFirst);
-        return;
-      }
 
       // OtpVerificationScreen takes over ownership of the flag from here —
       // it clears it in its own dispose(), however that screen ends.
@@ -189,7 +172,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
             fullName: fullName,
             email: email,
             phone: e164Phone,
-            verificationId: outcome.verificationId!,
             photoUrl: photoUrl,
           ),
         ),
@@ -307,15 +289,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         if (digits.length != 10) return 'Enter a valid 10-digit mobile number';
                         return null;
                       },
-                    ),
-                    const SizedBox(height: AppSpacing.xs),
-                    // Required by Google's terms since the reCAPTCHA badge
-                    // (shown while sending the phone OTP) is hidden via CSS
-                    // — see web/index.html.
-                    Text(
-                      'This site is protected by reCAPTCHA and the Google '
-                      'Privacy Policy and Terms of Service apply.',
-                      style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                     ),
                     if (!_hasGoogleSession) ...[
                       const SizedBox(height: AppSpacing.md),

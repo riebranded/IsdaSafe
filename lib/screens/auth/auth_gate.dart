@@ -73,9 +73,9 @@ class AuthGate extends StatelessWidget {
   }
 }
 
-/// Fires a fresh Firebase OTP send for a user recovered mid-signup (no
-/// `verificationId` survives an app restart, unlike [RegisterScreen], which
-/// already has one from the send it just triggered).
+/// Fires a fresh Semaphore OTP send for a user recovered mid-signup —
+/// nothing about the in-flight send survives an app restart, so this always
+/// requests a new code rather than trying to recover state from before.
 class _PendingPhoneVerification extends StatefulWidget {
   const _PendingPhoneVerification({
     required this.fullName,
@@ -94,7 +94,7 @@ class _PendingPhoneVerification extends StatefulWidget {
 }
 
 class _PendingPhoneVerificationState extends State<_PendingPhoneVerification> {
-  late Future<String?> _future;
+  late Future<void> _future;
 
   @override
   void initState() {
@@ -102,29 +102,15 @@ class _PendingPhoneVerificationState extends State<_PendingPhoneVerification> {
     _future = _send();
   }
 
-  /// Returns a `verificationId` to hand to [OtpVerificationScreen], or null
-  /// if Firebase auto-verified the phone without a code (already marked
-  /// verified in that case — nothing left for the caller to do).
-  Future<String?> _send() async {
-    debugPrint('AuthGate: recovering mid-signup user, requesting fresh Firebase OTP for ${widget.phone}...');
-    final outcome = await AuthService.requestFirebasePhoneOtp(widget.phone);
-    debugPrint('AuthGate: recovery OTP outcome — autoVerified=${outcome.autoVerified}');
-    if (!outcome.autoVerified) return outcome.verificationId;
-
-    await AuthService.upsertProfile(
-      fullName: widget.fullName,
-      email: widget.email,
-      phone: widget.phone,
-      phoneVerified: true,
-      photoUrl: widget.photoUrl,
-    );
-    await AuthService.refreshAuthState();
-    return null;
+  Future<void> _send() async {
+    debugPrint('AuthGate: recovering mid-signup user, requesting fresh Semaphore OTP for ${widget.phone}...');
+    await AuthService.requestSemaphoreOtp(widget.phone);
+    debugPrint('AuthGate: recovery OTP send succeeded');
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<String?>(
+    return FutureBuilder<void>(
       future: _future,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
@@ -158,18 +144,10 @@ class _PendingPhoneVerificationState extends State<_PendingPhoneVerification> {
           );
         }
 
-        final verificationId = snapshot.data;
-        if (verificationId == null) {
-          // Android auto-verified the phone already — [_send] marked the
-          // profile verified, so AppShell can show immediately.
-          return const AppShell();
-        }
-
         return OtpVerificationScreen(
           fullName: widget.fullName,
           email: widget.email,
           phone: widget.phone,
-          verificationId: verificationId,
           photoUrl: widget.photoUrl,
         );
       },

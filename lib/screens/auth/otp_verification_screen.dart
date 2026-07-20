@@ -8,7 +8,10 @@ import '../../services/auth_service.dart';
 import '../../theme/app_spacing.dart';
 
 const _kOtpLength = 6;
-const _kResendCooldown = Duration(seconds: 30);
+// Matches send-semaphore-otp's server-side cooldown — keeping these in sync
+// means "Resend" never re-enables client-side before the server would
+// actually accept another send.
+const _kResendCooldown = Duration(seconds: 60);
 
 class OtpVerificationScreen extends StatefulWidget {
   const OtpVerificationScreen({
@@ -16,17 +19,12 @@ class OtpVerificationScreen extends StatefulWidget {
     required this.fullName,
     required this.email,
     required this.phone,
-    required this.verificationId,
     this.photoUrl,
   });
 
   final String fullName;
   final String email;
   final String phone;
-
-  /// Firebase's handle for the in-flight phone verification. Resending
-  /// replaces this with a new one (see [_resend]).
-  final String verificationId;
 
   /// Imported from Google during Register's prefill, if used. Null for
   /// plain email/password sign-ups.
@@ -43,9 +41,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   // invisible; the boxes below just reflect its content.
   final _otpController = TextEditingController();
   final _otpFocusNode = FocusNode();
-
-  late var _verificationId = widget.verificationId;
-  int? _resendToken;
 
   Timer? _resendTimer;
   var _secondsRemaining = _kResendCooldown.inSeconds;
@@ -99,8 +94,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
     setState(() => _isVerifying = true);
     try {
-      debugPrint('OtpVerificationScreen: confirming code against verificationId=$_verificationId');
-      await AuthService.confirmFirebasePhoneOtp(verificationId: _verificationId, smsCode: _code);
+      debugPrint('OtpVerificationScreen: confirming code...');
+      await AuthService.confirmSemaphoreOtp(_code);
       debugPrint('OtpVerificationScreen: confirmed — upserting profile as verified...');
       await AuthService.upsertProfile(
         fullName: widget.fullName,
@@ -129,11 +124,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
     setState(() => _isResending = true);
     try {
-      final outcome = await AuthService.requestFirebasePhoneOtp(widget.phone, forceResendingToken: _resendToken);
-      if (!outcome.autoVerified) {
-        _verificationId = outcome.verificationId!;
-        _resendToken = outcome.resendToken;
-      }
+      await AuthService.requestSemaphoreOtp(widget.phone);
       if (mounted) {
         _otpController.clear();
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Verification code resent.')));

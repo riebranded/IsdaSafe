@@ -2,10 +2,10 @@
 
 This app uses **Supabase Auth** as the single source of truth for identity —
 email/password and Google sign-in both end in a Supabase session. Phone-number
-OTP is the one exception: it goes through **Firebase Phone Auth** instead of
-Supabase's own Phone provider (see Part 2 for why), with a Supabase Edge
-Function bridging the two — Firebase never issues a session of its own that
-the app uses.
+OTP is the one exception: it goes through **Semaphore** (a Philippines SMS
+API) instead of Supabase's own Phone provider (see Part 2 for why), with two
+Supabase Edge Functions doing all the work — the Flutter app never talks to
+Semaphore directly, and Semaphore never issues a session of its own.
 
 Your Supabase project ref is `vemaphehzjnvspxmweeb` (from `.env`'s `SUPABASE_URL`).
 Replace it below if you ever point the app at a different project.
@@ -92,91 +92,77 @@ step 4 is what Google validates against.
 
 ---
 
-## Part 2 — Phone OTP (Firebase Phone Auth + Supabase Edge Function)
+## Part 2 — Phone OTP (Semaphore + two Supabase Edge Functions)
 
 Supabase's built-in Phone provider only supports Twilio, Twilio Verify,
-MessageBird, Vonage, and TextLocal — there's no Firebase option there. So
-instead of Supabase's Phone provider, this app uses Firebase's own Phone Auth
-SDK client-side to send/verify the OTP, then calls a Supabase Edge Function
-(`verify-firebase-phone`) that verifies the resulting Firebase ID token
-server-side and marks the **Supabase** user's phone confirmed. Firebase is
-never used as an identity provider the app signs in with — the user is
-already signed into Supabase (via email/password) before phone verification
-starts; Firebase just proves they own the number.
+MessageBird, Vonage, and TextLocal — no PH-focused SMS API is available
+there. This app uses [Semaphore](https://semaphore.co) (an SMS API built for
+the Philippines) instead: the Flutter app never talks to Semaphore or holds
+any SMS-provider SDK/session — it only ever calls two Supabase Edge
+Functions. Semaphore itself has **no rate limiting and no code-verification
+step** of its own (it just sends an SMS and hands the generated code back in
+the response), so both are implemented in the Edge Functions:
 
-### 1. Create a Firebase project
-Go to [console.firebase.google.com](https://console.firebase.google.com) →
-**Add project** (e.g. "IsdaSafe") → you can decline Google Analytics, it's not
-needed.
+- **`send-semaphore-otp`** — resolves the caller's Supabase session, checks
+  per-user and per-phone rate limits (60s cooldown, max 3 sends/10min, max
+  8 sends/24h — tracked in `public.otp_send_log`), calls Semaphore, hashes
+  the returned code, and stores it in `public.phone_otps` with a 5-minute
+  expiry.
+- **`verify-semaphore-otp`** — checks the submitted code's hash against
+  `public.phone_otps`, locking out after 5 wrong attempts, then marks the
+  Supabase user's phone confirmed via the admin API.
 
-### 2. Enable Phone sign-in
-**Firebase Console → Build → Authentication → Sign-in method → Phone** → Enable → Save.
+Both tables and functions are already created against this project (ref
+`vemaphehzjnvspxmweeb`) — what's left is the Semaphore account itself and its
+two secrets.
 
-### 2b. Allow the Philippines in the SMS region policy (required)
-**Firebase Console → Authentication → Settings tab → SMS region policy** —
-this defaults to blocking regions until explicitly allowed, so phone auth
-will fail with `operation-not-allowed: SMS unable to be sent until this
-region enabled by the app developer` until you either select **Allow by
-default** or add the **Philippines** to an allowlist.
+### 1. Create a Semaphore account
+Go to [semaphore.co](https://semaphore.co) → sign up. New accounts start with
+some free/trial credits, but sending a real OTP always consumes credits —
+top up before testing if the balance is 0.
 
-### 3. Register your apps + generate `lib/firebase_options.dart`
-Run from the repo root (requires Node + the Firebase CLI: `npm install -g firebase-tools`,
-then `firebase login`):
+### 2. Get your API key
+**Semaphore Dashboard → Account → API Key** (exact label may vary) — copy it.
+
+### 3. Check your Sender Name
+**Semaphore Dashboard → Sender Names** — a default sender name is usable
+immediately; registering a custom one (e.g. "ISDASAFE") requires Semaphore's
+approval, so check the dashboard for the current turnaround time if you want
+one. Either way, note the sender name you intend to use for step 4 — or skip
+setting `SEMAPHORE_SENDER_NAME` entirely to fall back to the account's
+default.
+
+### 4. Set the Supabase secrets
 ```
-dart pub global activate flutterfire_cli
-flutterfire configure
+supabase secrets set SEMAPHORE_API_KEY=<your api key> --project-ref vemaphehzjnvspxmweeb
+supabase secrets set SEMAPHORE_SENDER_NAME=<your sender name> --project-ref vemaphehzjnvspxmweeb
 ```
-Pick the Firebase project from step 1, then select the platforms you build for
-(Android, iOS, Web at minimum). This generates `lib/firebase_options.dart` and
-any native config files (`google-services.json` etc.) automatically — nothing
-to hand-edit. `main.dart` already imports this file; the app won't compile
-until you've run this.
-
-### 4. Android: no extra config
-Firebase's Android SDK matches by package name (`com.isdasafe.app`) + the
-`google-services.json` from step 3 — the SHA-1 used for Google Sign-In isn't
-needed here.
-
-### 5. iOS: upload an APNs key (required for silent-push verification)
-**Firebase Console → Project settings → Cloud Messaging → Apple app configuration
-→ APNs Authentication Key → Upload** — needs a `.p8` key from
-**Apple Developer → Certificates, Identifiers & Profiles → Keys** (enable "Apple
-Push Notifications service"). Without this, iOS phone verification falls back
-to a visible reCAPTCHA instead of silent verification.
-
-### 6. Web: nothing extra
-`firebase_auth`'s web implementation handles the required reCAPTCHA
-automatically once `flutterfire configure` has wired the web config in.
-
-### 7. Deploy the Edge Function + set its secret
-The function itself (`supabase/functions/verify-firebase-phone/index.ts`) is
-already deployed. It needs one secret it can't get automatically — your
-Firebase **Project ID** (Firebase Console → Project settings → General →
-"Project ID", *not* the project name):
-```
-supabase secrets set FIREBASE_PROJECT_ID=<your-firebase-project-id> --project-ref vemaphehzjnvspxmweeb
-```
-(or set it via **Supabase Dashboard → Edge Functions → Manage secrets**). The
-function's other three env vars (`SUPABASE_URL`, `SUPABASE_ANON_KEY`,
+(or via **Supabase Dashboard → Edge Functions → Manage secrets**).
+`SEMAPHORE_SENDER_NAME` is optional; omit it to use Semaphore's account
+default. The functions' other env vars (`SUPABASE_URL`, `SUPABASE_ANON_KEY`,
 `SUPABASE_SERVICE_ROLE_KEY`) are injected automatically by Supabase — nothing
 to configure there.
 
-### 8. Turn off email confirmation (required)
+### 5. Turn off email confirmation (required)
 **Supabase Dashboard → Authentication → Providers → Email**
 - Make sure **"Confirm email"** is **OFF**.
 
 This matters because the app's flow is: `signUp()` → immediately request a
-Firebase OTP. Phone-OTP verification is the real verification gate in this
+Semaphore OTP. Phone-OTP verification is the real verification gate in this
 app, not an email link, and several other calls in this flow (e.g.
 `functions.invoke`) expect an active Supabase session, which `signUp()` only
-returns immediately when email confirmation isn't required.
+returns immediately when email confirmation isn't required. It's also why
+`send-semaphore-otp` rate-limits by **phone number** as well as by account —
+email confirmation being off means creating a throwaway account is trivial,
+so a per-account-only limit wouldn't stop someone from targeting one phone
+number with unlimited accounts.
 
-### 9. What the app actually calls
-`lib/services/auth_service.dart` wraps `firebase_auth`'s `verifyPhoneNumber`/
-`signInWithCredential` to get a Firebase ID token, then calls
-`supabase.functions.invoke('verify-firebase-phone', ...)` — the Flutter app
-never talks to Twilio, and never holds a long-lived Firebase session (it signs
-out of Firebase immediately after the Edge Function call, success or not).
+### 6. What the app actually calls
+`lib/services/auth_service.dart`'s `requestSemaphoreOtp`/`confirmSemaphoreOtp`
+call `supabase.functions.invoke('send-semaphore-otp', ...)` and
+`supabase.functions.invoke('verify-semaphore-otp', ...)` respectively — no
+client-side SMS SDK is involved on any platform, so there's no Android/iOS/Web
+native setup step for phone OTP at all (unlike Google Sign-In in Part 1).
 
 ---
 
@@ -211,22 +197,27 @@ create policy "Users can update their own profile" on public.profiles
 
 ## Verification checklist
 
-1. `flutterfire configure` has been run (Part 2, step 3) — `lib/firebase_options.dart` exists.
-2. SMS region policy allows the Philippines (Part 2, step 2b).
-3. `FIREBASE_PROJECT_ID` secret is set on the Supabase project (Part 2, step 7).
-4. `flutter pub get`
-5. `flutter analyze`
-6. Confirm the `profiles` table exists (Part 3).
-7. `flutter run` on Android (debug SHA-1 registered for Google Sign-In) or iOS
-   (URL scheme in `Info.plist` + APNs key uploaded for Firebase).
-8. Walk through:
+1. `SEMAPHORE_API_KEY` (and optionally `SEMAPHORE_SENDER_NAME`) secrets are set
+   on the Supabase project (Part 2, step 4).
+2. `send-semaphore-otp` and `verify-semaphore-otp` are `ACTIVE` Edge Functions,
+   and `public.phone_otps` / `public.otp_send_log` exist (Part 2/3).
+3. `flutter pub get`
+4. `flutter analyze`
+5. Confirm the `profiles` table exists (Part 3).
+6. `flutter run` on Android or iOS (URL scheme in `Info.plist` for Google
+   Sign-In — no phone-OTP-specific native setup needed, see Part 2 step 6).
+7. Walk through:
    - **Register** → watch the password checklist go green → submit → receive the
-     Firebase SMS → enter the code → confirm a row appears in `public.profiles`
+     Semaphore SMS → enter the code → confirm a row appears in `public.profiles`
      with `phone_verified = true`, and that `auth.users.phone_confirmed_at` is
      set for that user → land in the app.
    - **Force-quit mid-signup** (after Register, before entering the code), then
      relaunch → confirm you're routed back into OTP verification with a fresh
      code, not stuck on a blank/expired one.
+   - **Wrong code** → clear "Incorrect code" error; after 5 wrong tries, a
+     distinct "too many attempts" error and the code is locked (a fresh
+     Resend is required).
+   - **Resend** before 60s → clear cooldown error, no SMS sent.
    - **Sign out** (logout icon in the app bar / sidebar).
    - **Login** with the email/password just created.
    - **Login with Google** (full sign-in).
