@@ -16,19 +16,36 @@ class OtpVerificationScreen extends StatefulWidget {
     required this.fullName,
     required this.email,
     required this.phone,
+    required this.verificationId,
+    this.photoUrl,
   });
 
   final String fullName;
   final String email;
   final String phone;
 
+  /// Firebase's handle for the in-flight phone verification. Resending
+  /// replaces this with a new one (see [_resend]).
+  final String verificationId;
+
+  /// Imported from Google during Register's prefill, if used. Null for
+  /// plain email/password sign-ups.
+  final String? photoUrl;
+
   @override
   State<OtpVerificationScreen> createState() => _OtpVerificationScreenState();
 }
 
 class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
-  final _controllers = List.generate(_kOtpLength, (_) => TextEditingController());
-  final _focusNodes = List.generate(_kOtpLength, (_) => FocusNode());
+  // A single real field captures the whole code — six separate one-char
+  // fields can't reliably support paste/autofill, since the browser only
+  // ever targets whichever *one* field is focused. This field is kept
+  // invisible; the boxes below just reflect its content.
+  final _otpController = TextEditingController();
+  final _otpFocusNode = FocusNode();
+
+  late var _verificationId = widget.verificationId;
+  int? _resendToken;
 
   Timer? _resendTimer;
   var _secondsRemaining = _kResendCooldown.inSeconds;
@@ -39,17 +56,17 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   void initState() {
     super.initState();
     _startResendCountdown();
+    _otpController.addListener(_onCodeChanged);
   }
 
   @override
   void dispose() {
+    // Whether this screen ends in success or the user backs out, AuthGate's
+    // own recovery flow is safe to take over again from here on.
+    AuthService.isManagingPhoneVerification = false;
     _resendTimer?.cancel();
-    for (final controller in _controllers) {
-      controller.dispose();
-    }
-    for (final node in _focusNodes) {
-      node.dispose();
-    }
+    _otpController.dispose();
+    _otpFocusNode.dispose();
     super.dispose();
   }
 
@@ -70,25 +87,11 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  String get _code => _controllers.map((c) => c.text).join();
+  String get _code => _otpController.text;
 
-  void _onDigitChanged(int index, String value) {
-    if (value.isNotEmpty && index < _kOtpLength - 1) {
-      _focusNodes[index + 1].requestFocus();
-    }
+  void _onCodeChanged() {
     setState(() {});
     if (_code.length == _kOtpLength) _verify();
-  }
-
-  void _onKeyEvent(int index, KeyEvent event) {
-    if (event is KeyDownEvent &&
-        event.logicalKey == LogicalKeyboardKey.backspace &&
-        _controllers[index].text.isEmpty &&
-        index > 0) {
-      _focusNodes[index - 1].requestFocus();
-      _controllers[index - 1].clear();
-      setState(() {});
-    }
   }
 
   Future<void> _verify() async {
@@ -96,16 +99,22 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
     setState(() => _isVerifying = true);
     try {
-      await AuthService.verifyPhoneOtp(e164Phone: widget.phone, token: _code);
+      debugPrint('OtpVerificationScreen: confirming code against verificationId=$_verificationId');
+      await AuthService.confirmFirebasePhoneOtp(verificationId: _verificationId, smsCode: _code);
+      debugPrint('OtpVerificationScreen: confirmed — upserting profile as verified...');
       await AuthService.upsertProfile(
         fullName: widget.fullName,
         email: widget.email,
         phone: widget.phone,
         phoneVerified: true,
+        photoUrl: widget.photoUrl,
       );
+      await AuthService.refreshAuthState();
+      debugPrint('OtpVerificationScreen: profile upsert done, navigating into the app');
       if (!mounted) return;
       Navigator.of(context).popUntil((route) => route.isFirst);
     } on AuthException catch (e) {
+      debugPrint('OtpVerificationScreen: verify AuthException: ${e.message}');
       if (mounted) _showError(e.message);
     } catch (e) {
       if (mounted) _showError('Something went wrong. Please try again.');
@@ -120,8 +129,13 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
     setState(() => _isResending = true);
     try {
-      await AuthService.resendPhoneOtp(widget.phone);
+      final outcome = await AuthService.requestFirebasePhoneOtp(widget.phone, forceResendingToken: _resendToken);
+      if (!outcome.autoVerified) {
+        _verificationId = outcome.verificationId!;
+        _resendToken = outcome.resendToken;
+      }
       if (mounted) {
+        _otpController.clear();
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Verification code resent.')));
         _startResendCountdown();
       }
@@ -162,31 +176,33 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: AppSpacing.xl),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      for (var i = 0; i < _kOtpLength; i++)
-                        SizedBox(
-                          width: 44,
-                          child: KeyboardListener(
-                            focusNode: FocusNode(skipTraversal: true),
-                            onKeyEvent: (event) => _onKeyEvent(i, event),
-                            child: TextField(
-                              controller: _controllers[i],
-                              focusNode: _focusNodes[i],
-                              enabled: !_isVerifying,
-                              autofocus: i == 0,
-                              maxLength: 1,
-                              textAlign: TextAlign.center,
-                              keyboardType: TextInputType.number,
-                              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                              style: theme.textTheme.titleLarge,
-                              decoration: const InputDecoration(counterText: ''),
-                              onChanged: (value) => _onDigitChanged(i, value),
-                            ),
+                  GestureDetector(
+                    onTap: () => _otpFocusNode.requestFocus(),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        _OtpBoxes(code: _code, length: _kOtpLength, enabled: !_isVerifying),
+                        // The real field: invisible, but this is what
+                        // actually receives typing, backspace, paste, and
+                        // autofill — a single normal text field handles all
+                        // of that correctly for free, unlike per-digit boxes.
+                        Opacity(
+                          opacity: 0,
+                          child: TextField(
+                            controller: _otpController,
+                            focusNode: _otpFocusNode,
+                            enabled: !_isVerifying,
+                            autofocus: true,
+                            keyboardType: TextInputType.number,
+                            autofillHints: const [AutofillHints.oneTimeCode],
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                              LengthLimitingTextInputFormatter(_kOtpLength),
+                            ],
                           ),
                         ),
-                    ],
+                      ],
+                    ),
                   ),
                   const SizedBox(height: AppSpacing.xl),
                   FilledButton(
@@ -212,6 +228,45 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Purely visual — six boxes reflecting [code], each showing a dot (like a
+/// password field) once filled. The real input is the invisible [TextField]
+/// stacked on top of this in [_OtpVerificationScreenState.build].
+class _OtpBoxes extends StatelessWidget {
+  const _OtpBoxes({required this.code, required this.length, required this.enabled});
+
+  final String code;
+  final int length;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final activeIndex = code.length.clamp(0, length - 1);
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+        for (var i = 0; i < length; i++)
+          Container(
+            width: 44,
+            height: 56,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: i == activeIndex && enabled
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.outlineVariant,
+                width: i == activeIndex && enabled ? 2 : 1,
+              ),
+            ),
+            child: i < code.length ? Text('●', style: theme.textTheme.titleLarge) : null,
+          ),
+      ],
     );
   }
 }
