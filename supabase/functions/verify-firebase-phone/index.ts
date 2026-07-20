@@ -92,14 +92,28 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: "Firebase token has no verified phone number." }, 400);
   }
 
-  const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-  const { error: updateError } = await admin.auth.admin.updateUserById(userData.user.id, {
-    phone: phoneNumber,
-    phone_confirm: true,
-  });
-  if (updateError) {
-    return jsonResponse({ error: updateError.message }, 500);
-  }
+  // Everything past this point can throw for reasons that have nothing to do
+  // with the caller (network blip talking to the auth admin API, an
+  // unexpected shape in its response, etc.) — without this wrapper, an
+  // uncaught exception here is serialized by JSON.stringify(err) into "{}"
+  // (Error objects have no enumerable own properties), which reaches the app
+  // as a useless empty error, so console.error it and always return a real
+  // message string instead.
+  try {
+    const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const { error: updateError } = await admin.auth.admin.updateUserById(userData.user.id, {
+      phone: phoneNumber,
+      phone_confirm: true,
+    });
+    if (updateError) {
+      console.error("verify-firebase-phone: updateUserById failed:", updateError);
+      return jsonResponse({ error: updateError.message }, 500);
+    }
 
-  return jsonResponse({ success: true, phone: phoneNumber });
+    return jsonResponse({ success: true, phone: phoneNumber });
+  } catch (err) {
+    console.error("verify-firebase-phone: unexpected error:", err);
+    const message = err instanceof Error ? err.message : String(err);
+    return jsonResponse({ error: `Unexpected error: ${message}` }, 500);
+  }
 });
