@@ -36,6 +36,12 @@ dependencies:
   cupertino_icons: ^1.0.8
   provider: ^6.1.2
 
+  # Auth: Supabase (email/password, Google OAuth, phone OTP), native Google
+  # Sign-In, and runtime .env loading for SUPABASE_URL/SUPABASE_ANON_KEY.
+  supabase_flutter: ^2.16.0
+  google_sign_in: ^7.2.0
+  flutter_dotenv: ^6.0.1
+
   # Typography (Lexend + Source Sans 3).
   google_fonts: ^6.2.1
 
@@ -76,6 +82,8 @@ flutter:
   # assets:
   #   - images/a_dot_burr.jpeg
   #   - images/a_dot_ham.jpeg
+  assets:
+    - .env
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

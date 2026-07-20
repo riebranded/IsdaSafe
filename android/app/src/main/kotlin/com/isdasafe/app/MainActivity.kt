@@ -1,4 +1,4 @@
-package com.example.isdasafev2
+package com.isdasafe.app
 
 import io.flutter.embedding.android.FlutterActivity
 

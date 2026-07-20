@@ -5,6 +5,7 @@ import '../models/pond.dart';
 import '../models/reading_bands.dart';
 import '../providers/dashboard_provider.dart';
 import '../providers/pond_provider.dart';
+import '../services/auth_service.dart';
 import '../services/pond_snapshot_cache.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/location_picker_map.dart';
@@ -182,6 +183,11 @@ class _PondSidebar extends StatelessWidget {
                     onPressed: onRefreshAll,
                     icon: const Icon(Icons.refresh),
                     tooltip: 'Refresh all ponds',
+                  ),
+                  IconButton(
+                    onPressed: AuthService.signOut,
+                    icon: const Icon(Icons.logout),
+                    tooltip: 'Sign out',
                   ),
                 ],
               ),

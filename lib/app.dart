@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'screens/app_shell.dart';
+import 'screens/auth/auth_gate.dart';
 import 'theme/app_theme.dart';
 
 class IsdaSafeApp extends StatelessWidget {
@@ -12,7 +12,7 @@ class IsdaSafeApp extends StatelessWidget {
       title: 'IsdaSafe',
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
-      home: const AppShell(),
+      home: const AuthGate(),
     );
   }
 }

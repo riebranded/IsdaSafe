@@ -17,7 +17,7 @@ val dotenv = Properties().apply {
 val mapsApiKey: String = dotenv.getProperty("ISDASAFE_ANDROID_MAPS_KEY", "")
 
 android {
-    namespace = "com.example.isdasafev2"
+    namespace = "com.isdasafe.app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -27,8 +27,7 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.isdasafev2"
+        applicationId = "com.isdasafe.app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
