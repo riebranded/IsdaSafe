@@ -11,6 +11,12 @@ import 'otp_verification_screen.dart';
 /// fixed rather than offered as a choice.
 const _kPhCountryCode = '+63';
 
+/// PH mobile numbers are commonly typed with their local trunk prefix
+/// ("09171234567"), but E.164 drops it — the country code replaces it, not
+/// precedes it. Concatenating "+63" directly onto a leading-0 number
+/// produces an invalid "+6309171234567" that Firebase rejects outright.
+String _stripLeadingTrunkZero(String digits) => digits.startsWith('0') ? digits.substring(1) : digits;
+
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
 
@@ -87,26 +93,54 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     final fullName = _fullNameController.text.trim();
     final email = _emailController.text.trim();
-    final e164Phone = '$_kPhCountryCode${_phoneController.text.trim()}';
+    final e164Phone = '$_kPhCountryCode${_stripLeadingTrunkZero(_phoneController.text.trim())}';
 
     setState(() => _isSubmitting = true);
+    // Claimed before AuthGate's underlying StreamBuilder can react to the
+    // session signUpWithEmail is about to create — see
+    // AuthService.isManagingPhoneVerification for why this matters.
+    AuthService.isManagingPhoneVerification = true;
     try {
+      debugPrint('RegisterScreen: signing up $email...');
       await AuthService.signUpWithEmail(
         email: email,
         password: _passwordController.text,
         fullName: fullName,
+        pendingPhone: e164Phone,
       );
-      await AuthService.startPhoneVerification(e164Phone);
-
+      debugPrint('RegisterScreen: sign-up succeeded, requesting Firebase OTP for $e164Phone...');
+      final outcome = await AuthService.requestFirebasePhoneOtp(e164Phone);
+      debugPrint('RegisterScreen: OTP request outcome — autoVerified=${outcome.autoVerified}');
       if (!mounted) return;
+
+      if (outcome.autoVerified) {
+        // Android auto-retrieved the SMS itself — the phone is already
+        // verified, so there's no code left for the user to enter.
+        await AuthService.upsertProfile(fullName: fullName, email: email, phone: e164Phone, phoneVerified: true);
+        await AuthService.refreshAuthState();
+        AuthService.isManagingPhoneVerification = false;
+        if (!mounted) return;
+        Navigator.of(context).popUntil((route) => route.isFirst);
+        return;
+      }
+
+      // OtpVerificationScreen takes over ownership of the flag from here —
+      // it clears it in its own dispose(), however that screen ends.
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => OtpVerificationScreen(fullName: fullName, email: email, phone: e164Phone),
+          builder: (_) => OtpVerificationScreen(
+            fullName: fullName,
+            email: email,
+            phone: e164Phone,
+            verificationId: outcome.verificationId!,
+          ),
         ),
       );
     } on AuthException catch (e) {
+      AuthService.isManagingPhoneVerification = false;
       if (mounted) _showError(e.message);
     } catch (e) {
+      AuthService.isManagingPhoneVerification = false;
       if (mounted) _showError('Something went wrong. Please try again.');
       debugPrint('RegisterScreen: sign-up error $e');
     } finally {
@@ -191,12 +225,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         labelText: 'Mobile number',
                         prefixIcon: Icon(Icons.phone_outlined),
                         prefixText: '$_kPhCountryCode ',
+                        helperText: 'e.g. 9171234567 — the leading 0 is optional',
                       ),
                       validator: (value) {
-                        final digits = value?.trim() ?? '';
-                        if (digits.length < 7 || digits.length > 12) return 'Enter a valid mobile number';
+                        final digits = _stripLeadingTrunkZero(value?.trim() ?? '');
+                        if (digits.length != 10) return 'Enter a valid 10-digit mobile number';
                         return null;
                       },
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    // Required by Google's terms since the reCAPTCHA badge
+                    // (shown while sending the phone OTP) is hidden via CSS
+                    // — see web/index.html.
+                    Text(
+                      'This site is protected by reCAPTCHA and the Google '
+                      'Privacy Policy and Terms of Service apply.',
+                      style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                     ),
                     const SizedBox(height: AppSpacing.md),
                     TextFormField(

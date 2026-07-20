@@ -1,11 +1,11 @@
 # Auth Setup Guide
 
-This app uses **Supabase Auth** for everything — email/password, Google sign-in, and
-phone-number OTP verification. The Flutter app never talks to Google or Twilio
-directly; it only calls `supabase_flutter`'s `auth` client, and Supabase relays
-to Google/Twilio on the backend using credentials you configure in the Supabase
-dashboard. This keeps all secrets (Twilio Auth Token, Google Client Secret) out
-of the app.
+This app uses **Supabase Auth** as the single source of truth for identity —
+email/password and Google sign-in both end in a Supabase session. Phone-number
+OTP is the one exception: it goes through **Firebase Phone Auth** instead of
+Supabase's own Phone provider (see Part 2 for why), with a Supabase Edge
+Function bridging the two — Firebase never issues a session of its own that
+the app uses.
 
 Your Supabase project ref is `vemaphehzjnvspxmweeb` (from `.env`'s `SUPABASE_URL`).
 Replace it below if you ever point the app at a different project.
@@ -92,54 +92,91 @@ step 4 is what Google validates against.
 
 ---
 
-## Part 2 — Phone OTP (Twilio + Supabase)
+## Part 2 — Phone OTP (Firebase Phone Auth + Supabase Edge Function)
 
-### 1. Create a Twilio account
-Sign up at [twilio.com](https://www.twilio.com) and verify your email + phone.
+Supabase's built-in Phone provider only supports Twilio, Twilio Verify,
+MessageBird, Vonage, and TextLocal — there's no Firebase option there. So
+instead of Supabase's Phone provider, this app uses Firebase's own Phone Auth
+SDK client-side to send/verify the OTP, then calls a Supabase Edge Function
+(`verify-firebase-phone`) that verifies the resulting Firebase ID token
+server-side and marks the **Supabase** user's phone confirmed. Firebase is
+never used as an identity provider the app signs in with — the user is
+already signed into Supabase (via email/password) before phone verification
+starts; Firebase just proves they own the number.
 
-### 2. Create a Verify Service
-**Twilio Console → Verify → Services → Create new Verify Service**
-- Friendly name: "IsdaSafe OTP"
-- Save. Copy the **Verify Service SID** (starts with `VA...`).
+### 1. Create a Firebase project
+Go to [console.firebase.google.com](https://console.firebase.google.com) →
+**Add project** (e.g. "IsdaSafe") → you can decline Google Analytics, it's not
+needed.
 
-Twilio *Verify* (not raw Messaging) is used because it manages OTP generation,
-expiry, and rate-limiting for you — no template/expiry logic to build yourself.
+### 2. Enable Phone sign-in
+**Firebase Console → Build → Authentication → Sign-in method → Phone** → Enable → Save.
 
-### 3. Get your Account SID and Auth Token
-**Twilio Console → Account dashboard** — copy the **Account SID** and **Auth
-Token** (click "show" to reveal it).
+### 2b. Allow the Philippines in the SMS region policy (required)
+**Firebase Console → Authentication → Settings tab → SMS region policy** —
+this defaults to blocking regions until explicitly allowed, so phone auth
+will fail with `operation-not-allowed: SMS unable to be sent until this
+region enabled by the app developer` until you either select **Allow by
+default** or add the **Philippines** to an allowlist.
 
-### 4. Trial account limitation
-On a Twilio trial account, you can only send SMS to phone numbers you've
-pre-verified under **Console → Phone Numbers → Verified Caller IDs**. Upgrade to
-a paid account to send to arbitrary numbers.
+### 3. Register your apps + generate `lib/firebase_options.dart`
+Run from the repo root (requires Node + the Firebase CLI: `npm install -g firebase-tools`,
+then `firebase login`):
+```
+dart pub global activate flutterfire_cli
+flutterfire configure
+```
+Pick the Firebase project from step 1, then select the platforms you build for
+(Android, iOS, Web at minimum). This generates `lib/firebase_options.dart` and
+any native config files (`google-services.json` etc.) automatically — nothing
+to hand-edit. `main.dart` already imports this file; the app won't compile
+until you've run this.
 
-### 5. Enable Phone auth in Supabase
-**Supabase Dashboard → Authentication → Providers → Phone**
-- Enable the provider.
-- SMS provider: **Twilio Verify**.
-- Enter your Account SID, Auth Token, and Verify Service SID from steps 2–3.
-- Save.
+### 4. Android: no extra config
+Firebase's Android SDK matches by package name (`com.isdasafe.app`) + the
+`google-services.json` from step 3 — the SHA-1 used for Google Sign-In isn't
+needed here.
 
-### 6. Turn off email confirmation (required)
+### 5. iOS: upload an APNs key (required for silent-push verification)
+**Firebase Console → Project settings → Cloud Messaging → Apple app configuration
+→ APNs Authentication Key → Upload** — needs a `.p8` key from
+**Apple Developer → Certificates, Identifiers & Profiles → Keys** (enable "Apple
+Push Notifications service"). Without this, iOS phone verification falls back
+to a visible reCAPTCHA instead of silent verification.
+
+### 6. Web: nothing extra
+`firebase_auth`'s web implementation handles the required reCAPTCHA
+automatically once `flutterfire configure` has wired the web config in.
+
+### 7. Deploy the Edge Function + set its secret
+The function itself (`supabase/functions/verify-firebase-phone/index.ts`) is
+already deployed. It needs one secret it can't get automatically — your
+Firebase **Project ID** (Firebase Console → Project settings → General →
+"Project ID", *not* the project name):
+```
+supabase secrets set FIREBASE_PROJECT_ID=<your-firebase-project-id> --project-ref vemaphehzjnvspxmweeb
+```
+(or set it via **Supabase Dashboard → Edge Functions → Manage secrets**). The
+function's other three env vars (`SUPABASE_URL`, `SUPABASE_ANON_KEY`,
+`SUPABASE_SERVICE_ROLE_KEY`) are injected automatically by Supabase — nothing
+to configure there.
+
+### 8. Turn off email confirmation (required)
 **Supabase Dashboard → Authentication → Providers → Email**
 - Make sure **"Confirm email"** is **OFF**.
 
-This matters because the app's flow is: `signUp()` → immediately
-`updateUser(phone: ...)` to trigger the OTP SMS. `updateUser` requires an
-active session, and `signUp()` only returns one immediately if email
-confirmation isn't required. Phone-OTP verification is the real verification
-gate in this app, not an email link.
+This matters because the app's flow is: `signUp()` → immediately request a
+Firebase OTP. Phone-OTP verification is the real verification gate in this
+app, not an email link, and several other calls in this flow (e.g.
+`functions.invoke`) expect an active Supabase session, which `signUp()` only
+returns immediately when email confirmation isn't required.
 
-### 7. (Optional) Raise SMS rate limits for testing
-**Supabase Dashboard → Authentication → Rate Limits** — the default SMS-send
-limit can be hit quickly during development/testing; raise it if needed to
-avoid `over_sms_send_rate_limit` errors.
-
-### 8. What the app actually calls
-Everything phone-related in `lib/services/auth_service.dart` goes through
-`supabase.auth.updateUser(...)` and `supabase.auth.verifyOTP(...)` — no HTTP
-client, no Twilio SDK, no Twilio secret anywhere in the Flutter app.
+### 9. What the app actually calls
+`lib/services/auth_service.dart` wraps `firebase_auth`'s `verifyPhoneNumber`/
+`signInWithCredential` to get a Firebase ID token, then calls
+`supabase.functions.invoke('verify-firebase-phone', ...)` — the Flutter app
+never talks to Twilio, and never holds a long-lived Firebase session (it signs
+out of Firebase immediately after the Edge Function call, success or not).
 
 ---
 
@@ -174,14 +211,22 @@ create policy "Users can update their own profile" on public.profiles
 
 ## Verification checklist
 
-1. `flutter pub get`
-2. `flutter analyze`
-3. Confirm the `profiles` table exists (Part 3).
-4. `flutter run` on Android (debug SHA-1 registered) or iOS (URL scheme in `Info.plist`).
-5. Walk through:
+1. `flutterfire configure` has been run (Part 2, step 3) — `lib/firebase_options.dart` exists.
+2. SMS region policy allows the Philippines (Part 2, step 2b).
+3. `FIREBASE_PROJECT_ID` secret is set on the Supabase project (Part 2, step 7).
+4. `flutter pub get`
+5. `flutter analyze`
+6. Confirm the `profiles` table exists (Part 3).
+7. `flutter run` on Android (debug SHA-1 registered for Google Sign-In) or iOS
+   (URL scheme in `Info.plist` + APNs key uploaded for Firebase).
+8. Walk through:
    - **Register** → watch the password checklist go green → submit → receive the
-     Twilio SMS → enter the code → confirm a row appears in `public.profiles`
-     with `phone_verified = true` → land in the app.
+     Firebase SMS → enter the code → confirm a row appears in `public.profiles`
+     with `phone_verified = true`, and that `auth.users.phone_confirmed_at` is
+     set for that user → land in the app.
+   - **Force-quit mid-signup** (after Register, before entering the code), then
+     relaunch → confirm you're routed back into OTP verification with a fresh
+     code, not stuck on a blank/expired one.
    - **Sign out** (logout icon in the app bar / sidebar).
    - **Login** with the email/password just created.
    - **Login with Google** (full sign-in).

@@ -1,3 +1,4 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -6,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app.dart';
+import 'firebase_options.dart';
 import 'providers/pond_provider.dart';
 
 Future<void> main() async {
@@ -16,6 +18,9 @@ Future<void> main() async {
     url: dotenv.env['SUPABASE_URL']!,
     publishableKey: dotenv.env['SUPABASE_ANON_KEY']!,
   );
+  // Used only for phone OTP (see AuthService.sendFirebasePhoneOtp) —
+  // Supabase remains the app's actual identity/session provider.
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   final googleWebClientId = dotenv.env['GOOGLE_WEB_CLIENT_ID'];
   final googleIosClientId = dotenv.env['GOOGLE_IOS_CLIENT_ID'];
