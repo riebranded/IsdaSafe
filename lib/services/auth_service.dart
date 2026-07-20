@@ -206,10 +206,23 @@ abstract final class AuthService {
   /// dev/prod origin registered as a JavaScript origin).
   static Future<void> signInWithGoogle() async {
     if (kIsWeb) {
-      // Without this, Google may silently reuse the last-used session or
-      // prompt for a typed email instead of listing every signed-in account.
+      // Without an explicit redirectTo, GoTrue sends the browser back to
+      // whatever "Site URL" is configured in the Supabase dashboard once
+      // Google's callback completes — not wherever this page actually is.
+      // `flutter run -d chrome` picks a random dev port each launch, so that
+      // static Site URL almost never matches and the browser lands on a dead
+      // "this site can't be reached" page. Uri.base is the page's own
+      // current URL, so this always redirects back to whatever's actually
+      // serving the app — but that exact origin must also be added to
+      // Supabase's Authentication → URL Configuration → Redirect URLs
+      // allow-list (a `http://localhost:*` wildcard covers every dev port).
+      //
+      // Without this, Google may also silently reuse the last-used session
+      // or prompt for a typed email instead of listing every signed-in
+      // account.
       await _auth.signInWithOAuth(
         OAuthProvider.google,
+        redirectTo: Uri.base.toString(),
         queryParams: {'prompt': 'select_account'},
       );
       return;
@@ -237,18 +250,6 @@ abstract final class AuthService {
     );
   }
 
-  /// Best-effort profile fetch from Google — used ONLY to prefill the
-  /// Register form (full name + email). Never creates a Supabase session.
-  ///
-  /// Google's basic `email`/`profile` scopes do not expose a phone number,
-  /// so this intentionally never returns one — the user still enters and
-  /// verifies their phone number via OTP.
-  static Future<({String? fullName, String? email})?> fetchGoogleProfileForPrefill() async {
-    final googleUser = await _authenticateWithGoogle();
-    if (googleUser == null) return null;
-    return (fullName: googleUser.displayName, email: googleUser.email);
-  }
-
   static Future<GoogleSignInAccount?> _authenticateWithGoogle() async {
     final googleSignIn = GoogleSignIn.instance;
     var googleUser = await googleSignIn.attemptLightweightAuthentication();
@@ -267,11 +268,32 @@ abstract final class AuthService {
     await _auth.signOut();
   }
 
+  /// Uploads a user-picked profile photo to the public `avatars` Storage
+  /// bucket and returns its public URL, ready to hand to [upsertProfile].
+  /// Storage RLS restricts writes to a `<uid>/...` prefix matching the
+  /// caller's own id, so this requires an active session — call only after
+  /// sign-up/sign-in has completed.
+  static Future<String> uploadAvatar({
+    required Uint8List bytes,
+    required String contentType,
+  }) async {
+    final uid = currentUser!.id;
+    final extension = contentType.split('/').last;
+    final path = '$uid/avatar.$extension';
+    await _client.storage.from('avatars').uploadBinary(
+      path,
+      bytes,
+      fileOptions: FileOptions(upsert: true, contentType: contentType),
+    );
+    return _client.storage.from('avatars').getPublicUrl(path);
+  }
+
   static Future<void> upsertProfile({
     required String fullName,
     required String email,
     String? phone,
     bool phoneVerified = false,
+    String? photoUrl,
   }) {
     final uid = currentUser!.id;
     return _client.from('profiles').upsert({
@@ -280,6 +302,7 @@ abstract final class AuthService {
       'email': email,
       'phone': ?phone,
       'phone_verified': phoneVerified,
+      'photo_url': ?photoUrl,
     });
   }
 
@@ -294,6 +317,27 @@ abstract final class AuthService {
     } catch (e) {
       debugPrint('AuthService: hasVerifiedProfile error $e');
       return false;
+    }
+  }
+
+  /// Used by the dashboard sidebar's account section to show the current
+  /// user's name/email/photo. Unlike [hasVerifiedProfile], failures surface
+  /// as null rather than being swallowed, since the caller has a clear
+  /// fallback (a placeholder avatar) either way.
+  static Future<({String fullName, String email, String? photoUrl})?> fetchCurrentProfile() async {
+    final uid = currentUser?.id;
+    if (uid == null) return null;
+    try {
+      final row = await _client.from('profiles').select('full_name, email, photo_url').eq('id', uid).maybeSingle();
+      if (row == null) return null;
+      return (
+        fullName: (row['full_name'] as String?) ?? '',
+        email: (row['email'] as String?) ?? '',
+        photoUrl: row['photo_url'] as String?,
+      );
+    } catch (e) {
+      debugPrint('AuthService: fetchCurrentProfile error $e');
+      return null;
     }
   }
 }

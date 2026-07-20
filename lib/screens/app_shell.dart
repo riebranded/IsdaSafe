@@ -184,11 +184,6 @@ class _PondSidebar extends StatelessWidget {
                     icon: const Icon(Icons.refresh),
                     tooltip: 'Refresh all ponds',
                   ),
-                  IconButton(
-                    onPressed: AuthService.signOut,
-                    icon: const Icon(Icons.logout),
-                    tooltip: 'Sign out',
-                  ),
                 ],
               ),
             ),
@@ -231,9 +226,98 @@ class _PondSidebar extends StatelessWidget {
                       },
                     ),
             ),
+            const Divider(height: 1),
+            const _AccountSection(),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Persistent account row at the bottom of the sidebar — avatar (Google
+/// photo when available, else an initial-letter placeholder), name, and
+/// email, tapping opens a menu with Sign out. Replaces the old bare logout
+/// icon that used to sit in the header.
+class _AccountSection extends StatefulWidget {
+  const _AccountSection();
+
+  @override
+  State<_AccountSection> createState() => _AccountSectionState();
+}
+
+class _AccountSectionState extends State<_AccountSection> {
+  late final _profileFuture = AuthService.fetchCurrentProfile();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final currentUser = AuthService.currentUser;
+
+    return FutureBuilder<({String fullName, String email, String? photoUrl})?>(
+      future: _profileFuture,
+      builder: (context, snapshot) {
+        final profile = snapshot.data;
+        // Falls back to the synchronously-available session data while the
+        // `profiles` fetch (needed for photo_url) is still in flight, so the
+        // row shows a name/email immediately instead of flashing empty.
+        final fallbackName = (currentUser?.userMetadata?['full_name'] as String?) ?? '';
+        final fallbackEmail = currentUser?.email ?? '';
+        final fullName = (profile?.fullName.isNotEmpty ?? false) ? profile!.fullName : fallbackName;
+        final email = (profile?.email.isNotEmpty ?? false) ? profile!.email : fallbackEmail;
+        final photoUrl = profile?.photoUrl;
+        final displayName = fullName.isNotEmpty ? fullName : email;
+        final initial = displayName.isNotEmpty ? displayName[0].toUpperCase() : '?';
+
+        return PopupMenuButton<String>(
+          tooltip: 'Account',
+          offset: const Offset(0, -8),
+          onSelected: (value) {
+            if (value == 'signOut') AuthService.signOut();
+          },
+          itemBuilder: (context) => const [
+            PopupMenuItem(value: 'signOut', child: Text('Sign out')),
+          ],
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 18,
+                  backgroundColor: theme.colorScheme.primary,
+                  backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
+                  child: photoUrl == null
+                      ? Text(initial, style: TextStyle(color: theme.colorScheme.onPrimary))
+                      : null,
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        displayName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                      if (email.isNotEmpty && email != displayName)
+                        Text(
+                          email,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                        ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.more_vert, size: 18, color: theme.colorScheme.onSurfaceVariant),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

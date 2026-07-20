@@ -17,6 +17,7 @@ class OtpVerificationScreen extends StatefulWidget {
     required this.email,
     required this.phone,
     required this.verificationId,
+    this.photoUrl,
   });
 
   final String fullName;
@@ -26,6 +27,10 @@ class OtpVerificationScreen extends StatefulWidget {
   /// Firebase's handle for the in-flight phone verification. Resending
   /// replaces this with a new one (see [_resend]).
   final String verificationId;
+
+  /// Imported from Google during Register's prefill, if used. Null for
+  /// plain email/password sign-ups.
+  final String? photoUrl;
 
   @override
   State<OtpVerificationScreen> createState() => _OtpVerificationScreenState();
@@ -102,6 +107,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         email: widget.email,
         phone: widget.phone,
         phoneVerified: true,
+        photoUrl: widget.photoUrl,
       );
       await AuthService.refreshAuthState();
       debugPrint('OtpVerificationScreen: profile upsert done, navigating into the app');

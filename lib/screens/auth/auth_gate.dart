@@ -5,6 +5,7 @@ import '../../services/auth_service.dart';
 import '../app_shell.dart';
 import 'login_screen.dart';
 import 'otp_verification_screen.dart';
+import 'register_screen.dart';
 
 /// Swaps between the auth flow and [AppShell] based on Supabase's current
 /// session, and recovers a user who was killed mid-signup (session exists
@@ -44,10 +45,26 @@ class AuthGate extends StatelessWidget {
             // pending number lives in user_metadata until then (see
             // AuthService.signUpWithEmail).
             final pendingPhone = (user.userMetadata?['pending_phone'] as String?) ?? user.phone ?? '';
+
+            if (pendingPhone.isEmpty) {
+              // A full "Continue with Google" from Login/Register (not the
+              // email/password form) lands a brand-new — or pre-pending_phone
+              // legacy — user here with no signup in progress to recover.
+              // RegisterScreen detects the existing session itself (see
+              // its `_hasGoogleSession`) and asks only for the phone number.
+              return const RegisterScreen();
+            }
+
+            // A full "Login with Google" (not Register) can also land a
+            // brand-new user here — Google's OIDC claims populate one of
+            // these two keys in user_metadata.
+            final photoUrl =
+                (user.userMetadata?['avatar_url'] as String?) ?? (user.userMetadata?['picture'] as String?);
             return _PendingPhoneVerification(
               fullName: (user.userMetadata?['full_name'] as String?) ?? '',
               email: user.email ?? '',
               phone: pendingPhone,
+              photoUrl: photoUrl,
             );
           },
         );
@@ -60,11 +77,17 @@ class AuthGate extends StatelessWidget {
 /// `verificationId` survives an app restart, unlike [RegisterScreen], which
 /// already has one from the send it just triggered).
 class _PendingPhoneVerification extends StatefulWidget {
-  const _PendingPhoneVerification({required this.fullName, required this.email, required this.phone});
+  const _PendingPhoneVerification({
+    required this.fullName,
+    required this.email,
+    required this.phone,
+    this.photoUrl,
+  });
 
   final String fullName;
   final String email;
   final String phone;
+  final String? photoUrl;
 
   @override
   State<_PendingPhoneVerification> createState() => _PendingPhoneVerificationState();
@@ -83,15 +106,6 @@ class _PendingPhoneVerificationState extends State<_PendingPhoneVerification> {
   /// if Firebase auto-verified the phone without a code (already marked
   /// verified in that case — nothing left for the caller to do).
   Future<String?> _send() async {
-    if (widget.phone.isEmpty) {
-      // Only possible for an account created before `pending_phone` started
-      // being stored (or one that somehow never had a phone entered) —
-      // there's no number left anywhere to recover, so this account can't
-      // self-heal. Signing out and registering again is the way forward.
-      throw const AuthException(
-        "We couldn't find a pending phone number for this account. Please sign out and register again.",
-      );
-    }
     debugPrint('AuthGate: recovering mid-signup user, requesting fresh Firebase OTP for ${widget.phone}...');
     final outcome = await AuthService.requestFirebasePhoneOtp(widget.phone);
     debugPrint('AuthGate: recovery OTP outcome — autoVerified=${outcome.autoVerified}');
@@ -102,6 +116,7 @@ class _PendingPhoneVerificationState extends State<_PendingPhoneVerification> {
       email: widget.email,
       phone: widget.phone,
       phoneVerified: true,
+      photoUrl: widget.photoUrl,
     );
     await AuthService.refreshAuthState();
     return null;
@@ -155,6 +170,7 @@ class _PendingPhoneVerificationState extends State<_PendingPhoneVerification> {
           email: widget.email,
           phone: widget.phone,
           verificationId: verificationId,
+          photoUrl: widget.photoUrl,
         );
       },
     );
