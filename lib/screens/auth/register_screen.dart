@@ -7,14 +7,9 @@ import '../../theme/app_spacing.dart';
 import '../../widgets/password_strength_checklist.dart';
 import 'otp_verification_screen.dart';
 
-/// Calling codes offered in the mobile-number field, default first.
-const _kCountryCodes = [
-  (code: '+63', label: 'PH +63'),
-  (code: '+1', label: 'US/CA +1'),
-  (code: '+44', label: 'UK +44'),
-  (code: '+61', label: 'AU +61'),
-  (code: '+65', label: 'SG +65'),
-];
+/// This app only serves Philippine mobile numbers, so the calling code is
+/// fixed rather than offered as a choice.
+const _kPhCountryCode = '+63';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -31,7 +26,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
-  var _countryCode = _kCountryCodes.first.code;
   var _password = '';
   var _isSubmitting = false;
   var _isGoogleSubmitting = false;
@@ -93,7 +87,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     final fullName = _fullNameController.text.trim();
     final email = _emailController.text.trim();
-    final e164Phone = '$_countryCode${_phoneController.text.trim()}';
+    final e164Phone = '$_kPhCountryCode${_phoneController.text.trim()}';
 
     setState(() => _isSubmitting = true);
     try {
@@ -187,38 +181,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       },
                     ),
                     const SizedBox(height: AppSpacing.md),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SizedBox(
-                          width: 110,
-                          child: DropdownButtonFormField<String>(
-                            initialValue: _countryCode,
-                            decoration: const InputDecoration(labelText: 'Code'),
-                            items: [
-                              for (final entry in _kCountryCodes)
-                                DropdownMenuItem(value: entry.code, child: Text(entry.label)),
-                            ],
-                            onChanged: busy ? null : (value) => setState(() => _countryCode = value ?? _countryCode),
-                          ),
-                        ),
-                        const SizedBox(width: AppSpacing.sm),
-                        Expanded(
-                          child: TextFormField(
-                            controller: _phoneController,
-                            enabled: !busy,
-                            keyboardType: TextInputType.phone,
-                            textInputAction: TextInputAction.next,
-                            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                            decoration: const InputDecoration(labelText: 'Mobile number', prefixIcon: Icon(Icons.phone_outlined)),
-                            validator: (value) {
-                              final digits = value?.trim() ?? '';
-                              if (digits.length < 7 || digits.length > 12) return 'Enter a valid mobile number';
-                              return null;
-                            },
-                          ),
-                        ),
-                      ],
+                    TextFormField(
+                      controller: _phoneController,
+                      enabled: !busy,
+                      keyboardType: TextInputType.phone,
+                      textInputAction: TextInputAction.next,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      decoration: const InputDecoration(
+                        labelText: 'Mobile number',
+                        prefixIcon: Icon(Icons.phone_outlined),
+                        prefixText: '$_kPhCountryCode ',
+                      ),
+                      validator: (value) {
+                        final digits = value?.trim() ?? '';
+                        if (digits.length < 7 || digits.length > 12) return 'Enter a valid mobile number';
+                        return null;
+                      },
                     ),
                     const SizedBox(height: AppSpacing.md),
                     TextFormField(

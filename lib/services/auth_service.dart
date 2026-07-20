@@ -63,18 +63,24 @@ abstract final class AuthService {
     );
   }
 
-  /// Full native Google sign-in (Login screen). Creates/reuses a Supabase
-  /// session via the ID-token exchange.
+  /// Full Google sign-in (Login screen). Creates/reuses a Supabase session.
   ///
   /// On web, `google_sign_in`'s web plugin only supports its own
   /// FedCM-rendered button — calling `authenticate()` programmatically
-  /// throws `UnimplementedError`, and lightweight/One-Tap auth alone
-  /// returns null when there's no auto-signed-in session, which previously
-  /// surfaced as "Google sign-in was cancelled" on every tap. Route through
-  /// Supabase's OAuth redirect instead, which needs no native button.
+  /// throws `UnimplementedError`, and lightweight/One-Tap auth alone returns
+  /// null when there's no auto-signed-in session. Route through Supabase's
+  /// OAuth redirect instead: same standard pattern Supabase's own Flutter
+  /// docs recommend, and it needs only the one redirect URI registered in
+  /// Google Cloud Console (unlike the native button, which requires every
+  /// dev/prod origin registered as a JavaScript origin).
   static Future<void> signInWithGoogle() async {
     if (kIsWeb) {
-      await _auth.signInWithOAuth(OAuthProvider.google);
+      // Without this, Google may silently reuse the last-used session or
+      // prompt for a typed email instead of listing every signed-in account.
+      await _auth.signInWithOAuth(
+        OAuthProvider.google,
+        queryParams: {'prompt': 'select_account'},
+      );
       return;
     }
 
