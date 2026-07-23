@@ -5,12 +5,13 @@ import '../models/pond.dart';
 import '../models/reading_bands.dart';
 import '../providers/dashboard_provider.dart';
 import '../theme/app_spacing.dart';
+import '../widgets/metric_comparison_chart.dart';
 import '../widgets/reading_grid.dart';
 import '../widgets/species_suggestion_list.dart';
 import '../widgets/status_badge.dart';
 
-/// Full-screen mobile route: pushed from [PondListScreen], owns its own
-/// [AppBar] with the pond name + refresh action.
+/// Full-screen mobile route: pushed from `DashboardScreen` or `PondMapScreen`,
+/// owns its own [AppBar] with the pond name + refresh action.
 class PondDashboardScreen extends StatelessWidget {
   const PondDashboardScreen({super.key, required this.pond});
 
@@ -104,14 +105,20 @@ class PondDashboardBody extends StatelessWidget {
             _PondStatusBanner(status: overallStatus(snapshot.readings)),
             const SizedBox(height: AppSpacing.lg),
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Latest readings', style: Theme.of(context).textTheme.titleMedium),
+                Expanded(
+                  child: Text('Latest readings', style: Theme.of(context).textTheme.titleMedium),
+                ),
+                const SizedBox(width: AppSpacing.sm),
                 _LastUpdated(timestamp: snapshot.reading(snapshot.readings.keys.first).timestamp),
               ],
             ),
             const SizedBox(height: AppSpacing.md),
             ReadingGrid(readings: snapshot.readings, history: snapshot.history),
+            const SizedBox(height: AppSpacing.xl),
+            Text('Trend comparison', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: AppSpacing.md),
+            MetricComparisonChart(history: snapshot.history),
             const SizedBox(height: AppSpacing.xl),
             Text('Suitable fish species', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: AppSpacing.md),

@@ -21,6 +21,11 @@ class AppRadius {
   static const double pill = 999;
 }
 
+/// Screens ≥1024px wide (Material's documented desktop/web threshold) get
+/// wide-layout treatment (e.g. [AppShell]'s persistent sidebar, or a fixed
+/// column count in [ReadingGrid]) instead of the mobile/responsive fallback.
+const double kWideLayoutBreakpoint = 1024;
+
 /// Shared motion durations/curves so every animation in the app shares the
 /// same rhythm.
 class AppMotion {
