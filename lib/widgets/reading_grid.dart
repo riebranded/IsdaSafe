@@ -9,9 +9,10 @@ import 'staggered_entrance.dart';
 /// Responsive grid of the 5 [ReadingCard]s — multi-column on wide/web
 /// viewports, falls back to fewer columns on narrow/phone widths.
 class ReadingGrid extends StatelessWidget {
-  const ReadingGrid({super.key, required this.readings});
+  const ReadingGrid({super.key, required this.readings, required this.history});
 
   final Map<MetricType, SensorReading> readings;
+  final Map<MetricType, List<SensorReading>> history;
 
   @override
   Widget build(BuildContext context) {
@@ -21,10 +22,13 @@ class ReadingGrid extends StatelessWidget {
       maxCrossAxisExtent: 260,
       mainAxisSpacing: AppSpacing.md,
       crossAxisSpacing: AppSpacing.md,
-      childAspectRatio: 0.88,
+      childAspectRatio: 0.72,
       children: [
         for (final (index, type) in MetricType.values.indexed)
-          StaggeredEntrance(index: index, child: ReadingCard(reading: readings[type]!)),
+          StaggeredEntrance(
+            index: index,
+            child: ReadingCard(reading: readings[type]!, history: history[type]!),
+          ),
       ],
     );
   }

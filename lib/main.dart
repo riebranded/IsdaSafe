@@ -22,19 +22,21 @@ Future<void> main() async {
   // Supabase remains the app's actual identity/session provider.
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  final googleWebClientId = dotenv.env['GOOGLE_WEB_CLIENT_ID'];
-  final googleIosClientId = dotenv.env['GOOGLE_IOS_CLIENT_ID'];
-  // The web plugin requires `clientId` (the web OAuth client) and rejects
-  // `serverClientId` outright; native platforms are the opposite — they use
-  // `serverClientId` (the web client) to mint an ID token Supabase can verify.
-  await GoogleSignIn.instance.initialize(
-    clientId: kIsWeb
-        ? ((googleWebClientId?.isNotEmpty ?? false) ? googleWebClientId : null)
-        : ((googleIosClientId?.isNotEmpty ?? false) ? googleIosClientId : null),
-    serverClientId: kIsWeb
-        ? null
-        : ((googleWebClientId?.isNotEmpty ?? false) ? googleWebClientId : null),
-  );
+  // Web's sign-in flow (AuthService.signInWithGoogle) goes entirely through
+  // Supabase's OAuth redirect and never touches the GoogleSignIn plugin, so
+  // initializing it on web only serves to arm Google Identity Services' auto
+  // One Tap prompt — which throws an uncaught JS TypeError
+  // (`Cannot read properties of null (reading 'removeChild')`) on some
+  // pages. Skip it there; native platforms still need it for
+  // AuthService._authenticateWithGoogle.
+  if (!kIsWeb) {
+    final googleIosClientId = dotenv.env['GOOGLE_IOS_CLIENT_ID'];
+    final googleWebClientId = dotenv.env['GOOGLE_WEB_CLIENT_ID'];
+    await GoogleSignIn.instance.initialize(
+      clientId: (googleIosClientId?.isNotEmpty ?? false) ? googleIosClientId : null,
+      serverClientId: (googleWebClientId?.isNotEmpty ?? false) ? googleWebClientId : null,
+    );
+  }
 
   runApp(
     ChangeNotifierProvider(

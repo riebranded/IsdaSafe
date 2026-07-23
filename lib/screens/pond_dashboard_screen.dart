@@ -111,7 +111,7 @@ class PondDashboardBody extends StatelessWidget {
               ],
             ),
             const SizedBox(height: AppSpacing.md),
-            ReadingGrid(readings: snapshot.readings),
+            ReadingGrid(readings: snapshot.readings, history: snapshot.history),
             const SizedBox(height: AppSpacing.xl),
             Text('Suitable fish species', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: AppSpacing.md),
