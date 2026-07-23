@@ -9,7 +9,7 @@ class MetricRange {
   String get label => '$min–$max';
 }
 
-/// A mock fish species with the water-quality ranges it needs to thrive.
+/// A mock fish species with the water-quality ranges it needs to thrives.
 class FishSpecies {
   const FishSpecies({
     required this.name,

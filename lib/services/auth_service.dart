@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:firebase_auth/firebase_auth.dart' as fb_auth;
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -9,14 +8,12 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 /// Sign-In behind a single static API, mirroring the style of
 /// [CurrentLocationService].
 ///
-/// Phone verification goes through Firebase Phone Auth (see
-/// docs/AUTH_SETUP.md Part 2) rather than Supabase's own Phone provider.
-/// Firebase is used only to prove phone ownership — the resulting ID token
-/// is verified server-side by the `verify-firebase-phone` Edge Function,
-/// which marks the *Supabase* user's phone confirmed. Supabase remains the
-/// single source of truth for the app's session; every method here hides
-/// the Firebase types behind [AuthException] so callers never import
-/// `firebase_auth` themselves.
+/// Phone verification goes through Semaphore (see docs/AUTH_SETUP.md Part 2)
+/// rather than Supabase's own Phone provider. Semaphore only sends the SMS —
+/// a Supabase Edge Function (`send-semaphore-otp`) generates/stores the code
+/// server-side and another (`verify-semaphore-otp`) checks it and marks the
+/// *Supabase* user's phone confirmed. Supabase remains the single source of
+/// truth for the app's session.
 abstract final class AuthService {
   static SupabaseClient get _client => Supabase.instance.client;
   static GoTrueClient get _auth => _client.auth;
@@ -38,13 +35,13 @@ abstract final class AuthService {
   /// underneath those screens for the entire app's lifetime and reacts to
   /// every auth-state change — including the one `signUpWithEmail` fires —
   /// so without this it also fires its own "recover a killed session" OTP
-  /// send at the same time, racing Firebase's reCAPTCHA widget against
-  /// itself. Cleared once those screens are done, one way or another.
+  /// send at the same time, racing the one already in flight. Cleared once
+  /// those screens are done, one way or another.
   static bool isManagingPhoneVerification = false;
 
   /// [pendingPhone] is stashed in `user_metadata` purely so [AuthGate] can
   /// recover it if the app is killed before phone verification finishes —
-  /// `auth.users.phone` itself isn't set until the `verify-firebase-phone`
+  /// `auth.users.phone` itself isn't set until the `verify-semaphore-otp`
   /// Edge Function succeeds, so there'd otherwise be nowhere to read the
   /// number back from to resend a code after a restart.
   static Future<AuthResponse> signUpWithEmail({
@@ -71,126 +68,37 @@ abstract final class AuthService {
     return _auth.resetPasswordForEmail(email);
   }
 
-  /// Sends an OTP to [e164Phone] via Firebase Phone Auth. [onCodeSent] fires
-  /// once the SMS is on its way, with a `verificationId` (needed to confirm
-  /// the code later) and an optional `resendToken` (pass back via
-  /// [forceResendingToken] to resend without waiting for a new SMS).
-  ///
-  /// [onAutoVerified] fires instead of [onCodeSent] on Android when Firebase
-  /// can auto-retrieve the SMS itself — in that case the phone is already
-  /// verified by the time it fires, and there's no code left to confirm.
-  static Future<void> sendFirebasePhoneOtp({
-    required String e164Phone,
-    required void Function(String verificationId, int? resendToken) onCodeSent,
-    required void Function() onAutoVerified,
-    required void Function(AuthException error) onVerificationFailed,
-    int? forceResendingToken,
-  }) {
-    debugPrint(
-      'AuthService: verifyPhoneNumber($e164Phone) called, forceResendingToken=$forceResendingToken',
-    );
-    return fb_auth.FirebaseAuth.instance.verifyPhoneNumber(
-      phoneNumber: e164Phone,
-      forceResendingToken: forceResendingToken,
-      verificationCompleted: (credential) async {
-        debugPrint('AuthService: verificationCompleted fired (Android auto-retrieval)');
-        try {
-          await _completeFirebasePhoneVerification(credential);
-          debugPrint('AuthService: auto-verification completed successfully');
-          onAutoVerified();
-        } catch (e) {
-          debugPrint('AuthService: auto-verification completion failed: $e');
-          onVerificationFailed(AuthException('$e'));
-        }
-      },
-      verificationFailed: (error) {
-        debugPrint('AuthService: verificationFailed fired — code=${error.code} message=${error.message}');
-        onVerificationFailed(AuthException(error.message ?? 'Failed to send verification code.'));
-      },
-      codeSent: (verificationId, resendToken) {
-        debugPrint(
-          'AuthService: codeSent fired — verificationId=${verificationId.substring(0, verificationId.length.clamp(0, 12))}… resendToken=$resendToken',
-        );
-        onCodeSent(verificationId, resendToken);
-      },
-      codeAutoRetrievalTimeout: (verificationId) {
-        debugPrint('AuthService: codeAutoRetrievalTimeout fired for $verificationId');
-      },
-    );
-  }
-
-  /// Convenience wrapper around [sendFirebasePhoneOtp] for callers that just
-  /// want to `await` an outcome instead of juggling three callbacks —
-  /// [sendFirebasePhoneOtp] itself only resolves once `verifyPhoneNumber` is
-  /// *called*, not once Firebase actually reports a result. Throws
-  /// [AuthException] on failure (mirroring every other method here).
-  static Future<({String? verificationId, int? resendToken, bool autoVerified})> requestFirebasePhoneOtp(
-    String e164Phone, {
-    int? forceResendingToken,
-  }) {
-    final completer = Completer<({String? verificationId, int? resendToken, bool autoVerified})>();
-    sendFirebasePhoneOtp(
-      e164Phone: e164Phone,
-      forceResendingToken: forceResendingToken,
-      onCodeSent: (verificationId, resendToken) {
-        if (!completer.isCompleted) {
-          completer.complete((verificationId: verificationId, resendToken: resendToken, autoVerified: false));
-        }
-      },
-      onAutoVerified: () {
-        if (!completer.isCompleted) {
-          completer.complete((verificationId: null, resendToken: null, autoVerified: true));
-        }
-      },
-      onVerificationFailed: (error) {
-        debugPrint('AuthService: requestFirebasePhoneOtp failing with: ${error.message}');
-        if (!completer.isCompleted) completer.completeError(error);
-      },
-    );
-    return completer.future;
-  }
-
-  /// Confirms the OTP the user typed against [verificationId], then marks
-  /// the Supabase account's phone as verified via the `verify-firebase-phone`
-  /// Edge Function.
-  static Future<void> confirmFirebasePhoneOtp({
-    required String verificationId,
-    required String smsCode,
-  }) {
-    debugPrint('AuthService: confirmFirebasePhoneOtp called (code length=${smsCode.length})');
-    final credential = fb_auth.PhoneAuthProvider.credential(
-      verificationId: verificationId,
-      smsCode: smsCode,
-    );
-    return _completeFirebasePhoneVerification(credential);
-  }
-
-  static Future<void> _completeFirebasePhoneVerification(fb_auth.PhoneAuthCredential credential) async {
-    debugPrint('AuthService: calling FirebaseAuth.signInWithCredential...');
-    final userCredential = await fb_auth.FirebaseAuth.instance.signInWithCredential(credential);
-    debugPrint('AuthService: Firebase sign-in succeeded, uid=${userCredential.user?.uid}');
-
-    final idToken = await userCredential.user?.getIdToken();
-    if (idToken == null) {
-      debugPrint('AuthService: getIdToken() returned null');
-      throw const AuthException('Firebase did not return an ID token.');
-    }
-    debugPrint('AuthService: got Firebase ID token (length=${idToken.length})');
-
+  /// Requests a phone-verification SMS for [e164Phone] via the
+  /// `send-semaphore-otp` Edge Function, which generates/stores the code
+  /// server-side and sends it through Semaphore. Throws [AuthException] on
+  /// failure (including rate-limit rejections, surfaced with a
+  /// user-facing message from the Edge Function).
+  static Future<void> requestSemaphoreOtp(String e164Phone) async {
+    debugPrint('AuthService: requesting Semaphore OTP for $e164Phone...');
     try {
-      debugPrint('AuthService: invoking verify-firebase-phone Edge Function...');
-      final response = await _client.functions.invoke('verify-firebase-phone', body: {'idToken': idToken});
-      debugPrint('AuthService: verify-firebase-phone responded status=${response.status} data=${response.data}');
+      final response = await _client.functions.invoke('send-semaphore-otp', body: {'phone': e164Phone});
+      debugPrint('AuthService: send-semaphore-otp responded status=${response.status} data=${response.data}');
     } on FunctionException catch (e) {
-      debugPrint('AuthService: verify-firebase-phone failed — status=${e.status} details=${e.details}');
+      debugPrint('AuthService: send-semaphore-otp failed — status=${e.status} details=${e.details}');
+      final details = e.details;
+      final message = details is Map ? details['error'] as String? : null;
+      throw AuthException(message ?? 'Failed to send verification code.');
+    }
+  }
+
+  /// Confirms [code] against the Supabase account's pending Semaphore OTP
+  /// via the `verify-semaphore-otp` Edge Function, which marks the
+  /// account's phone verified on success.
+  static Future<void> confirmSemaphoreOtp(String code) async {
+    debugPrint('AuthService: confirmSemaphoreOtp called (code length=${code.length})');
+    try {
+      final response = await _client.functions.invoke('verify-semaphore-otp', body: {'code': code});
+      debugPrint('AuthService: verify-semaphore-otp responded status=${response.status} data=${response.data}');
+    } on FunctionException catch (e) {
+      debugPrint('AuthService: verify-semaphore-otp failed — status=${e.status} details=${e.details}');
       final details = e.details;
       final message = details is Map ? details['error'] as String? : null;
       throw AuthException(message ?? 'Phone verification failed.');
-    } finally {
-      // Firebase is only used transiently to prove phone ownership —
-      // Supabase remains the single source of truth for the app's session.
-      await fb_auth.FirebaseAuth.instance.signOut();
-      debugPrint('AuthService: signed out of Firebase (transient use only)');
     }
   }
 
