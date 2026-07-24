@@ -23,6 +23,7 @@ class IsdaSafeApp extends StatelessWidget {
 
     return MaterialApp(
       title: 'IsdaSafe',
+      debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: themeMode,

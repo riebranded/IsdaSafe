@@ -122,15 +122,65 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     // Wide layout: a selected pond takes over the content area (side panel
-    // stays visible). Otherwise — and always on narrow — show the list.
+    // stays visible); otherwise the full-grid overview list. Narrow/mobile
+    // gets the compact summary + one-row-readings design.
     if (widget.showDetailPane) {
       final selected = _selectedPond(ponds);
       if (selected != null) {
         return _PondDetailView(pond: selected, onBack: widget.onClearPond);
       }
+      return _pondList(ponds);
     }
 
-    return _pondList(ponds);
+    return _mobileList(ponds);
+  }
+
+  Widget _mobileList(List<Pond> ponds) {
+    var normal = 0;
+    var warning = 0;
+    var critical = 0;
+    for (final pond in ponds) {
+      switch (overallStatus(widget.cache.snapshotFor(pond).readings)) {
+        case ReadingStatus.normal:
+          normal++;
+        case ReadingStatus.warning:
+          warning++;
+        case ReadingStatus.critical:
+          critical++;
+      }
+    }
+
+    return RefreshIndicator(
+      onRefresh: () => _refreshAll(ponds),
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg,
+          AppSpacing.lg,
+          AppSpacing.lg,
+          AppSpacing.xxl + AppSpacing.xl,
+        ),
+        children: [
+          _StatusSummary(normal: normal, warning: warning, critical: critical),
+          const SizedBox(height: AppSpacing.lg),
+          for (final (index, pond) in ponds.indexed) ...[
+            if (index > 0) const SizedBox(height: AppSpacing.md),
+            StaggeredEntrance(
+              index: index,
+              child: _MobilePondCard(
+                pond: pond,
+                status: overallStatus(widget.cache.snapshotFor(pond).readings),
+                readings: widget.cache.snapshotFor(pond).readings,
+                onTap: () => _openPond(context, pond),
+                onRename: () => _renamePond(context, pond),
+                onEditLocation: () => _editLocation(context, pond),
+                onRemove: () => _removePond(context, pond),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   Pond? _selectedPond(List<Pond> ponds) {
@@ -213,6 +263,217 @@ class _PondDetailView extends StatelessWidget {
     );
   }
 }
+/// Mobile overview header: how many ponds are Normal / Warning / Critical.
+class _StatusSummary extends StatelessWidget {
+  const _StatusSummary({required this.normal, required this.warning, required this.critical});
+
+  final int normal;
+  final int warning;
+  final int critical;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(child: _SummaryTile(count: normal, label: 'Normal', status: ReadingStatus.normal)),
+        const SizedBox(width: AppSpacing.sm),
+        Expanded(child: _SummaryTile(count: warning, label: 'Warning', status: ReadingStatus.warning)),
+        const SizedBox(width: AppSpacing.sm),
+        Expanded(child: _SummaryTile(count: critical, label: 'Critical', status: ReadingStatus.critical)),
+      ],
+    );
+  }
+}
+
+class _SummaryTile extends StatelessWidget {
+  const _SummaryTile({required this.count, required this.label, required this.status});
+
+  final int count;
+  final String label;
+  final ReadingStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = status.colorOf(context);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.md),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(status.icon, size: 16, color: color),
+              const SizedBox(width: AppSpacing.xs),
+              Text(
+                '$count',
+                style: theme.textTheme.headlineSmall?.copyWith(color: color, fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(label, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Compact pond card for the mobile dashboard: name with location beneath it,
+/// a status badge pinned top-right, and all readings condensed into one row.
+class _MobilePondCard extends StatelessWidget {
+  const _MobilePondCard({
+    required this.pond,
+    required this.status,
+    required this.readings,
+    required this.onTap,
+    required this.onRename,
+    required this.onEditLocation,
+    required this.onRemove,
+  });
+
+  final Pond pond;
+  final ReadingStatus status;
+  final Map<MetricType, SensorReading> readings;
+  final VoidCallback onTap;
+  final VoidCallback onRename;
+  final VoidCallback onEditLocation;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          pond.name,
+                          style: theme.textTheme.titleMedium,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        _PondLocationLine(pond: pond),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  StatusBadge(status: status),
+                  PopupMenuButton<String>(
+                    tooltip: 'Pond options',
+                    padding: EdgeInsets.zero,
+                    icon: const Icon(Icons.more_vert),
+                    onSelected: (value) {
+                      if (value == 'rename') onRename();
+                      if (value == 'location') onEditLocation();
+                      if (value == 'remove') onRemove();
+                    },
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(value: 'rename', child: Text('Rename')),
+                      PopupMenuItem(value: 'location', child: Text('Edit location')),
+                      PopupMenuItem(value: 'remove', child: Text('Remove')),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Row(
+                children: [
+                  for (final type in MetricType.values)
+                    Expanded(child: _ReadingChip(type: type, value: readings[type]!.value)),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One metric condensed to an icon + value, sized to share a row equally.
+class _ReadingChip extends StatelessWidget {
+  const _ReadingChip({required this.type, required this.value});
+
+  final MetricType type;
+  final double value;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(type.icon, size: 18, color: theme.colorScheme.onSurfaceVariant),
+        const SizedBox(height: 4),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            type.format(value),
+            maxLines: 1,
+            style: theme.textTheme.labelMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Pond coordinates (or "No location set"), shown beneath the pond name.
+class _PondLocationLine extends StatelessWidget {
+  const _PondLocationLine({required this.pond});
+
+  final Pond pond;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final text = pond.hasLocation
+        ? '${pond.latitude!.toStringAsFixed(4)}, ${pond.longitude!.toStringAsFixed(4)}'
+        : 'No location set';
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.location_on_outlined, size: 14, color: theme.colorScheme.onSurfaceVariant),
+        const SizedBox(width: 4),
+        Flexible(
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+
 
 class _PondSummaryCard extends StatelessWidget {
   const _PondSummaryCard({

@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../models/metric_type.dart';
 import '../providers/pond_provider.dart';
 import '../services/pond_snapshot_cache.dart';
 import '../theme/app_spacing.dart';
-import '../widgets/metric_comparison_chart.dart';
+import '../widgets/individual_trend_chart.dart';
+import '../widgets/reading_history_table.dart';
 
-/// A pond selector plus that pond's trend-comparison chart (the same
-/// [MetricComparisonChart] used on each pond's own dashboard) — lets a
-/// farmer switch between ponds without leaving Analytics.
+/// A pond selector plus that pond's per-metric trends and raw reading
+/// history — lets a farmer switch between ponds without leaving Analytics.
 class AnalyticsScreen extends StatefulWidget {
   const AnalyticsScreen({super.key, required this.cache});
 
@@ -49,9 +50,15 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             ),
           ),
           const SizedBox(height: AppSpacing.lg),
-          Text('Trend comparison — ${selected.name}', style: theme.textTheme.titleMedium),
+          Text('Individual trends', style: theme.textTheme.titleMedium),
           const SizedBox(height: AppSpacing.md),
-          MetricComparisonChart(history: snapshot.history),
+          for (final type in MetricType.values) ...[
+            IndividualTrendChart(type: type, history: snapshot.history[type]!),
+            const SizedBox(height: AppSpacing.lg),
+          ],
+          Text('Individual readings', style: theme.textTheme.titleMedium),
+          const SizedBox(height: AppSpacing.md),
+          ReadingHistoryTable(history: snapshot.history),
         ],
       ),
     );

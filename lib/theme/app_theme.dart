@@ -62,13 +62,14 @@ class StatusColors extends ThemeExtension<StatusColors> {
   }
 }
 
-/// Categorical color for each [MetricType] on `MetricComparisonChart` — a
-/// separate vocabulary from [StatusColors]: this one means "which metric is
-/// this line," not "how healthy is it," so it must never be reused as a
-/// status color or vice versa. The fixed order matches [MetricType.values]
-/// and is drawn from a pre-validated CVD-safe categorical palette (adjacent
-/// pairs, as used by a multi-line chart) — swapping or reordering entries
-/// invalidates that guarantee.
+/// Categorical color for each [MetricType], used anywhere a metric needs a
+/// consistent identity color (charts, chips, icons) — a separate vocabulary
+/// from [StatusColors]: this one means "which metric is this," not "how
+/// healthy is it," so it must never be reused as a status color or vice
+/// versa. The fixed order matches [MetricType.values] and is drawn from a
+/// pre-validated CVD-safe categorical palette (adjacent pairs, as used by a
+/// multi-line chart) — swapping or reordering entries invalidates that
+/// guarantee.
 ///
 /// This is the *only* place these colors are defined — read them via
 /// `Theme.of(context).extension<MetricPalette>()!` (or `context.metricPalette`).

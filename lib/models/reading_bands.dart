@@ -49,7 +49,7 @@ class MetricBands {
   /// means "toward trouble," unlike [positionOf] (which just reflects
   /// display-range position and reads backwards for metrics where high is
   /// good, e.g. dissolved oxygen). Used to put every metric on one shared,
-  /// comparable axis — see `MetricComparisonChart`.
+  /// comparable axis for cross-metric status logic (e.g. [overallStatus]).
   double riskOf(double value) {
     final safeLo = warningLow ?? displayMin;
     final safeHi = warningHigh ?? displayMax;

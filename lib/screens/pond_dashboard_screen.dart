@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../models/metric_type.dart';
 import '../models/pond.dart';
 import '../models/reading_bands.dart';
 import '../providers/dashboard_provider.dart';
 import '../theme/app_spacing.dart';
-import '../widgets/metric_comparison_chart.dart';
+import '../widgets/individual_trend_chart.dart';
 import '../widgets/reading_grid.dart';
 import '../widgets/species_suggestion_list.dart';
 import '../widgets/status_badge.dart';
@@ -116,10 +117,12 @@ class PondDashboardBody extends StatelessWidget {
             const SizedBox(height: AppSpacing.md),
             ReadingGrid(readings: snapshot.readings, history: snapshot.history),
             const SizedBox(height: AppSpacing.xl),
-            Text('Trend comparison', style: Theme.of(context).textTheme.titleMedium),
+            Text('Individual trends', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: AppSpacing.md),
-            MetricComparisonChart(history: snapshot.history),
-            const SizedBox(height: AppSpacing.xl),
+            for (final type in MetricType.values) ...[
+              IndividualTrendChart(type: type, history: snapshot.history[type]!),
+              const SizedBox(height: AppSpacing.lg),
+            ],
             Text('Suitable fish species', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: AppSpacing.md),
             SpeciesSuggestionList(results: dashboard.matches),

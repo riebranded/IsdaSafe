@@ -260,10 +260,17 @@ abstract final class AuthService {
   }
 
   static Future<void> signOut() async {
-    try {
-      await GoogleSignIn.instance.signOut();
-    } catch (e) {
-      debugPrint('AuthService: GoogleSignIn.signOut error $e');
+    // On web, sign-in goes entirely through Supabase's OAuth redirect and
+    // never touches this plugin (see signInWithGoogle), and main.dart only
+    // calls GoogleSignIn.instance.initialize() on native platforms — calling
+    // signOut() here on web awaits an `initialize()` that never comes and
+    // hangs forever, so sign-out itself never proceeds past this line.
+    if (!kIsWeb) {
+      try {
+        await GoogleSignIn.instance.signOut();
+      } catch (e) {
+        debugPrint('AuthService: GoogleSignIn.signOut error $e');
+      }
     }
     await _auth.signOut();
   }

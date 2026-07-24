@@ -116,4 +116,42 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Suitable fish species'), findsNothing);
   });
+
+  Future<void> setNarrowSurface(WidgetTester tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+  }
+
+  testWidgets('mobile layout shows a greeting bar (avatar + bell) and a 4-item bottom nav without Notifications', (
+    tester,
+  ) async {
+    await setNarrowSurface(tester);
+    await tester.pumpWidget(buildApp());
+    await tester.pumpAndSettle();
+
+    // Greeting header with a time-based greeting and the user's avatar.
+    expect(find.textContaining('Good '), findsOneWidget);
+    expect(find.byType(CircleAvatar), findsAtLeastNWidgets(1));
+
+    // Notification bell lives in the top bar now (as an icon).
+    expect(find.byIcon(Icons.notifications_outlined), findsOneWidget);
+
+    // Bottom nav has 4 destinations and no Notifications entry.
+    final navBar = tester.widget<NavigationBar>(find.byType(NavigationBar));
+    expect(navBar.destinations.length, 4);
+    expect(find.text('Notifications'), findsNothing);
+  });
+
+  testWidgets('tapping the bell opens the Notifications page', (tester) async {
+    await setNarrowSurface(tester);
+    await tester.pumpWidget(buildApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.notifications_outlined));
+    await tester.pumpAndSettle();
+
+    // The pushed Notifications page shows its own titled AppBar.
+    expect(find.widgetWithText(AppBar, 'Notifications'), findsOneWidget);
+  });
 }

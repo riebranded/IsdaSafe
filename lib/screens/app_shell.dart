@@ -56,6 +56,22 @@ class _AppShellState extends State<AppShell> {
   final _cache = PondSnapshotCache();
   var _selectedIndex = 0;
 
+  /// Bottom nav destinations on mobile — Notifications is intentionally
+  /// excluded; it's reached via the greeting bar's bell icon instead.
+  static const List<_Destination> _bottomDestinations = [
+    _Destination.dashboard,
+    _Destination.map,
+    _Destination.analytics,
+    _Destination.settings,
+  ];
+
+  /// Selected index expressed as a position within [_bottomDestinations]
+  /// (falls back to Dashboard for any destination not in the bottom bar).
+  int get _bottomNavIndex {
+    final i = _bottomDestinations.indexOf(_Destination.values[_selectedIndex]);
+    return i < 0 ? 0 : i;
+  }
+
   /// The pond whose dashboard is shown in the wide-layout detail pane, chosen
   /// via a Dashboard sub-button or a Dashboard card. Null until one is picked.
   String? _selectedPondId;
@@ -65,6 +81,20 @@ class _AppShellState extends State<AppShell> {
     if (draft != null && context.mounted) {
       context.read<PondProvider>().addPond(draft.name, latitude: draft.latitude, longitude: draft.longitude);
     }
+  }
+
+  /// Opens Notifications as its own page (from the mobile greeting bar's
+  /// bell). On mobile it isn't a bottom-nav tab, so it's a pushed route with
+  /// its own back button rather than an [IndexedStack] switch.
+  void _openNotifications(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => Scaffold(
+          appBar: AppBar(title: const Text('Notifications')),
+          body: NotificationsScreen(cache: _cache),
+        ),
+      ),
+    );
   }
 
   /// Jumps to the Dashboard destination and shows [pond] in its detail pane.
@@ -84,7 +114,6 @@ class _AppShellState extends State<AppShell> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final isWide = constraints.maxWidth >= kWideLayoutBreakpoint;
-        final destination = _Destination.values[_selectedIndex];
 
         final content = IndexedStack(
           index: _selectedIndex,
@@ -104,10 +133,15 @@ class _AppShellState extends State<AppShell> {
         );
 
         return Scaffold(
-          // No top AppBar on wide/web layouts — the full-height side panel
-          // (its "IsdaSafe" branding at the very top, plus the highlighted
-          // destination) is the header there. Phones still get one.
-          appBar: isWide ? null : AppBar(title: Text(destination.label)),
+          // Wide/web: no top bar (the full-height side panel is the header).
+          // Mobile: a greeting bar with the user's avatar (top-left) and a
+          // notification bell (top-right) that opens the Notifications page.
+          appBar: isWide
+              ? null
+              : _MobileTopBar(
+                  onOpenProfile: () => setState(() => _selectedIndex = _Destination.settings.index),
+                  onOpenNotifications: () => _openNotifications(context),
+                ),
           floatingActionButton: _selectedIndex == 0
               ? FloatingActionButton.extended(
                   onPressed: () => _addPond(context),
@@ -140,10 +174,10 @@ class _AppShellState extends State<AppShell> {
           bottomNavigationBar: isWide
               ? null
               : NavigationBar(
-                  selectedIndex: _selectedIndex,
-                  onDestinationSelected: (index) => setState(() => _selectedIndex = index),
+                  selectedIndex: _bottomNavIndex,
+                  onDestinationSelected: (index) => setState(() => _selectedIndex = _bottomDestinations[index].index),
                   destinations: [
-                    for (final d in _Destination.values)
+                    for (final d in _bottomDestinations)
                       NavigationDestination(
                         icon: Icon(d.icon),
                         selectedIcon: Icon(d.selectedIcon),
@@ -151,6 +185,97 @@ class _AppShellState extends State<AppShell> {
                       ),
                   ],
                 ),
+        );
+      },
+    );
+  }
+}
+
+/// Mobile top bar: a greeting with the user's avatar (top-left) and a
+/// notification bell (top-right). Replaces the plain per-screen AppBar title.
+class _MobileTopBar extends StatefulWidget implements PreferredSizeWidget {
+  const _MobileTopBar({required this.onOpenProfile, required this.onOpenNotifications});
+
+  final VoidCallback onOpenProfile;
+  final VoidCallback onOpenNotifications;
+
+  @override
+  Size get preferredSize => const Size.fromHeight(72);
+
+  @override
+  State<_MobileTopBar> createState() => _MobileTopBarState();
+}
+
+class _MobileTopBarState extends State<_MobileTopBar> {
+  late final _profileFuture = AuthService.fetchCurrentProfile();
+
+  String get _greeting {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return 'Good morning';
+    if (hour < 18) return 'Good afternoon';
+    return 'Good evening';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return FutureBuilder<({String fullName, String email, String? photoUrl})?>(
+      future: _profileFuture,
+      builder: (context, snapshot) {
+        final profile = snapshot.data;
+        final currentUser = AuthService.currentUser;
+        final fullName = (profile?.fullName.isNotEmpty ?? false)
+            ? profile!.fullName
+            : (currentUser?.userMetadata?['full_name'] as String?) ?? '';
+        final email = (profile?.email.isNotEmpty ?? false) ? profile!.email : (currentUser?.email ?? '');
+        final photoUrl = profile?.photoUrl;
+        // First name for the greeting; fall back to the email, then a neutral word.
+        final displayName = fullName.isNotEmpty
+            ? fullName.split(' ').first
+            : (email.isNotEmpty ? email : 'there');
+        final initialSource = fullName.isNotEmpty ? fullName : email;
+        final initial = initialSource.isNotEmpty ? initialSource[0].toUpperCase() : '?';
+
+        return AppBar(
+          toolbarHeight: 72,
+          titleSpacing: AppSpacing.md,
+          leadingWidth: 60,
+          leading: Padding(
+            padding: const EdgeInsets.only(left: AppSpacing.md),
+            child: GestureDetector(
+              onTap: widget.onOpenProfile,
+              child: CircleAvatar(
+                radius: 20,
+                backgroundColor: theme.colorScheme.primary,
+                backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
+                child: photoUrl == null
+                    ? Text(initial, style: TextStyle(color: theme.colorScheme.onPrimary))
+                    : null,
+              ),
+            ),
+          ),
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(_greeting, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+              Text(
+                displayName,
+                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+          actions: [
+            IconButton(
+              onPressed: widget.onOpenNotifications,
+              icon: const Icon(Icons.notifications_outlined),
+              tooltip: 'Notifications',
+            ),
+            const SizedBox(width: AppSpacing.xs),
+          ],
         );
       },
     );
