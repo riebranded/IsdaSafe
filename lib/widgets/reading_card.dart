@@ -5,16 +5,18 @@ import '../models/reading_bands.dart';
 import '../models/sensor_reading.dart';
 import '../theme/app_spacing.dart';
 import 'metric_range_bar.dart';
+import 'reading_sparkline.dart';
 import 'status_badge.dart';
 
-/// A single metric stat-tile: icon, label, value+unit, a compact range bar
-/// showing where the value sits within its healthy band, and a status
-/// badge — with a colored accent stripe (not a full-color fill) carrying
-/// the status.
+/// A single metric stat-tile: icon, label, value+unit, a trend sparkline, a
+/// compact range bar showing where the value sits within its healthy band,
+/// and a status badge — with a colored accent stripe (not a full-color
+/// fill) carrying the status.
 class ReadingCard extends StatelessWidget {
-  const ReadingCard({super.key, required this.reading});
+  const ReadingCard({super.key, required this.reading, required this.history});
 
   final SensorReading reading;
+  final List<SensorReading> history;
 
   @override
   Widget build(BuildContext context) {
@@ -57,6 +59,8 @@ class ReadingCard extends StatelessWidget {
                         fontFeatures: const [FontFeature.tabularFigures()],
                       ),
                     ),
+                    const SizedBox(height: AppSpacing.sm),
+                    ReadingSparkline(type: reading.type, history: history),
                     const SizedBox(height: AppSpacing.sm),
                     MetricRangeBar(type: reading.type, value: reading.value),
                     const SizedBox(height: AppSpacing.sm),

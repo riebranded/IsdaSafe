@@ -34,12 +34,16 @@ class MockSensorService {
     MetricType.ph: 0.15,
   };
 
+  static const int _historyPoints = 12;
+  static const Duration _historyInterval = Duration(minutes: 30);
+
   PondSnapshot generateSnapshot(Pond pond) {
     final baselineRandom = Random(pond.seed);
     final jitterRandom = Random();
     final now = DateTime.now();
 
     final readings = <MetricType, SensorReading>{};
+    final history = <MetricType, List<SensorReading>>{};
     for (final type in MetricType.values) {
       final band = _bands[type]!;
       final baseline = band.min + baselineRandom.nextDouble() * (band.max - band.min);
@@ -48,8 +52,35 @@ class MockSensorService {
       value = value.clamp(band.min, band.max);
 
       readings[type] = SensorReading(type: type, value: value, timestamp: now);
+      history[type] = _generateHistory(pond, type, band, jitter, value, now);
     }
 
-    return PondSnapshot(pond: pond, readings: readings);
+    return PondSnapshot(pond: pond, readings: readings, history: history);
+  }
+
+  /// Synthesizes a short walk ending at [currentValue] — stands in for a
+  /// real sensor's logged history until one exists. Seeded on `pond.seed`
+  /// plus the metric, so the shape stays stable across refreshes; only the
+  /// final point (the live, jittered current reading) moves.
+  List<SensorReading> _generateHistory(
+    Pond pond,
+    MetricType type,
+    _Band band,
+    double jitter,
+    double currentValue,
+    DateTime now,
+  ) {
+    final walkRandom = Random(pond.seed ^ type.index);
+    final step = jitter * 2;
+    var value = band.min + walkRandom.nextDouble() * (band.max - band.min);
+
+    final points = <SensorReading>[];
+    for (var i = 0; i < _historyPoints - 1; i++) {
+      final timestamp = now.subtract(_historyInterval * (_historyPoints - 1 - i));
+      points.add(SensorReading(type: type, value: value, timestamp: timestamp));
+      value = (value + (walkRandom.nextDouble() - 0.5) * 2 * step).clamp(band.min, band.max);
+    }
+    points.add(SensorReading(type: type, value: currentValue, timestamp: now));
+    return points;
   }
 }

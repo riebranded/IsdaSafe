@@ -31,6 +31,10 @@
 	     accessed. -->
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>IsdaSafe needs access to your photos so you can pick a profile picture.</string>
+	<!-- Required by geolocator (Add Pond location picker) — iOS terminates
+	     the app if this is missing when location access is requested. -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>IsdaSafe uses your location to help you pin your pond's exact location on the map.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

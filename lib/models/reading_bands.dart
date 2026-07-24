@@ -43,6 +43,29 @@ class MetricBands {
   double positionOf(double value) {
     return ((value - displayMin) / (displayMax - displayMin)).clamp(0.0, 1.0);
   }
+
+  /// 0 = safely inside the normal band, 1 = at/beyond the critical
+  /// threshold, on either side — direction-agnostic so "rising" always
+  /// means "toward trouble," unlike [positionOf] (which just reflects
+  /// display-range position and reads backwards for metrics where high is
+  /// good, e.g. dissolved oxygen). Used to put every metric on one shared,
+  /// comparable axis for cross-metric status logic (e.g. [overallStatus]).
+  double riskOf(double value) {
+    final safeLo = warningLow ?? displayMin;
+    final safeHi = warningHigh ?? displayMax;
+
+    if (value < safeLo) {
+      final critLo = criticalLow ?? displayMin;
+      if (safeLo == critLo) return 1.0;
+      return ((safeLo - value) / (safeLo - critLo)).clamp(0.0, 1.0);
+    }
+    if (value > safeHi) {
+      final critHi = criticalHigh ?? displayMax;
+      if (safeHi == critHi) return 1.0;
+      return ((value - safeHi) / (critHi - safeHi)).clamp(0.0, 1.0);
+    }
+    return 0.0;
+  }
 }
 
 const Map<MetricType, MetricBands> metricBands = {

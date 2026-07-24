@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../models/metric_type.dart';
 import 'app_spacing.dart';
 
 /// Single brand seed — Material 3 derives harmonious light/dark tonal
@@ -61,6 +62,61 @@ class StatusColors extends ThemeExtension<StatusColors> {
   }
 }
 
+/// Categorical color for each [MetricType], used anywhere a metric needs a
+/// consistent identity color (charts, chips, icons) — a separate vocabulary
+/// from [StatusColors]: this one means "which metric is this," not "how
+/// healthy is it," so it must never be reused as a status color or vice
+/// versa. The fixed order matches [MetricType.values] and is drawn from a
+/// pre-validated CVD-safe categorical palette (adjacent pairs, as used by a
+/// multi-line chart) — swapping or reordering entries invalidates that
+/// guarantee.
+///
+/// This is the *only* place these colors are defined — read them via
+/// `Theme.of(context).extension<MetricPalette>()!` (or `context.metricPalette`).
+class MetricPalette extends ThemeExtension<MetricPalette> {
+  const MetricPalette({required this.colors});
+
+  final Map<MetricType, Color> colors;
+
+  static const light = MetricPalette(
+    colors: {
+      MetricType.temperature: Color(0xFF2A78D6), // blue
+      MetricType.humidity: Color(0xFFEB6834), // orange
+      MetricType.ammonia: Color(0xFF1BAF7A), // aqua
+      MetricType.dissolvedOxygen: Color(0xFFEDA100), // yellow
+      MetricType.ph: Color(0xFFE87BA4), // magenta
+    },
+  );
+
+  static const dark = MetricPalette(
+    colors: {
+      MetricType.temperature: Color(0xFF3987E5),
+      MetricType.humidity: Color(0xFFD95926),
+      MetricType.ammonia: Color(0xFF199E70),
+      MetricType.dissolvedOxygen: Color(0xFFC98500),
+      MetricType.ph: Color(0xFFD55181),
+    },
+  );
+
+  Color of(MetricType type) => colors[type]!;
+
+  @override
+  MetricPalette copyWith({Map<MetricType, Color>? colors}) {
+    return MetricPalette(colors: colors ?? this.colors);
+  }
+
+  @override
+  MetricPalette lerp(ThemeExtension<MetricPalette>? other, double t) {
+    if (other is! MetricPalette) return this;
+    return MetricPalette(
+      colors: {
+        for (final type in MetricType.values)
+          type: Color.lerp(colors[type], other.colors[type], t)!,
+      },
+    );
+  }
+}
+
 class AppTheme {
   const AppTheme._();
 
@@ -74,6 +130,7 @@ class AppTheme {
       brightness: brightness,
     );
     final statusColors = isDark ? StatusColors.dark : StatusColors.light;
+    final metricPalette = isDark ? MetricPalette.dark : MetricPalette.light;
     final textTheme = _buildTextTheme(brightness);
     final shape = RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(AppRadius.lg),
@@ -86,7 +143,7 @@ class AppTheme {
       colorScheme: colorScheme,
       textTheme: textTheme,
       scaffoldBackgroundColor: colorScheme.surface,
-      extensions: [statusColors],
+      extensions: [statusColors, metricPalette],
       dividerColor: colorScheme.outlineVariant,
       appBarTheme: AppBarTheme(
         backgroundColor: colorScheme.surface,
@@ -207,4 +264,9 @@ class AppTheme {
 extension StatusColorsContext on BuildContext {
   /// Shorthand for `Theme.of(context).extension<StatusColors>()!`.
   StatusColors get statusColors => Theme.of(this).extension<StatusColors>()!;
+}
+
+extension MetricPaletteContext on BuildContext {
+  /// Shorthand for `Theme.of(context).extension<MetricPalette>()!`.
+  MetricPalette get metricPalette => Theme.of(this).extension<MetricPalette>()!;
 }
