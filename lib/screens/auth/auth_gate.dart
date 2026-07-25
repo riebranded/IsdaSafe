@@ -103,6 +103,22 @@ class _PendingPhoneVerificationState extends State<_PendingPhoneVerification> {
   }
 
   Future<void> _send() async {
+    if (AuthService.bypassOtpVerification) {
+      // The phone was already vetted by RegisterScreen's isPhoneTaken check
+      // before it ever reached user_metadata, so recovering here can go
+      // straight to marking the profile verified — same as RegisterScreen's
+      // own bypass branch.
+      debugPrint('AuthGate: OTP bypass enabled — marking recovered profile verified without SMS.');
+      await AuthService.upsertProfile(
+        fullName: widget.fullName,
+        email: widget.email,
+        phone: widget.phone,
+        phoneVerified: true,
+        photoUrl: widget.photoUrl,
+      );
+      await AuthService.refreshAuthState();
+      return;
+    }
     debugPrint('AuthGate: recovering mid-signup user, requesting fresh Semaphore OTP for ${widget.phone}...');
     await AuthService.requestSemaphoreOtp(widget.phone);
     debugPrint('AuthGate: recovery OTP send succeeded');
@@ -142,6 +158,13 @@ class _PendingPhoneVerificationState extends State<_PendingPhoneVerification> {
               ),
             ),
           );
+        }
+
+        if (AuthService.bypassOtpVerification) {
+          // refreshAuthState() above already fired an auth-state event;
+          // AuthGate's StreamBuilder will rebuild into AppShell shortly —
+          // nothing to show here in the meantime.
+          return const Scaffold(body: Center(child: CircularProgressIndicator()));
         }
 
         return OtpVerificationScreen(

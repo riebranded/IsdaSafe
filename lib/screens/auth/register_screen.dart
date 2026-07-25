@@ -139,12 +139,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final e164Phone = '$_kPhCountryCode${_stripLeadingTrunkZero(_phoneController.text.trim())}';
 
     setState(() => _isSubmitting = true);
-    // Claimed before AuthGate's underlying StreamBuilder can react to the
-    // session signUpWithEmail (or, in `_hasGoogleSession` mode, the Google
-    // sign-in already sitting on the session) is about to create — see
-    // AuthService.isManagingPhoneVerification for why this matters.
-    AuthService.isManagingPhoneVerification = true;
     try {
+      if (await AuthService.isPhoneTaken(e164Phone)) {
+        if (mounted) _showError('This phone number is already registered.');
+        return;
+      }
+
+      // Claimed before AuthGate's underlying StreamBuilder can react to the
+      // session signUpWithEmail (or, in `_hasGoogleSession` mode, the Google
+      // sign-in already sitting on the session) is about to create — see
+      // AuthService.isManagingPhoneVerification for why this matters.
+      AuthService.isManagingPhoneVerification = true;
+
       if (!_hasGoogleSession) {
         debugPrint('RegisterScreen: signing up $email...');
         await AuthService.signUpWithEmail(
@@ -158,6 +164,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
       // A session now exists either way, so an uploaded avatar has a uid
       // to key its Storage path off of.
       final photoUrl = await _resolvePhotoUrl();
+
+      if (AuthService.bypassOtpVerification) {
+        debugPrint('RegisterScreen: OTP bypass enabled — marking profile verified without SMS.');
+        await AuthService.upsertProfile(
+          fullName: fullName,
+          email: email,
+          phone: e164Phone,
+          phoneVerified: true,
+          photoUrl: photoUrl,
+        );
+        await AuthService.refreshAuthState();
+        AuthService.isManagingPhoneVerification = false;
+        if (!mounted) return;
+        Navigator.of(context).popUntil((route) => route.isFirst);
+        return;
+      }
 
       debugPrint('RegisterScreen: requesting Semaphore OTP for $e164Phone...');
       await AuthService.requestSemaphoreOtp(e164Phone);

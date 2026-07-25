@@ -39,6 +39,22 @@ abstract final class AuthService {
   /// those screens are done, one way or another.
   static bool isManagingPhoneVerification = false;
 
+  /// TEMPORARY: skips the actual Semaphore SMS send/verify step everywhere
+  /// it's used (RegisterScreen, AuthGate's mid-signup recovery) and marks
+  /// the profile phone-verified immediately instead. The phone-uniqueness
+  /// check ([isPhoneTaken]) still runs regardless — flip this back to
+  /// `false` once Semaphore is ready to re-enable real OTP delivery.
+  static const bool bypassOtpVerification = true;
+
+  /// True if [e164Phone] is already attached to another profile. Backed by
+  /// a SECURITY DEFINER RPC ([public.is_phone_taken]) since `profiles`' RLS
+  /// only lets a user read their own row — a plain `select` here would
+  /// always come back empty regardless of who else has claimed the number.
+  static Future<bool> isPhoneTaken(String e164Phone) async {
+    final result = await _client.rpc('is_phone_taken', params: {'check_phone': e164Phone});
+    return result == true;
+  }
+
   /// [pendingPhone] is stashed in `user_metadata` purely so [AuthGate] can
   /// recover it if the app is killed before phone verification finishes —
   /// `auth.users.phone` itself isn't set until the `verify-semaphore-otp`
