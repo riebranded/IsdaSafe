@@ -1,6 +1,6 @@
 import 'dart:io' show Platform;
 
-import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
@@ -117,17 +117,19 @@ class _LocationPickerMapState extends State<LocationPickerMap> {
   }
 
   @override
+  void dispose() {
+    // GoogleMap's own State already disposes the controller it hands us
+    // via onMapCreated when it's removed from the tree; disposing it again
+    // here double-disposes the platform map (fatal assertion on web:
+    // "Maps cannot be retrieved before calling buildView!").
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    debugPrint(
-      'LocationPickerMap.build: kIsWeb=$kIsWeb '
-      'isMapViewSupported=$isMapViewSupported '
-      'initialCenter=${widget.initialCenter} initialZoom=${widget.initialZoom}',
-    );
-
     if (!isMapViewSupported) {
-      debugPrint('LocationPickerMap: rendering manual entry fallback');
       return _ManualLocationEntry(
         initialCenter: widget.initialCenter,
         centerLabel: _showCenterLabel ? widget.centerLabel : null,
@@ -138,7 +140,6 @@ class _LocationPickerMapState extends State<LocationPickerMap> {
       );
     }
 
-    debugPrint('LocationPickerMap: building GoogleMap widget');
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
       child: Stack(
@@ -150,11 +151,19 @@ class _LocationPickerMapState extends State<LocationPickerMap> {
               zoom: widget.initialZoom,
             ),
             onMapCreated: (controller) {
-              debugPrint(
-                'LocationPickerMap: onMapCreated fired '
-                '(platform view + JS API ready)',
-              );
               _mapController = controller;
+              // The camera may already be stale by the time this fires (e.g.
+              // the current-location fetch resolved before the platform view
+              // finished initializing, so didUpdateWidget's moveCamera call
+              // above was a no-op). Re-apply whatever the latest requested
+              // center is now that a controller actually exists.
+              _isProgrammaticMove = true;
+              controller.moveCamera(
+                CameraUpdate.newLatLngZoom(
+                  widget.initialCenter,
+                  widget.initialZoom,
+                ),
+              );
             },
             onCameraMoveStarted: _handleCameraMoveStarted,
             onCameraMove: _handleCameraMove,

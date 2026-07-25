@@ -49,6 +49,10 @@ dependencies:
   # Typography (Lexend + Source Sans 3).
   google_fonts: ^6.2.1
 
+  # Persists the user's light/dark theme choice across launches (see
+  # ThemeProvider). Already pulled in transitively by supabase_flutter.
+  shared_preferences: ^2.5.0
+
   # Pond location picker. Uses Google Maps on Android/iOS/Web; Windows/Linux/
   # macOS fall back to manual latitude/longitude entry since google_maps_flutter
   # has no official desktop support.

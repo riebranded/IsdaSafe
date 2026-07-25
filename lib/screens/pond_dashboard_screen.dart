@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../models/metric_type.dart';
 import '../models/pond.dart';
 import '../models/reading_bands.dart';
 import '../providers/dashboard_provider.dart';
 import '../theme/app_spacing.dart';
+import '../widgets/individual_trend_chart.dart';
 import '../widgets/reading_grid.dart';
 import '../widgets/species_suggestion_list.dart';
 import '../widgets/status_badge.dart';
 
-/// Full-screen mobile route: pushed from [PondListScreen], owns its own
-/// [AppBar] with the pond name + refresh action.
+/// Full-screen mobile route: pushed from `DashboardScreen` or `PondMapScreen`,
+/// owns its own [AppBar] with the pond name + refresh action.
 class PondDashboardScreen extends StatelessWidget {
   const PondDashboardScreen({super.key, required this.pond});
 
@@ -104,15 +106,23 @@ class PondDashboardBody extends StatelessWidget {
             _PondStatusBanner(status: overallStatus(snapshot.readings)),
             const SizedBox(height: AppSpacing.lg),
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Latest readings', style: Theme.of(context).textTheme.titleMedium),
+                Expanded(
+                  child: Text('Latest readings', style: Theme.of(context).textTheme.titleMedium),
+                ),
+                const SizedBox(width: AppSpacing.sm),
                 _LastUpdated(timestamp: snapshot.reading(snapshot.readings.keys.first).timestamp),
               ],
             ),
             const SizedBox(height: AppSpacing.md),
-            ReadingGrid(readings: snapshot.readings),
+            ReadingGrid(readings: snapshot.readings, history: snapshot.history),
             const SizedBox(height: AppSpacing.xl),
+            Text('Individual trends', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: AppSpacing.md),
+            for (final type in MetricType.values) ...[
+              IndividualTrendChart(type: type, history: snapshot.history[type]!),
+              const SizedBox(height: AppSpacing.lg),
+            ],
             Text('Suitable fish species', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: AppSpacing.md),
             SpeciesSuggestionList(results: dashboard.matches),
