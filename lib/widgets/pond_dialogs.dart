@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../services/current_location_service.dart';
+import '../services/fish_species_catalog.dart';
 import '../theme/app_spacing.dart';
 import 'location_picker_map.dart';
 
@@ -296,6 +297,75 @@ class _AddPondDialogState extends State<_AddPondDialog> {
       ),
     );
   }
+}
+
+/// Shows a checklist of [FishSpeciesCatalog.species] for the user to mark
+/// which fish/shrimp a pond actually holds — used afterwards to suggest
+/// feeding times on that pond's dashboard. Pass [initialSelection] (species
+/// names) to pre-check a pond's existing species when editing.
+///
+/// Returns the selected species' names, or null if the dialog was
+/// dismissed/skipped (callers should leave the pond's species untouched in
+/// that case, rather than clearing them).
+Future<List<String>?> showSelectSpeciesDialog(
+  BuildContext context, {
+  List<String> initialSelection = const [],
+  String title = 'Add fish species',
+}) {
+  final selected = {...initialSelection};
+
+  return showDialog<List<String>>(
+    context: context,
+    builder: (context) {
+      return StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            title: Text(title),
+            content: SizedBox(
+              width: 360,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Which fish or shrimp does this pond have? This is used to '
+                    'suggest feeding times.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  for (final species in FishSpeciesCatalog.species.where((s) => s.assignableToPond))
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: selected.contains(species.name),
+                      title: Text('${species.name} (${species.localName})'),
+                      onChanged: (checked) {
+                        setState(() {
+                          if (checked ?? false) {
+                            selected.add(species.name);
+                          } else {
+                            selected.remove(species.name);
+                          }
+                        });
+                      },
+                    ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Skip'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(selected.toList()),
+                child: const Text('Done'),
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
 }
 
 /// Result of [showEditLocationDialog].

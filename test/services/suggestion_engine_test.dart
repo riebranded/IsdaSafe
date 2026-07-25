@@ -15,6 +15,7 @@ void main() {
     phRange: MetricRange(7, 8),
     doRange: MetricRange(4, 8),
     ammoniaRange: MetricRange(0, 0.05),
+    feedingTimes: [],
   );
 
   Map<MetricType, SensorReading> readingsFor({
@@ -58,6 +59,7 @@ void main() {
       phRange: MetricRange(0, 1),
       doRange: MetricRange(0, 1),
       ammoniaRange: MetricRange(0, 0.001),
+      feedingTimes: [],
     );
 
     final results = engine.evaluate(readingsFor(), [badSpecies, species]);

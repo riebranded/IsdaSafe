@@ -42,7 +42,13 @@ class _PondMapScreenState extends State<PondMapScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final ponds = context.watch<PondProvider>().ponds;
+    final pondProvider = context.watch<PondProvider>();
+    final ponds = pondProvider.ponds;
+
+    if (ponds.isEmpty && pondProvider.isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
     var selected = _selected;
     if (selected != null && !ponds.any((p) => p.id == selected!.id)) {
       selected = null;

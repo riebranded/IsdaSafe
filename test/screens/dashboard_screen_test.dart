@@ -9,10 +9,12 @@ import 'package:isdasafev2/theme/app_theme.dart';
 import 'package:isdasafev2/widgets/reading_card.dart';
 import 'package:isdasafev2/widgets/status_badge.dart';
 
+import '../support/fake_pond_repository.dart';
+
 void main() {
   Widget buildMobileDashboard() {
     return ChangeNotifierProvider(
-      create: (_) => PondProvider(),
+      create: (_) => PondProvider(repository: FakePondRepository()),
       child: MaterialApp(
         theme: AppTheme.light,
         home: Scaffold(

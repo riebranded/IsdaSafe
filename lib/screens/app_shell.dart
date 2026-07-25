@@ -15,6 +15,12 @@ import 'notifications_screen.dart';
 import 'pond_map_screen.dart';
 import 'settings_screen.dart';
 
+void _showPondSaveError(BuildContext context) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(content: Text("Couldn't save changes. Check your connection and try again.")),
+  );
+}
+
 enum _Destination {
   dashboard(label: 'Dashboard', icon: Icons.dashboard_outlined, selectedIcon: Icons.dashboard),
   map(label: 'Map', icon: Icons.map_outlined, selectedIcon: Icons.map),
@@ -78,8 +84,23 @@ class _AppShellState extends State<AppShell> {
 
   Future<void> _addPond(BuildContext context) async {
     final draft = await showAddPondDialog(context);
-    if (draft != null && context.mounted) {
-      context.read<PondProvider>().addPond(draft.name, latitude: draft.latitude, longitude: draft.longitude);
+    if (draft == null || !context.mounted) return;
+
+    final pond = await context.read<PondProvider>().addPond(
+          draft.name,
+          latitude: draft.latitude,
+          longitude: draft.longitude,
+        );
+    if (pond == null) {
+      if (context.mounted) _showPondSaveError(context);
+      return;
+    }
+    if (!context.mounted) return;
+
+    final species = await showSelectSpeciesDialog(context);
+    if (species != null && context.mounted) {
+      final ok = await context.read<PondProvider>().setSpecies(pond.id, species);
+      if (!ok && context.mounted) _showPondSaveError(context);
     }
   }
 

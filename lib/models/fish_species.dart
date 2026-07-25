@@ -18,6 +18,8 @@ class FishSpecies {
     required this.phRange,
     required this.doRange,
     required this.ammoniaRange,
+    required this.feedingTimes,
+    this.assignableToPond = true,
   });
 
   final String name;
@@ -26,4 +28,13 @@ class FishSpecies {
   final MetricRange phRange;
   final MetricRange doRange;
   final MetricRange ammoniaRange;
+
+  /// Suggested times of day to feed this species, e.g. `['6:00 AM', '5:00 PM']`.
+  final List<String> feedingTimes;
+
+  /// Whether this species is offered in [showSelectSpeciesDialog]'s
+  /// checklist. Still fully present in [FishSpeciesCatalog.species] for
+  /// SuggestionEngine's water-quality-based suitability matching either way
+  /// — this only controls what a user can pick as "what my pond holds".
+  final bool assignableToPond;
 }

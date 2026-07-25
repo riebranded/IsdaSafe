@@ -9,6 +9,8 @@ import 'package:isdasafev2/providers/theme_provider.dart';
 import 'package:isdasafev2/screens/app_shell.dart';
 import 'package:isdasafev2/theme/app_theme.dart';
 
+import '../support/fake_pond_repository.dart';
+
 void main() {
   // AppShell mounts all 5 destinations via IndexedStack, and SettingsScreen
   // touches AuthService (→ Supabase.instance) at build. Initialize Supabase
@@ -16,6 +18,9 @@ void main() {
   // user, no network) instead of asserting `_isInitialized`. We render
   // AppShell directly rather than the full app so these tests exercise the
   // side panel without going through the auth gate / a live session.
+  // PondProvider itself is given a FakePondRepository (below) rather than
+  // going through this Supabase client, since it's never pointed at a real
+  // project.
   setUpAll(() async {
     final binding = TestWidgetsFlutterBinding.ensureInitialized();
     // Supabase's default local storage reads the shared_preferences plugin
@@ -32,7 +37,7 @@ void main() {
   Widget buildApp() {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => PondProvider()),
+        ChangeNotifierProvider(create: (_) => PondProvider(repository: FakePondRepository())),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
       ],
       child: MaterialApp(

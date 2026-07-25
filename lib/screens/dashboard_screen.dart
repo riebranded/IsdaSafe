@@ -16,6 +16,15 @@ import '../widgets/staggered_entrance.dart';
 import '../widgets/status_badge.dart';
 import 'pond_dashboard_screen.dart';
 
+/// Shown whenever a Supabase write (rename/move/remove/species/create) fails
+/// — the in-memory list has already rolled back to match, so this is purely
+/// informational.
+void _showSaveError(BuildContext context) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(content: Text("Couldn't save changes. Check your connection and try again.")),
+  );
+}
+
 /// Every pond as one list item that already shows *all* its sensor
 /// readings (via [ReadingGrid], not just a status dot). On narrow layouts,
 /// tapping a card pushes [PondDashboardScreen]. On wide layouts
@@ -60,9 +69,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _renamePond(BuildContext context, Pond pond) async {
     final name = await showPondNameDialog(context, initialValue: pond.name);
-    if (name != null && context.mounted) {
-      context.read<PondProvider>().renamePond(pond.id, name);
-    }
+    if (name == null || !context.mounted) return;
+
+    final ok = await context.read<PondProvider>().renamePond(pond.id, name);
+    if (!ok && context.mounted) _showSaveError(context);
   }
 
   Future<void> _editLocation(BuildContext context, Pond pond) async {
@@ -71,13 +81,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
       initialLatitude: pond.latitude ?? kDefaultMapCenter.latitude,
       initialLongitude: pond.longitude ?? kDefaultMapCenter.longitude,
     );
-    if (location != null && context.mounted) {
-      context.read<PondProvider>().setLocation(
-            pond.id,
-            latitude: location.latitude,
-            longitude: location.longitude,
-          );
-    }
+    if (location == null || !context.mounted) return;
+
+    final ok = await context.read<PondProvider>().setLocation(
+          pond.id,
+          latitude: location.latitude,
+          longitude: location.longitude,
+        );
+    if (!ok && context.mounted) _showSaveError(context);
   }
 
   Future<void> _removePond(BuildContext context, Pond pond) async {
@@ -92,9 +103,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ],
       ),
     );
-    if (confirmed == true && context.mounted) {
+    if (confirmed != true || !context.mounted) return;
+
+    final ok = await context.read<PondProvider>().removePond(pond.id);
+    if (ok) {
       widget.cache.discard(pond.id);
-      context.read<PondProvider>().removePond(pond.id);
+    } else if (context.mounted) {
+      _showSaveError(context);
     }
   }
 
@@ -110,13 +125,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final ponds = context.watch<PondProvider>().ponds;
+    final pondProvider = context.watch<PondProvider>();
+    final ponds = pondProvider.ponds;
+
+    if (ponds.isEmpty && pondProvider.isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
 
     if (ponds.isEmpty) {
       return _EmptyDashboard(onAddPond: () async {
         final draft = await showAddPondDialog(context);
-        if (draft != null && context.mounted) {
-          context.read<PondProvider>().addPond(draft.name, latitude: draft.latitude, longitude: draft.longitude);
+        if (draft == null || !context.mounted) return;
+
+        final pond = await context.read<PondProvider>().addPond(
+              draft.name,
+              latitude: draft.latitude,
+              longitude: draft.longitude,
+            );
+        if (pond == null) {
+          if (context.mounted) _showSaveError(context);
+          return;
+        }
+        if (!context.mounted) return;
+
+        final species = await showSelectSpeciesDialog(context);
+        if (species != null && context.mounted) {
+          final ok = await context.read<PondProvider>().setSpecies(pond.id, species);
+          if (!ok && context.mounted) _showSaveError(context);
         }
       });
     }
