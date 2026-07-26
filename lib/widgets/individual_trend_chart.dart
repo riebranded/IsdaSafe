@@ -123,14 +123,14 @@ class _TrendPainter extends CustomPainter {
     double yOf(double value) => _inset + (1 - (value - min) / (max - min)) * plotHeight;
 
     final dx = history.length > 1 ? size.width / (history.length - 1) : 0.0;
+    final points = [for (var i = 0; i < history.length; i++) Offset(dx * i, yOf(history[i].value))];
 
     final path = Path();
-    for (var i = 0; i < history.length; i++) {
-      final point = Offset(dx * i, yOf(history[i].value));
+    for (var i = 0; i < points.length; i++) {
       if (i == 0) {
-        path.moveTo(point.dx, point.dy);
+        path.moveTo(points[i].dx, points[i].dy);
       } else {
-        path.lineTo(point.dx, point.dy);
+        path.lineTo(points[i].dx, points[i].dy);
       }
     }
     canvas.drawPath(
@@ -143,6 +143,24 @@ class _TrendPainter extends CustomPainter {
         ..strokeJoin = StrokeJoin.round,
     );
 
+    // A small marker at every recorded reading, so the line reads as
+    // discrete data points rather than a smooth, sourceless curve.
+    final haloPaint = Paint()..color = surfaceColor;
+    final dotPaint = Paint()..color = color;
+    for (final point in points) {
+      canvas.drawCircle(point, 3, haloPaint);
+      canvas.drawCircle(point, 1.8, dotPaint);
+    }
+
+    void drawEmphasized(Offset point) {
+      canvas.drawCircle(point, 4, haloPaint);
+      canvas.drawCircle(point, 3, dotPaint);
+    }
+
+    // The current (latest) reading is always emphasized, even without
+    // interaction — it's the value the rest of the dashboard reports.
+    drawEmphasized(points.last);
+
     final index = selectedIndex;
     if (index != null) {
       final x = dx * index;
@@ -153,9 +171,7 @@ class _TrendPainter extends CustomPainter {
           ..color = mutedColor.withValues(alpha: 0.5)
           ..strokeWidth = 1,
       );
-      final point = Offset(x, yOf(history[index].value));
-      canvas.drawCircle(point, 4, Paint()..color = surfaceColor);
-      canvas.drawCircle(point, 3, Paint()..color = color);
+      drawEmphasized(points[index]);
     }
   }
 
