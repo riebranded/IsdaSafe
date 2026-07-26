@@ -1,13 +1,11 @@
 import 'dart:convert';
 
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/metric_type.dart';
 import '../models/sensor_reading.dart';
 import '../models/species_recommendation.dart';
-
-const _defaultBaseUrl = 'https://isdasafe-server.onrender.com';
+import 'prediction_api_config.dart';
 
 /// Everything [DashboardProvider] needs to turn a pond's current readings
 /// into an AI-recommended fish species, factored out so it can be unit
@@ -25,9 +23,7 @@ abstract class SpeciesRecommendationService {
 class HttpSpeciesRecommendationService implements SpeciesRecommendationService {
   HttpSpeciesRecommendationService({http.Client? client, String? baseUrl})
       : _client = client ?? http.Client(),
-        _baseUrl = baseUrl ??
-            (dotenv.isInitialized ? dotenv.env['ISDASAFE_PREDICTION_API_URL'] : null) ??
-            _defaultBaseUrl;
+        _baseUrl = resolvePredictionApiBaseUrl(baseUrl);
 
   final http.Client _client;
   final String _baseUrl;
