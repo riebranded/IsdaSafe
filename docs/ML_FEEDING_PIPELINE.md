@@ -2,9 +2,9 @@
 
 This is a design doc, not shipped code — it lays out how to go from today's
 mock sensor data to a trained regression model that recommends a feeding
-schedule (amount + frequency) per pond. Species suitability stays on the
-existing rule-based `SuggestionEngine` (see decision log at the bottom); this
-pipeline is scoped to feeding schedule only.
+schedule (amount + frequency) per pond. Species suitability is served
+separately, by the Render-hosted prediction API (see decision log at the
+bottom); this pipeline is scoped to feeding schedule only.
 
 ## Current state (as of writing)
 
@@ -94,7 +94,8 @@ columns = features below + `target_amount_grams`.
 | `hour_of_day` | derived from `recorded_at` | feeding rate is time-of-day dependent |
 | *(Phase 2 only, if trend matters)* `temp_delta_24h`, `do_delta_24h` | rolling window over `sensor_readings` | only add if point-in-time regression underperforms — see the earlier discussion in this thread |
 
-`humidity` is deliberately excluded — same reasoning as `SuggestionEngine`:
+`humidity` is deliberately excluded — same reasoning as the species
+prediction API:
 it's ambient air humidity, not a driver of aquatic feeding behavior.
 
 ---
@@ -138,10 +139,13 @@ pattern in this repo and keeps retraining/redeployment simple.
 
 ## Decision log (context from prior discussion)
 
-- **Species suitability stays rule-based** (`SuggestionEngine`) — it's a
-  narrow, well-defined range-lookup problem; an LLM or trained model adds
-  hallucination/drift risk without a clear benefit over the existing
-  deterministic, explainable ranges.
+- **Species suitability now comes from a trained model**, served by a
+  separate Render-hosted FastAPI service (`isdasafe-server`, repo
+  `riebranded/IsdaSafe_Server`) via `POST /predict` — the app posts
+  ammonia/dissolved-oxygen/pH/temperature and displays the returned species +
+  confidence (`lib/services/species_recommendation_service.dart`). This
+  superseded the original decision to keep species suitability on the
+  in-app rule-based `SuggestionEngine`, which has been removed.
 - **Feeding schedule is the ML/LLM candidate** — it's a more open-ended
   synthesis problem (amount × frequency × trend), where a learned model or
   LLM reasoning has more to add than a lookup table does.

@@ -79,7 +79,7 @@ void main() {
         expect(find.byKey(ValueKey('pond-nav-$id')), findsOneWidget);
       }
       expect(find.text('Add pond'), findsOneWidget);
-      expect(find.text('Suitable fish species'), findsNothing);
+      expect(find.text('AI Recommended Species'), findsNothing);
     },
   );
 
@@ -104,14 +104,14 @@ void main() {
     await tester.pumpWidget(buildApp());
     await tester.pumpAndSettle();
 
-    expect(find.text('Suitable fish species'), findsNothing);
+    expect(find.text('AI Recommended Species'), findsNothing);
 
     await tester.tap(find.byKey(const ValueKey('pond-nav-pond-a')));
     await tester.pumpAndSettle();
 
     // Content area now shows the pond's dashboard (not a full-screen push):
     // the side panel nav is still present, and there's a back action.
-    expect(find.text('Suitable fish species'), findsAtLeastNWidgets(1));
+    expect(find.text('AI Recommended Species'), findsAtLeastNWidgets(1));
     expect(find.text('All ponds'), findsOneWidget);
     expect(find.byKey(const ValueKey('nav-dashboard')), findsOneWidget);
     expect(find.byKey(const ValueKey('pond-nav-pond-a')), findsOneWidget);
@@ -119,7 +119,7 @@ void main() {
     // Back action returns to the pond list.
     await tester.tap(find.text('All ponds'));
     await tester.pumpAndSettle();
-    expect(find.text('Suitable fish species'), findsNothing);
+    expect(find.text('AI Recommended Species'), findsNothing);
   });
 
   Future<void> setNarrowSurface(WidgetTester tester) async {

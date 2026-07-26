@@ -12,7 +12,7 @@ import '../theme/app_spacing.dart';
 import '../widgets/individual_trend_chart.dart';
 import '../widgets/pond_dialogs.dart';
 import '../widgets/reading_grid.dart';
-import '../widgets/species_suggestion_list.dart';
+import '../widgets/species_recommendation_card.dart';
 import '../widgets/status_badge.dart';
 
 /// Full-screen mobile route: pushed from `DashboardScreen` or `PondMapScreen`,
@@ -135,9 +135,13 @@ class PondDashboardBody extends StatelessWidget {
               IndividualTrendChart(type: type, history: snapshot.history[type]!),
               const SizedBox(height: AppSpacing.lg),
             ],
-            Text('Suitable fish species', style: Theme.of(context).textTheme.titleMedium),
+            Text('AI Recommended Species', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: AppSpacing.md),
-            SpeciesSuggestionList(results: dashboard.matches),
+            SpeciesRecommendationCard(
+              recommendation: dashboard.recommendation,
+              loading: dashboard.recommendationLoading,
+              error: dashboard.recommendationError,
+            ),
           ],
         ),
       ),

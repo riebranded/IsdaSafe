@@ -75,8 +75,7 @@ void main() {
       expect(find.text('Dissolved Oxygen'), findsOneWidget);
       expect(find.text('pH Level'), findsOneWidget);
 
-      expect(find.text('Suitable fish species'), findsOneWidget);
-      expect(find.text('Tilapia (Tilapia)'), findsOneWidget);
+      expect(find.text('AI Recommended Species'), findsOneWidget);
     },
   );
 }

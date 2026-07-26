@@ -4,7 +4,7 @@ import 'sensor_reading.dart';
 
 /// Per-metric pond-health bands — independent from, and wider than, any
 /// single fish species' optimal range. These answer "is this pond healthy
-/// overall", while `SuggestionEngine` answers "which fish fit it".
+/// overall", while the AI species recommendation answers "which fish fit it".
 class MetricBands {
   const MetricBands({
     this.criticalLow,

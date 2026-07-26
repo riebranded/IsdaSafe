@@ -15,8 +15,8 @@ class Pond {
   /// Fish/shrimp species the user says this pond actually holds, by
   /// [FishSpecies.name] — picked at creation (or later, via "Edit species")
   /// rather than inferred from readings. Drives the feeding-time suggestions
-  /// shown on the pond's dashboard; unrelated to SuggestionEngine's
-  /// water-quality-based "suitable species" matches.
+  /// shown on the pond's dashboard; unrelated to the AI species
+  /// recommendation, which is driven by live readings instead.
   List<String> speciesNames;
 
   /// Stable per-pond seed used to derive consistent mock sensor baselines.

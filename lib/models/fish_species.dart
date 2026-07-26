@@ -33,8 +33,8 @@ class FishSpecies {
   final List<String> feedingTimes;
 
   /// Whether this species is offered in [showSelectSpeciesDialog]'s
-  /// checklist. Still fully present in [FishSpeciesCatalog.species] for
-  /// SuggestionEngine's water-quality-based suitability matching either way
-  /// — this only controls what a user can pick as "what my pond holds".
+  /// checklist. Still fully present in [FishSpeciesCatalog.species] so its
+  /// local name can be shown alongside the AI species recommendation either
+  /// way — this only controls what a user can pick as "what my pond holds".
   final bool assignableToPond;
 }

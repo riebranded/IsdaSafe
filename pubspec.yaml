@@ -36,6 +36,9 @@ dependencies:
   cupertino_icons: ^1.0.8
   provider: ^6.1.2
 
+  # HTTP client for calling the Render-hosted fish species prediction API.
+  http: ^1.2.2
+
   # Auth: Supabase (email/password, Google OAuth, phone OTP), native Google
   # Sign-In, and runtime .env loading for SUPABASE_URL/SUPABASE_ANON_KEY.
   supabase_flutter: ^2.16.0
