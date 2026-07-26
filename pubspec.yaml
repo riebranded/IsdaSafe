@@ -64,6 +64,12 @@ dependencies:
   # button) pass straight through to the map underneath unless intercepted.
   pointer_interceptor: ^0.10.1
 
+  # Cloudflare Turnstile CAPTCHA, shown before login/register/forgot-password
+  # once enabled on the Supabase project (see docs/AUTH_SETUP.md). Renders via
+  # a WebView on native platforms (Android/iOS/Windows/macOS — no Linux) and
+  # direct JS interop on web.
+  cloudflare_turnstile: ^3.8.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

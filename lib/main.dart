@@ -18,13 +18,6 @@ Future<void> main() async {
     publishableKey: dotenv.env['SUPABASE_ANON_KEY']!,
   );
 
-  // Web's sign-in flow (AuthService.signInWithGoogle) goes entirely through
-  // Supabase's OAuth redirect and never touches the GoogleSignIn plugin, so
-  // initializing it on web only serves to arm Google Identity Services' auto
-  // One Tap prompt — which throws an uncaught JS TypeError
-  // (`Cannot read properties of null (reading 'removeChild')`) on some
-  // pages. Skip it there; native platforms still need it for
-  // AuthService._authenticateWithGoogle.
   if (!kIsWeb) {
     final googleIosClientId = dotenv.env['GOOGLE_IOS_CLIENT_ID'];
     final googleWebClientId = dotenv.env['GOOGLE_WEB_CLIENT_ID'];

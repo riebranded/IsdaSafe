@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/auth_service.dart';
 import '../../theme/app_spacing.dart';
 import '../../widgets/auth_dialogs.dart';
+import '../../widgets/captcha_field.dart';
 import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -18,9 +19,31 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
+  /// How long the solved widget stays on screen before collapsing, so its
+  /// own checkmark animation gets to finish playing instead of being cut
+  /// off by an instant hide.
+  static const _captchaHideDelay = Duration(milliseconds: 900);
+
   var _isSubmitting = false;
   var _isGoogleSubmitting = false;
   var _obscurePassword = true;
+  String? _captchaToken;
+  var _showCaptcha = true;
+
+  void _handleCaptchaToken(String? token) {
+    setState(() => _captchaToken = token);
+    if (token == null) {
+      // Expired/errored — show it again immediately, no reason to delay.
+      setState(() => _showCaptcha = true);
+      return;
+    }
+    Future.delayed(_captchaHideDelay, () {
+      // Only hide if this is still the token that triggered the delay —
+      // it may have already expired or been reset (e.g. by a submit
+      // attempt) by the time this fires.
+      if (mounted && _captchaToken == token) setState(() => _showCaptcha = false);
+    });
+  }
 
   static final _emailRegExp = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
 
@@ -37,12 +60,15 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _submit() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
+    final captchaToken = _captchaToken;
+    if (captchaToken == null) return;
 
     setState(() => _isSubmitting = true);
     try {
       await AuthService.signInWithEmail(
         email: _emailController.text.trim(),
         password: _passwordController.text,
+        captchaToken: captchaToken,
       );
       // AuthGate reacts to the auth-state stream automatically; nothing
       // further to do here.
@@ -52,7 +78,16 @@ class _LoginScreenState extends State<LoginScreen> {
       if (mounted) _showError('Something went wrong. Please try again.');
       debugPrint('LoginScreen: sign-in error $e');
     } finally {
-      if (mounted) setState(() => _isSubmitting = false);
+      // Tokens are single-use, and the widget hides itself shortly after
+      // being solved — bring it back immediately for a fresh challenge
+      // before the next attempt, whether this one succeeded or failed.
+      if (mounted) {
+        setState(() {
+          _captchaToken = null;
+          _showCaptcha = true;
+          _isSubmitting = false;
+        });
+      }
     }
   }
 
@@ -143,9 +178,18 @@ class _LoginScreenState extends State<LoginScreen> {
                         child: const Text('Forgot password?'),
                       ),
                     ),
-                    const SizedBox(height: AppSpacing.sm),
+                    // Hidden a moment after solving (see _handleCaptchaToken)
+                    // — reappears immediately when a fresh challenge is
+                    // needed for the next attempt (see _submit's finally).
+                    if (_showCaptcha) ...[
+                      const SizedBox(height: AppSpacing.sm),
+                      Center(
+                        child: CaptchaField(onTokenChanged: _handleCaptchaToken),
+                      ),
+                    ],
+                    const SizedBox(height: AppSpacing.md),
                     FilledButton(
-                      onPressed: busy ? null : _submit,
+                      onPressed: (busy || _captchaToken == null) ? null : _submit,
                       child: _isSubmitting
                           ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
                           : const Text('Log in'),

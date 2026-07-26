@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../services/auth_service.dart';
 import '../../theme/app_spacing.dart';
+import '../../widgets/captcha_field.dart';
 import '../../widgets/password_strength_checklist.dart';
 import 'otp_verification_screen.dart';
 
@@ -32,6 +33,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _captchaKey = GlobalKey<CaptchaFieldState>();
 
   /// True when a Supabase session already exists (AuthGate routes here
   /// straight after a fresh "Continue with Google" that has no account yet
@@ -48,6 +50,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   var _isGoogleSubmitting = false;
   var _obscurePassword = true;
   var _obscureConfirmPassword = true;
+  String? _captchaToken;
 
   static final _emailRegExp = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
 
@@ -133,6 +136,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   Future<void> _submit() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
+    final captchaToken = _captchaToken;
+    if (!_hasGoogleSession && captchaToken == null) return;
 
     final fullName = _fullNameController.text.trim();
     final email = _emailController.text.trim();
@@ -158,6 +163,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           password: _passwordController.text,
           fullName: fullName,
           pendingPhone: e164Phone,
+          captchaToken: captchaToken!,
         );
       }
 
@@ -206,6 +212,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
       if (mounted) _showError('Something went wrong. Please try again.');
       debugPrint('RegisterScreen: sign-up error $e');
     } finally {
+      // Tokens are single-use — always fetch a fresh one, whether this
+      // attempt succeeded or failed. No-op when `_hasGoogleSession` (the
+      // field isn't rendered, so the key has no current state).
+      _captchaKey.currentState?.reset();
       if (mounted) setState(() => _isSubmitting = false);
     }
   }
@@ -351,10 +361,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         validator: (value) => value == _passwordController.text ? null : 'Passwords do not match',
                         onFieldSubmitted: (_) => _submit(),
                       ),
+                      const SizedBox(height: AppSpacing.md),
+                      Center(
+                        child: CaptchaField(
+                          key: _captchaKey,
+                          onTokenChanged: (token) => setState(() => _captchaToken = token),
+                        ),
+                      ),
                     ],
                     const SizedBox(height: AppSpacing.xl),
                     FilledButton(
-                      onPressed: busy ? null : _submit,
+                      onPressed: (busy || (!_hasGoogleSession && _captchaToken == null)) ? null : _submit,
                       child: _isSubmitting
                           ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
                           : Text(_hasGoogleSession ? 'Continue' : 'Create account'),

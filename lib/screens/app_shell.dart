@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -228,7 +230,29 @@ class _MobileTopBar extends StatefulWidget implements PreferredSizeWidget {
 }
 
 class _MobileTopBarState extends State<_MobileTopBar> {
-  late final _profileFuture = AuthService.fetchCurrentProfile();
+  late Future<({String fullName, String email, String? photoUrl})?> _profileFuture =
+      AuthService.fetchCurrentProfile();
+  StreamSubscription? _authSub;
+
+  @override
+  void initState() {
+    super.initState();
+    // Refetches on every auth event, including the `userUpdated` fired by
+    // Settings' "Edit name" — this widget stays mounted for the app's whole
+    // lifetime (behind an IndexedStack), so it'd otherwise never see a
+    // rename made elsewhere until the app restarts.
+    _authSub = AuthService.onAuthStateChange.listen((_) {
+      setState(() {
+        _profileFuture = AuthService.fetchCurrentProfile();
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _authSub?.cancel();
+    super.dispose();
+  }
 
   String get _greeting {
     final hour = DateTime.now().hour;
@@ -500,7 +524,26 @@ class _AccountSection extends StatefulWidget {
 }
 
 class _AccountSectionState extends State<_AccountSection> {
-  late final _profileFuture = AuthService.fetchCurrentProfile();
+  late Future<({String fullName, String email, String? photoUrl})?> _profileFuture =
+      AuthService.fetchCurrentProfile();
+  StreamSubscription? _authSub;
+
+  @override
+  void initState() {
+    super.initState();
+    // See _MobileTopBarState's identical subscription for why.
+    _authSub = AuthService.onAuthStateChange.listen((_) {
+      setState(() {
+        _profileFuture = AuthService.fetchCurrentProfile();
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _authSub?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {

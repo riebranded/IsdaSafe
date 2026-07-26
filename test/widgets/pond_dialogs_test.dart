@@ -117,4 +117,119 @@ void main() {
     expect(result?.latitude, isNot(14.5995));
     expect(result?.longitude, isNot(120.9842));
   });
+
+  testWidgets('edit location dialog opens centered on current location', (
+    tester,
+  ) async {
+    LocationDraft? result;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => FilledButton(
+            onPressed: () async {
+              result = await showEditLocationDialog(
+                context,
+                initialLatitude: 10.0,
+                initialLongitude: 100.0,
+                currentLocationLoader: () async =>
+                    const LatLng(14.5995, 120.9842),
+              );
+            },
+            child: const Text('Open picker'),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open picker'));
+    await tester.pump();
+    await tester.pump();
+
+    // Centers on the current location, not the pond's saved coordinates.
+    expect(find.text('14.5995, 120.9842'), findsOneWidget);
+    expect(find.text("You're here"), findsOneWidget);
+    expect(find.byType(SnackBar), findsNothing);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Save location'));
+    await tester.pumpAndSettle();
+
+    expect(result?.latitude, 14.5995);
+    expect(result?.longitude, 120.9842);
+  });
+
+  testWidgets(
+    'edit location dialog falls back to the pond location when current '
+    'location is unavailable',
+    (tester) async {
+      LocationDraft? result;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => FilledButton(
+              onPressed: () async {
+                result = await showEditLocationDialog(
+                  context,
+                  initialLatitude: 10.0,
+                  initialLongitude: 100.0,
+                  currentLocationLoader: () async => null,
+                );
+              },
+              child: const Text('Open picker'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open picker'));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('10.0000, 100.0000'), findsOneWidget);
+      expect(find.text("You're here"), findsNothing);
+      expect(find.byType(SnackBar), findsNothing);
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Save location'));
+      await tester.pumpAndSettle();
+
+      expect(result?.latitude, 10.0);
+      expect(result?.longitude, 100.0);
+    },
+  );
+
+  testWidgets('edit location locate-me button recenters without a snackbar', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => FilledButton(
+            onPressed: () async {
+              await showEditLocationDialog(
+                context,
+                initialLatitude: 10.0,
+                initialLongitude: 100.0,
+                currentLocationLoader: () async =>
+                    const LatLng(14.5995, 120.9842),
+              );
+            },
+            child: const Text('Open picker'),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open picker'));
+    await tester.pump();
+    await tester.pump();
+
+    await tester.tap(
+      find.widgetWithText(OutlinedButton, 'Use my current location'),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byType(SnackBar), findsNothing);
+  });
 }

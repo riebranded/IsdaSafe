@@ -373,130 +373,173 @@ typedef LocationDraft = ({double latitude, double longitude});
 
 /// Shows a map-only dialog for updating an existing pond's location.
 ///
-/// Camera movement updates only the coordinate label, rather than rebuilding
-/// the map on every frame.
+/// Opens centered on the user's current location, same as [showAddPondDialog]
+/// — falling back to the pond's existing coordinates if a fix isn't
+/// available. The embedded locate-me button silently recenters the pin on
+/// tap; no snackbar messaging either way. [currentLocationLoader] allows
+/// deterministic tests.
 Future<LocationDraft?> showEditLocationDialog(
   BuildContext context, {
   required double initialLatitude,
   required double initialLongitude,
-}) async {
-  final center = ValueNotifier(LatLng(initialLatitude, initialLongitude));
-  // Only reassigned (via setState) when "locate me" fires a deliberate
-  // recenter — plain panning updates `center` above without rebuilding,
-  // so the map isn't recreated on every drag frame.
-  var mapCenter = center.value;
-  var isLocatingMe = false;
-
-  final result = await showDialog<LocationDraft>(
+  CurrentLocationLoader? currentLocationLoader,
+}) {
+  return showDialog<LocationDraft>(
     context: context,
-    builder: (context) {
-      final theme = Theme.of(context);
-      return StatefulBuilder(
-        builder: (context, setState) {
-          Future<void> handleLocateMe() async {
-            if (isLocatingMe) return;
-            setState(() => isLocatingMe = true);
+    builder: (context) => _EditLocationDialog(
+      initialLatitude: initialLatitude,
+      initialLongitude: initialLongitude,
+      currentLocationLoader:
+          currentLocationLoader ?? CurrentLocationService.getCurrentLocation,
+    ),
+  );
+}
 
-            final messenger = ScaffoldMessenger.of(context);
-            messenger.showSnackBar(
-              const SnackBar(
-                content: Text('Finding your location…'),
-                duration: Duration(seconds: 2),
-              ),
-            );
+class _EditLocationDialog extends StatefulWidget {
+  const _EditLocationDialog({
+    required this.initialLatitude,
+    required this.initialLongitude,
+    required this.currentLocationLoader,
+  });
 
-            LatLng? location;
-            try {
-              location = await CurrentLocationService.getCurrentLocation();
-            } finally {
-              setState(() => isLocatingMe = false);
-            }
-            if (location == null) {
-              messenger.showSnackBar(
-                const SnackBar(
-                  content: Text(
-                    "Couldn't get your location. Check that location access "
-                    'is allowed for this site/app.',
-                  ),
-                ),
-              );
-              return;
-            }
-            messenger.showSnackBar(
-              SnackBar(
-                content: Text(
-                  'Located: ${location.latitude.toStringAsFixed(4)}, '
-                  '${location.longitude.toStringAsFixed(4)}',
-                ),
-              ),
-            );
-            center.value = location;
-            setState(() => mapCenter = location!);
-          }
+  final double initialLatitude;
+  final double initialLongitude;
+  final CurrentLocationLoader currentLocationLoader;
 
-          return Dialog(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 480, maxHeight: 600),
-              child: Padding(
-                padding: const EdgeInsets.all(AppSpacing.lg),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text('Edit location', style: theme.textTheme.titleLarge),
-                    const SizedBox(height: AppSpacing.md),
-                    Expanded(
-                      child: LocationPickerMap(
-                        initialCenter: mapCenter,
-                        initialZoom: kFocusedMapZoom,
-                        onCenterChanged: (newCenter) =>
-                            center.value = newCenter,
-                        onLocateMe: handleLocateMe,
-                        isLocatingMe: isLocatingMe,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
-                    ValueListenableBuilder<LatLng>(
-                      valueListenable: center,
-                      builder: (context, value, _) => Text(
-                        '${value.latitude.toStringAsFixed(4)}, '
-                        '${value.longitude.toStringAsFixed(4)}',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        TextButton(
-                          onPressed: () => Navigator.of(context).pop(),
-                          child: const Text('Cancel'),
-                        ),
-                        const SizedBox(width: AppSpacing.sm),
-                        FilledButton(
-                          onPressed: () {
-                            final value = center.value;
-                            Navigator.of(context).pop((
-                              latitude: value.latitude,
-                              longitude: value.longitude,
-                            ));
-                          },
-                          child: const Text('Save location'),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        },
-      );
-    },
+  @override
+  State<_EditLocationDialog> createState() => _EditLocationDialogState();
+}
+
+class _EditLocationDialogState extends State<_EditLocationDialog> {
+  late final _center = ValueNotifier<LatLng>(
+    LatLng(widget.initialLatitude, widget.initialLongitude),
   );
 
-  center.dispose();
-  return result;
+  var _isLocatingMe = false;
+  var _userAdjustedMap = false;
+  var _isAtUserLocation = false;
+  var _mapZoom = kFocusedMapZoom;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCurrentLocation();
+  }
+
+  // Silent by design: this only recenters the map if a fix resolves before
+  // the user has touched it, and otherwise just leaves the pond's existing
+  // location in place — no message either way.
+  Future<void> _loadCurrentLocation() async {
+    LatLng? location;
+    try {
+      location = await widget.currentLocationLoader();
+    } catch (_) {
+      location = null;
+    }
+    if (!mounted || _userAdjustedMap || location == null) return;
+
+    _center.value = location;
+    setState(() {
+      _isAtUserLocation = true;
+      _mapZoom = kUserLocationMapZoom;
+    });
+  }
+
+  Future<void> _handleLocateMe() async {
+    if (_isLocatingMe) return;
+    setState(() => _isLocatingMe = true);
+
+    LatLng? location;
+    try {
+      location = await widget.currentLocationLoader();
+    } catch (_) {
+      location = null;
+    } finally {
+      if (mounted) setState(() => _isLocatingMe = false);
+    }
+    if (!mounted || location == null) return;
+
+    _userAdjustedMap = false;
+    _center.value = location;
+    setState(() {
+      _isAtUserLocation = true;
+      _mapZoom = kUserLocationMapZoom;
+    });
+  }
+
+  void _handleUserInteraction() {
+    _userAdjustedMap = true;
+    if (_isAtUserLocation) setState(() => _isAtUserLocation = false);
+  }
+
+  @override
+  void dispose() {
+    _center.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Dialog(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480, maxHeight: 600),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('Edit location', style: theme.textTheme.titleLarge),
+              const SizedBox(height: AppSpacing.md),
+              Expanded(
+                child: LocationPickerMap(
+                  initialCenter: _center.value,
+                  initialZoom: _mapZoom,
+                  centerLabel: _isAtUserLocation ? "You're here" : null,
+                  onUserInteraction: _handleUserInteraction,
+                  onCenterChanged: (newCenter) => _center.value = newCenter,
+                  onLocateMe: _handleLocateMe,
+                  isLocatingMe: _isLocatingMe,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              ValueListenableBuilder<LatLng>(
+                valueListenable: _center,
+                builder: (context, value, _) => Text(
+                  '${value.latitude.toStringAsFixed(4)}, '
+                  '${value.longitude.toStringAsFixed(4)}',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Cancel'),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  FilledButton(
+                    onPressed: () {
+                      final value = _center.value;
+                      Navigator.of(context).pop((
+                        latitude: value.latitude,
+                        longitude: value.longitude,
+                      ));
+                    },
+                    child: const Text('Save location'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

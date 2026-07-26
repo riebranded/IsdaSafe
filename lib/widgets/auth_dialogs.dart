@@ -2,16 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/auth_service.dart';
+import 'captcha_field.dart';
 
 /// Shows a single-field dialog for requesting a password-reset email.
 /// Returns true if the email was sent, or null if cancelled.
 Future<bool?> showForgotPasswordDialog(BuildContext context) {
   final controller = TextEditingController();
+  final captchaKey = GlobalKey<CaptchaFieldState>();
 
   return showDialog<bool>(
     context: context,
     builder: (context) {
       String? errorText;
+      String? captchaToken;
       var isSubmitting = false;
 
       return StatefulBuilder(
@@ -22,12 +25,14 @@ Future<bool?> showForgotPasswordDialog(BuildContext context) {
               setState(() => errorText = 'Enter a valid email address');
               return;
             }
+            final token = captchaToken;
+            if (token == null) return;
 
             setState(() => isSubmitting = true);
             final messenger = ScaffoldMessenger.of(context);
             final navigator = Navigator.of(context);
             try {
-              await AuthService.resetPasswordForEmail(email);
+              await AuthService.resetPasswordForEmail(email, captchaToken: token);
               navigator.pop(true);
               messenger.showSnackBar(
                 SnackBar(content: Text('Password reset email sent to $email')),
@@ -43,25 +48,39 @@ Future<bool?> showForgotPasswordDialog(BuildContext context) {
                 errorText = 'Something went wrong. Please try again.';
               });
               debugPrint('showForgotPasswordDialog: error $e');
+            } finally {
+              // Tokens are single-use — always fetch a fresh one, whether
+              // this attempt succeeded or failed.
+              captchaKey.currentState?.reset();
             }
           }
 
           return AlertDialog(
             title: const Text('Reset your password'),
-            content: TextField(
-              controller: controller,
-              autofocus: true,
-              keyboardType: TextInputType.emailAddress,
-              textInputAction: TextInputAction.done,
-              enabled: !isSubmitting,
-              decoration: InputDecoration(
-                labelText: 'Email address',
-                errorText: errorText,
-              ),
-              onChanged: (_) {
-                if (errorText != null) setState(() => errorText = null);
-              },
-              onSubmitted: (_) => submit(),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  keyboardType: TextInputType.emailAddress,
+                  textInputAction: TextInputAction.done,
+                  enabled: !isSubmitting,
+                  decoration: InputDecoration(
+                    labelText: 'Email address',
+                    errorText: errorText,
+                  ),
+                  onChanged: (_) {
+                    if (errorText != null) setState(() => errorText = null);
+                  },
+                  onSubmitted: (_) => submit(),
+                ),
+                const SizedBox(height: 16),
+                CaptchaField(
+                  key: captchaKey,
+                  onTokenChanged: (token) => setState(() => captchaToken = token),
+                ),
+              ],
             ),
             actions: [
               TextButton(
@@ -69,7 +88,7 @@ Future<bool?> showForgotPasswordDialog(BuildContext context) {
                 child: const Text('Cancel'),
               ),
               FilledButton(
-                onPressed: isSubmitting ? null : submit,
+                onPressed: (isSubmitting || captchaToken == null) ? null : submit,
                 child: isSubmitting
                     ? const SizedBox(
                         width: 20,

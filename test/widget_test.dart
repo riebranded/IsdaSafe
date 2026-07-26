@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import 'package:isdasafev2/app.dart';
 import 'package:isdasafev2/providers/pond_provider.dart';
+import 'package:isdasafev2/providers/theme_provider.dart';
 
 import 'support/fake_pond_repository.dart';
 
@@ -21,8 +22,11 @@ void main() {
   });
 
   Widget buildApp() {
-    return ChangeNotifierProvider(
-      create: (_) => PondProvider(repository: FakePondRepository()),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => PondProvider(repository: FakePondRepository())),
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+      ],
       child: const IsdaSafeApp(),
     );
   }

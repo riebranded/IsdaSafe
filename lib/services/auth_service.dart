@@ -60,28 +60,34 @@ abstract final class AuthService {
   /// `auth.users.phone` itself isn't set until the `verify-semaphore-otp`
   /// Edge Function succeeds, so there'd otherwise be nowhere to read the
   /// number back from to resend a code after a restart.
+  /// [captchaToken] is required once Turnstile CAPTCHA protection is enabled
+  /// on the Supabase project (see docs/AUTH_SETUP.md) — Supabase rejects
+  /// every password-grant call below without one.
   static Future<AuthResponse> signUpWithEmail({
     required String email,
     required String password,
     required String fullName,
     required String pendingPhone,
+    required String captchaToken,
   }) {
     return _auth.signUp(
       email: email,
       password: password,
       data: {'full_name': fullName, 'pending_phone': pendingPhone},
+      captchaToken: captchaToken,
     );
   }
 
   static Future<AuthResponse> signInWithEmail({
     required String email,
     required String password,
+    required String captchaToken,
   }) {
-    return _auth.signInWithPassword(email: email, password: password);
+    return _auth.signInWithPassword(email: email, password: password, captchaToken: captchaToken);
   }
 
-  static Future<void> resetPasswordForEmail(String email) {
-    return _auth.resetPasswordForEmail(email);
+  static Future<void> resetPasswordForEmail(String email, {required String captchaToken}) {
+    return _auth.resetPasswordForEmail(email, captchaToken: captchaToken);
   }
 
   /// Requests a phone-verification SMS for [e164Phone] via the
@@ -217,6 +223,23 @@ abstract final class AuthService {
       fileOptions: FileOptions(upsert: true, contentType: contentType),
     );
     return _client.storage.from('avatars').getPublicUrl(path);
+  }
+
+  /// Updates the signed-in user's display name — both the `profiles` row
+  /// (source of truth for [fetchCurrentProfile]) and auth `user_metadata`
+  /// (what the `currentUser`-based fallbacks read before that fetch
+  /// resolves). The `updateUser` call also fires a `userUpdated` event on
+  /// [onAuthStateChange], which mounted account UI (sidebar, top bar,
+  /// Settings) listens for to refresh itself.
+  ///
+  /// Deliberately a targeted `update` rather than routing through
+  /// [upsertProfile] — that upserts every column, so a bare `fullName` call
+  /// would silently reset `phone_verified` to false for a profile that had
+  /// already completed verification.
+  static Future<void> updateFullName(String fullName) async {
+    final uid = currentUser!.id;
+    await _client.from('profiles').update({'full_name': fullName}).eq('id', uid);
+    await _auth.updateUser(UserAttributes(data: {'full_name': fullName}));
   }
 
   static Future<void> upsertProfile({

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -15,7 +17,78 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  late final _profileFuture = AuthService.fetchCurrentProfile();
+  late Future<({String fullName, String email, String? photoUrl})?> _profileFuture =
+      AuthService.fetchCurrentProfile();
+  StreamSubscription? _authSub;
+
+  @override
+  void initState() {
+    super.initState();
+    // Also refetches after our own `updateFullName` below (it triggers a
+    // `userUpdated` event), so this doubles as this screen's own refresh —
+    // no separate setState needed after a successful rename.
+    _authSub = AuthService.onAuthStateChange.listen((_) {
+      setState(() {
+        _profileFuture = AuthService.fetchCurrentProfile();
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _authSub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _editName(String currentName) async {
+    final controller = TextEditingController(text: currentName);
+    final newName = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        String? errorText;
+        return StatefulBuilder(
+          builder: (context, setState) {
+            void submit() {
+              final trimmed = controller.text.trim();
+              if (trimmed.isEmpty) {
+                setState(() => errorText = 'Enter your name');
+                return;
+              }
+              Navigator.of(context).pop(trimmed);
+            }
+
+            return AlertDialog(
+              title: const Text('Edit name'),
+              content: TextField(
+                controller: controller,
+                autofocus: true,
+                textInputAction: TextInputAction.done,
+                decoration: InputDecoration(labelText: 'Full name', errorText: errorText),
+                onChanged: (_) {
+                  if (errorText != null) setState(() => errorText = null);
+                },
+                onSubmitted: (_) => submit(),
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
+                FilledButton(onPressed: submit, child: const Text('Save')),
+              ],
+            );
+          },
+        );
+      },
+    );
+    controller.dispose();
+    if (newName == null || newName == currentName) return;
+    if (!mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await AuthService.updateFullName(newName);
+    } catch (e) {
+      messenger.showSnackBar(const SnackBar(content: Text("Couldn't update name. Try again.")));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -70,6 +143,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ),
                         ],
                       ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.edit_outlined),
+                      tooltip: 'Edit name',
+                      onPressed: () => _editName(fullName),
                     ),
                   ],
                 ),
