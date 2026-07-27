@@ -84,6 +84,29 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
 
+  # Generate Android/iOS/web app icons and native splash screens from the
+  # IsdaSafe logo (see flutter_launcher_icons / flutter_native_splash config
+  # below). Dev-only — not needed at runtime.
+  flutter_launcher_icons: ^0.14.3
+  flutter_native_splash: ^2.4.4
+
+# Config for `dart run flutter_launcher_icons`.
+flutter_launcher_icons:
+  android: true
+  ios: true
+  web:
+    generate: true
+  image_path: "assets/branding/logo.png"
+
+# Config for `dart run flutter_native_splash:create`.
+flutter_native_splash:
+  color: "#0B2644"
+  image: assets/branding/logo.png
+  android_12:
+    color: "#0B2644"
+    image: assets/branding/logo.png
+  web: true
+
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 
@@ -101,6 +124,7 @@ flutter:
   #   - images/a_dot_ham.jpeg
   assets:
     - .env
+    - assets/branding/logo.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

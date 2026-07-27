@@ -7,7 +7,7 @@ import 'app_spacing.dart';
 /// Single brand seed — Material 3 derives harmonious light/dark tonal
 /// palettes from one seed, so both themes should share it (only
 /// `brightness` differs).
-const _seedColor = Color(0xFF15803D); // deep aquaculture green
+const _seedColor = Color(0xFF0F7490); // IsdaSafe logo teal
 
 /// Status (severity) colors are a separate, fixed vocabulary from the brand
 /// palette — they mean "healthy / needs attention / unsafe" and must never

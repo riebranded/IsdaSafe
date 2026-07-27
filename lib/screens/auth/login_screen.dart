@@ -131,7 +131,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.water_drop, size: 48, color: theme.colorScheme.primary),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(AppRadius.md),
+                      child: Image.asset('assets/branding/logo.png', width: 64, height: 64, fit: BoxFit.cover),
+                    ),
                     const SizedBox(height: AppSpacing.md),
                     Text('Welcome back', style: theme.textTheme.headlineSmall, textAlign: TextAlign.center),
                     const SizedBox(height: AppSpacing.xs),

@@ -1,11 +1,11 @@
 {
-    "name": "isdasafev2",
-    "short_name": "isdasafev2",
+    "name": "IsdaSafe",
+    "short_name": "IsdaSafe",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#0B2644",
+    "theme_color": "#0B2644",
+    "description": "IsdaSafe: aquaculture pond monitoring, water quality, and fish species recommendations.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

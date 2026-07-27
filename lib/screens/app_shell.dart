@@ -362,7 +362,10 @@ class _SidePanel extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.lg, AppSpacing.md, AppSpacing.sm),
               child: Row(
                 children: [
-                  Icon(Icons.water_drop, color: theme.colorScheme.primary, size: 28),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
+                    child: Image.asset('assets/branding/logo.png', width: 28, height: 28, fit: BoxFit.cover),
+                  ),
                   const SizedBox(width: AppSpacing.sm),
                   Text('IsdaSafe', style: theme.textTheme.headlineSmall),
                 ],
