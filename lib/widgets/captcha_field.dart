@@ -11,7 +11,11 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 /// for the same reason: `kIsWeb` short-circuits before `Platform.*` is ever
 /// evaluated, so this is safe to read on web too.
 bool get isCaptchaSupported =>
-    kIsWeb || Platform.isAndroid || Platform.isIOS || Platform.isWindows || Platform.isMacOS;
+    kIsWeb ||
+    Platform.isAndroid ||
+    Platform.isIOS ||
+    Platform.isWindows ||
+    Platform.isMacOS;
 
 /// Renders a Cloudflare Turnstile challenge and reports the current
 /// verification token up to [onTokenChanged] — null whenever there isn't a
@@ -55,7 +59,9 @@ class CaptchaFieldState extends State<CaptchaField> {
     if (!isCaptchaSupported) {
       return Text(
         "Verification isn't available on this platform.",
-        style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error),
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.error,
+        ),
       );
     }
 
@@ -63,21 +69,39 @@ class CaptchaFieldState extends State<CaptchaField> {
     if (siteKey.isEmpty) {
       return Text(
         'Missing TURNSTILE_SITE_KEY — see docs/AUTH_SETUP.md.',
-        style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error),
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.error,
+        ),
       );
     }
 
-    return CloudflareTurnstile(
-      siteKey: siteKey,
-      // Matches the "localhost" hostname registered against the widget for
-      // native builds (see docs/AUTH_SETUP.md) — irrelevant on web, where
-      // the script runs against the page's real origin instead.
-      baseUrl: 'http://localhost/',
-      controller: _controller,
-      options: TurnstileOptions(size: TurnstileSize.flexible),
-      onTokenReceived: widget.onTokenChanged,
-      onTokenExpired: () => widget.onTokenChanged(null),
-      onError: (_) => widget.onTokenChanged(null),
+    return ColoredBox(
+      // The widget's own WebView/iframe paints a plain black rectangle for
+      // an instant before the Turnstile challenge itself loads — matching
+      // the surface color here (instead of leaving it transparent) hides
+      // that flash instead of showing a jarring black box mid-form.
+      color: theme.colorScheme.surface,
+      child: CloudflareTurnstile(
+        siteKey: siteKey,
+        // Matches the "localhost" hostname registered against the widget for
+        // native builds (see docs/AUTH_SETUP.md) — irrelevant on web, where
+        // the script runs against the page's real origin instead.
+        baseUrl: 'http://localhost/',
+        controller: _controller,
+        options: TurnstileOptions(
+          size: TurnstileSize.flexible,
+          // `auto` picks the challenge's own dark/light rendering from the
+          // *device* brightness, which can mismatch our Material theme
+          // (e.g. dark widget chrome on a light surface) — tie it to the
+          // app's actual theme instead.
+          theme: theme.brightness == Brightness.dark
+              ? TurnstileTheme.dark
+              : TurnstileTheme.light,
+        ),
+        onTokenReceived: widget.onTokenChanged,
+        onTokenExpired: () => widget.onTokenChanged(null),
+        onError: (_) => widget.onTokenChanged(null),
+      ),
     );
   }
 }
