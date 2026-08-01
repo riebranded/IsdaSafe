@@ -48,9 +48,14 @@ extension MetricTypeInfo on MetricType {
     }
   }
 
+  /// Numeric-only rendering, e.g. "27.4" — no unit, for space-constrained UI
+  /// like per-point chart labels. [format] is the full display form.
+  String formatValue(double value) =>
+      value.toStringAsFixed(this == MetricType.ammonia ? 2 : 1);
+
   /// Formats [value] the way it should be displayed, e.g. "27.4°C" or "6.8".
   String format(double value) {
-    final formatted = value.toStringAsFixed(this == MetricType.ammonia ? 2 : 1);
+    final formatted = formatValue(value);
     return unit.isEmpty ? formatted : '$formatted$unit';
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/metric_type.dart';
 import '../models/sensor_reading.dart';
+import '../models/trend_range.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_theme.dart';
 
@@ -9,10 +10,20 @@ import '../theme/app_theme.dart';
 /// Answers "what did this metric actually do" for one reading type at a
 /// time. Tap or drag to see the real value at that point.
 class IndividualTrendChart extends StatefulWidget {
-  const IndividualTrendChart({super.key, required this.type, required this.history});
+  const IndividualTrendChart({
+    super.key,
+    required this.type,
+    required this.history,
+    required this.range,
+  });
 
   final MetricType type;
   final List<SensorReading> history;
+
+  /// Drives the bottom axis's date/time label granularity — must match
+  /// whatever range [history] was actually fetched for (see
+  /// `AnalyticsScreen`'s `_range`/`historyForRange`).
+  final TrendRange range;
 
   @override
   State<IndividualTrendChart> createState() => _IndividualTrendChartState();
@@ -21,10 +32,11 @@ class IndividualTrendChart extends StatefulWidget {
 class _IndividualTrendChartState extends State<IndividualTrendChart> {
   int? _selectedIndex;
 
-  void _selectAt(double localX, double width) {
+  void _selectAt(double localX, double width, double leftMargin) {
     final count = widget.history.length;
     if (count < 2) return;
-    final fraction = (localX / width).clamp(0.0, 1.0);
+    final plotWidth = width - leftMargin;
+    final fraction = ((localX - leftMargin) / plotWidth).clamp(0.0, 1.0);
     final index = (fraction * (count - 1)).round().clamp(0, count - 1);
     setState(() => _selectedIndex = index);
   }
@@ -44,6 +56,16 @@ class _IndividualTrendChartState extends State<IndividualTrendChart> {
       max += 1;
     }
 
+    final yAxisLabelStyle = TextStyle(
+      fontSize: 10,
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    final leftMargin = _measureLeftMargin(
+      [max, (max + min) / 2, min],
+      widget.type.format,
+      yAxisLabelStyle,
+    );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -56,16 +78,28 @@ class _IndividualTrendChartState extends State<IndividualTrendChart> {
         ),
         const SizedBox(height: AppSpacing.sm),
         SizedBox(
-          height: 120,
+          height: 160,
           child: LayoutBuilder(
             builder: (context, constraints) {
               return GestureDetector(
                 behavior: HitTestBehavior.opaque,
-                onTapDown: (d) => _selectAt(d.localPosition.dx, constraints.maxWidth),
-                onPanStart: (d) => _selectAt(d.localPosition.dx, constraints.maxWidth),
-                onPanUpdate: (d) => _selectAt(d.localPosition.dx, constraints.maxWidth),
+                onTapDown: (d) => _selectAt(
+                  d.localPosition.dx,
+                  constraints.maxWidth,
+                  leftMargin,
+                ),
+                onPanStart: (d) => _selectAt(
+                  d.localPosition.dx,
+                  constraints.maxWidth,
+                  leftMargin,
+                ),
+                onPanUpdate: (d) => _selectAt(
+                  d.localPosition.dx,
+                  constraints.maxWidth,
+                  leftMargin,
+                ),
                 child: CustomPaint(
-                  size: Size(constraints.maxWidth, 120),
+                  size: Size(constraints.maxWidth, 160),
                   painter: _TrendPainter(
                     history: widget.history,
                     min: min,
@@ -73,19 +107,17 @@ class _IndividualTrendChartState extends State<IndividualTrendChart> {
                     color: color,
                     mutedColor: theme.colorScheme.onSurfaceVariant,
                     surfaceColor: theme.colorScheme.surface,
+                    gridColor: theme.colorScheme.outlineVariant,
                     selectedIndex: selectedIndex,
+                    valueFormat: widget.type.format,
+                    timeFormat: widget.range.formatTimestamp,
+                    leftMargin: leftMargin,
+                    yAxisLabelStyle: yAxisLabelStyle,
                   ),
                 ),
               );
             },
           ),
-        ),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(widget.type.format(max), style: theme.textTheme.labelSmall),
-            Text(widget.type.format(min), style: theme.textTheme.labelSmall),
-          ],
         ),
         if (selectedIndex != null) ...[
           const SizedBox(height: AppSpacing.sm),
@@ -96,6 +128,25 @@ class _IndividualTrendChartState extends State<IndividualTrendChart> {
   }
 }
 
+/// The widest of [values] (as formatted by [format]) plus a small gap —
+/// used as the chart's left margin so the y-axis labels never clip, without
+/// reserving more space than the longest one actually needs.
+double _measureLeftMargin(
+  List<double> values,
+  String Function(double) format,
+  TextStyle style,
+) {
+  var widest = 0.0;
+  for (final value in values) {
+    final painter = TextPainter(
+      text: TextSpan(text: format(value), style: style),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    if (painter.width > widest) widest = painter.width;
+  }
+  return widest + AppSpacing.xs;
+}
+
 class _TrendPainter extends CustomPainter {
   _TrendPainter({
     required this.history,
@@ -104,7 +155,12 @@ class _TrendPainter extends CustomPainter {
     required this.color,
     required this.mutedColor,
     required this.surfaceColor,
+    required this.gridColor,
     required this.selectedIndex,
+    required this.valueFormat,
+    required this.timeFormat,
+    required this.leftMargin,
+    required this.yAxisLabelStyle,
   });
 
   final List<SensorReading> history;
@@ -113,17 +169,64 @@ class _TrendPainter extends CustomPainter {
   final Color color;
   final Color mutedColor;
   final Color surfaceColor;
+  final Color gridColor;
   final int? selectedIndex;
 
-  static const _inset = 6.0;
+  /// Renders a value (with unit) for the y-axis gridline labels.
+  final String Function(double) valueFormat;
+
+  /// Renders a point's timestamp for its x-axis label, at this chart's
+  /// selected [TrendRange] granularity.
+  final String Function(DateTime) timeFormat;
+
+  final double leftMargin;
+  final TextStyle yAxisLabelStyle;
+
+  static const _topInset = 8.0;
+  static const _xAxisHeight = 18.0;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final plotHeight = size.height - _inset * 2;
-    double yOf(double value) => _inset + (1 - (value - min) / (max - min)) * plotHeight;
+    final plotTop = _topInset;
+    final plotBottom = size.height - _xAxisHeight;
+    final plotHeight = plotBottom - plotTop;
+    final plotWidth = size.width - leftMargin;
 
-    final dx = history.length > 1 ? size.width / (history.length - 1) : 0.0;
-    final points = [for (var i = 0; i < history.length; i++) Offset(dx * i, yOf(history[i].value))];
+    double yOf(double value) =>
+        plotTop + (1 - (value - min) / (max - min)) * plotHeight;
+    double xOf(int i) =>
+        leftMargin +
+        (history.length > 1
+            ? plotWidth / (history.length - 1) * i
+            : plotWidth / 2);
+
+    // Y-axis gridlines + labels (max / mid / min).
+    final gridPaint = Paint()
+      ..color = gridColor
+      ..strokeWidth = 1;
+    for (final value in [max, (max + min) / 2, min]) {
+      final y = yOf(value);
+      canvas.drawLine(Offset(leftMargin, y), Offset(size.width, y), gridPaint);
+      final labelPainter = TextPainter(
+        text: TextSpan(text: valueFormat(value), style: yAxisLabelStyle),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      labelPainter.paint(
+        canvas,
+        Offset(
+          0,
+          (y - labelPainter.height / 2).clamp(
+            0.0,
+            plotBottom - labelPainter.height,
+          ),
+        ),
+      );
+    }
+
+    final points = [
+      for (var i = 0; i < history.length; i++)
+        Offset(xOf(i), yOf(history[i].value)),
+    ];
 
     final path = Path();
     for (var i = 0; i < points.length; i++) {
@@ -163,15 +266,36 @@ class _TrendPainter extends CustomPainter {
 
     final index = selectedIndex;
     if (index != null) {
-      final x = dx * index;
+      final x = points[index].dx;
       canvas.drawLine(
-        Offset(x, 0),
-        Offset(x, size.height),
+        Offset(x, plotTop),
+        Offset(x, plotBottom),
         Paint()
           ..color = mutedColor.withValues(alpha: 0.5)
           ..strokeWidth = 1,
       );
       drawEmphasized(points[index]);
+    }
+
+    // X-axis date/time label under every point.
+    for (var i = 0; i < points.length; i++) {
+      final isEmphasized = i == points.length - 1 || i == index;
+      final labelPainter = TextPainter(
+        text: TextSpan(
+          text: timeFormat(history[i].timestamp),
+          style: TextStyle(
+            fontSize: 9,
+            color: isEmphasized ? color : mutedColor,
+            fontWeight: isEmphasized ? FontWeight.w600 : FontWeight.w400,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      final labelX = (points[i].dx - labelPainter.width / 2).clamp(
+        leftMargin,
+        size.width - labelPainter.width,
+      );
+      labelPainter.paint(canvas, Offset(labelX, plotBottom + 3));
     }
   }
 
@@ -181,7 +305,8 @@ class _TrendPainter extends CustomPainter {
         oldDelegate.history != history ||
         oldDelegate.min != min ||
         oldDelegate.max != max ||
-        oldDelegate.color != color;
+        oldDelegate.color != color ||
+        oldDelegate.leftMargin != leftMargin;
   }
 }
 
@@ -196,7 +321,10 @@ class _ValueTooltip extends StatelessWidget {
     final theme = Theme.of(context);
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 6),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: 6,
+      ),
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(AppRadius.sm),
@@ -204,16 +332,24 @@ class _ValueTooltip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
           const SizedBox(width: AppSpacing.xs),
           Text(
             reading.type.format(reading.value),
-            style: theme.textTheme.labelMedium?.copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
+            style: theme.textTheme.labelMedium?.copyWith(
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
           ),
           const SizedBox(width: AppSpacing.sm),
           Text(
             _relativeLabel(reading.timestamp),
-            style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
           ),
         ],
       ),

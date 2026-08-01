@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/metric_type.dart';
+import '../models/trend_range.dart';
 import '../providers/pond_provider.dart';
 import '../services/pond_snapshot_cache.dart';
 import '../theme/app_spacing.dart';
@@ -21,6 +22,7 @@ class AnalyticsScreen extends StatefulWidget {
 
 class _AnalyticsScreenState extends State<AnalyticsScreen> {
   String? _selectedId;
+  var _range = TrendRange.hourly;
 
   @override
   Widget build(BuildContext context) {
@@ -29,12 +31,21 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
 
     if (ponds.isEmpty) {
       return Center(
-        child: Text('Add a pond to see its trends here.', style: theme.textTheme.bodyMedium),
+        child: Text(
+          'Add a pond to see its trends here.',
+          style: theme.textTheme.bodyMedium,
+        ),
       );
     }
 
-    final selected = ponds.firstWhere((p) => p.id == _selectedId, orElse: () => ponds.first);
-    final snapshot = widget.cache.snapshotFor(selected);
+    final selected = ponds.firstWhere(
+      (p) => p.id == _selectedId,
+      orElse: () => ponds.first,
+    );
+    final rangedHistory = {
+      for (final type in MetricType.values)
+        type: widget.cache.historyForRange(selected, type, _range),
+    };
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(AppSpacing.lg),
@@ -44,21 +55,42 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: SegmentedButton<String>(
-              segments: [for (final pond in ponds) ButtonSegment(value: pond.id, label: Text(pond.name))],
+              segments: [
+                for (final pond in ponds)
+                  ButtonSegment(value: pond.id, label: Text(pond.name)),
+              ],
               selected: {selected.id},
-              onSelectionChanged: (ids) => setState(() => _selectedId = ids.first),
+              onSelectionChanged: (ids) =>
+                  setState(() => _selectedId = ids.first),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SegmentedButton<TrendRange>(
+              segments: [
+                for (final range in TrendRange.values)
+                  ButtonSegment(value: range, label: Text(range.label)),
+              ],
+              selected: {_range},
+              onSelectionChanged: (ranges) =>
+                  setState(() => _range = ranges.first),
             ),
           ),
           const SizedBox(height: AppSpacing.lg),
           Text('Individual trends', style: theme.textTheme.titleMedium),
           const SizedBox(height: AppSpacing.md),
           for (final type in MetricType.values) ...[
-            IndividualTrendChart(type: type, history: snapshot.history[type]!),
+            IndividualTrendChart(
+              type: type,
+              history: rangedHistory[type]!,
+              range: _range,
+            ),
             const SizedBox(height: AppSpacing.lg),
           ],
           Text('Individual readings', style: theme.textTheme.titleMedium),
           const SizedBox(height: AppSpacing.md),
-          ReadingHistoryTable(history: snapshot.history),
+          ReadingHistoryTable(history: rangedHistory),
         ],
       ),
     );

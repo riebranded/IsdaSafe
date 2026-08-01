@@ -8,6 +8,7 @@ import '../models/sensor_reading.dart';
 import '../models/species_recommendation.dart';
 import '../services/feeding_recommendation_service.dart';
 import '../services/mock_sensor_service.dart';
+import '../services/recommendation_cache.dart';
 import '../services/species_recommendation_service.dart';
 
 /// Holds the latest snapshot, AI species recommendation, and per-species
@@ -21,9 +22,19 @@ class DashboardProvider extends ChangeNotifier {
     MockSensorService? sensorService,
     SpeciesRecommendationService? recommendationService,
     FeedingRecommendationService? feedingService,
+    RecommendationCache? cache,
   })  : _sensorService = sensorService ?? MockSensorService(),
         _recommendationService = recommendationService ?? HttpSpeciesRecommendationService(),
-        _feedingService = feedingService ?? HttpFeedingRecommendationService() {
+        _feedingService = feedingService ?? HttpFeedingRecommendationService(),
+        _cache = cache ?? RecommendationCache.instance {
+    // Show whatever's still fresh from a previous visit to this pond's
+    // dashboard immediately, before refresh() decides whether it needs to
+    // hit the server at all.
+    _recommendation = _cache.species(_pond.id);
+    for (final name in _pond.speciesNames) {
+      final cached = _cache.feeding(_pond.id, name);
+      if (cached != null) _feedingRecommendations[name] = cached;
+    }
     refresh();
   }
 
@@ -31,13 +42,14 @@ class DashboardProvider extends ChangeNotifier {
   final MockSensorService _sensorService;
   final SpeciesRecommendationService _recommendationService;
   final FeedingRecommendationService _feedingService;
+  final RecommendationCache _cache;
 
   PondSnapshot? _snapshot;
   SpeciesRecommendation? _recommendation;
   bool _recommendationLoading = false;
   String? _recommendationError;
 
-  Map<String, FeedingRecommendation> _feedingRecommendations = {};
+  final Map<String, FeedingRecommendation> _feedingRecommendations = {};
   bool _feedingLoading = false;
   String? _feedingError;
 
@@ -92,14 +104,24 @@ class DashboardProvider extends ChangeNotifier {
   }
 
   Future<void> _fetchRecommendation(PondSnapshot snapshot) async {
+    final cached = _cache.species(_pond.id);
+    if (cached != null) {
+      // Still within the cache window — keep showing the cached
+      // recommendation instead of asking the model again.
+      _recommendation = cached;
+      return;
+    }
+
     _recommendationLoading = true;
     _recommendationError = null;
     notifyListeners();
 
     try {
       _recommendation = await _recommendationService.recommend(snapshot.readings);
+      _cache.putSpecies(_pond.id, _recommendation!);
     } catch (e) {
       _recommendation = null;
+      _cache.clearSpecies(_pond.id);
       _recommendationError = e.toString().replaceFirst('Exception: ', '');
     } finally {
       _recommendationLoading = false;
@@ -109,10 +131,24 @@ class DashboardProvider extends ChangeNotifier {
 
   Future<void> _fetchFeedingRecommendations(PondSnapshot snapshot) async {
     final speciesNames = _pond.speciesNames;
+
+    // Drop cached data for species no longer assigned to the pond.
+    _feedingRecommendations.removeWhere((name, _) => !speciesNames.contains(name));
+    _cache.pruneFeeding(_pond.id, speciesNames);
+
     if (speciesNames.isEmpty) {
-      _feedingRecommendations = {};
       _feedingError = null;
       _feedingLoading = false;
+      notifyListeners();
+      return;
+    }
+
+    // Only re-ask the model for species that are missing or whose cached
+    // feeding schedule/water-quality advisory/risks have gone stale.
+    final namesToFetch = speciesNames.where((name) => !_cache.isFeedingFresh(_pond.id, name)).toList();
+
+    if (namesToFetch.isEmpty) {
+      _feedingError = null;
       notifyListeners();
       return;
     }
@@ -121,20 +157,21 @@ class DashboardProvider extends ChangeNotifier {
     _feedingError = null;
     notifyListeners();
 
-    final results = <String, FeedingRecommendation>{};
     String? error;
-    for (final name in speciesNames) {
+    for (final name in namesToFetch) {
       try {
-        results[name] = await _feedingService.recommend(species: name, readings: snapshot.readings);
+        final recommendation = await _feedingService.recommend(species: name, readings: snapshot.readings);
+        _feedingRecommendations[name] = recommendation;
+        _cache.putFeeding(_pond.id, name, recommendation);
       } catch (e) {
         error = e.toString().replaceFirst('Exception: ', '');
       }
     }
 
-    _feedingRecommendations = results;
     // Only surface the error banner if nothing came back at all — a partial
-    // result (some species failed, others didn't) still has useful content.
-    _feedingError = results.isEmpty ? error : null;
+    // result (some species failed, others didn't, or came from cache) still
+    // has useful content.
+    _feedingError = _feedingRecommendations.isEmpty ? error : null;
     _feedingLoading = false;
     notifyListeners();
   }

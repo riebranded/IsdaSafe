@@ -5,6 +5,7 @@ import '../models/feeding_recommendation.dart';
 import '../models/metric_type.dart';
 import '../models/pond.dart';
 import '../models/reading_bands.dart';
+import '../models/trend_range.dart';
 import '../providers/dashboard_provider.dart';
 import '../providers/pond_provider.dart';
 import '../services/fish_species_catalog.dart';
@@ -63,7 +64,11 @@ class _MobileDashboardScaffold extends StatelessWidget {
 /// the pond name has no [AppBar] to live in). Must be built as a descendant
 /// of a `ChangeNotifierProvider<DashboardProvider>`.
 class PondDashboardBody extends StatelessWidget {
-  const PondDashboardBody({super.key, required this.pond, required this.showHeader});
+  const PondDashboardBody({
+    super.key,
+    required this.pond,
+    required this.showHeader,
+  });
 
   final Pond pond;
   final bool showHeader;
@@ -101,7 +106,8 @@ class PondDashboardBody extends StatelessWidget {
                     ),
                   ),
                   IconButton(
-                    onPressed: () => context.read<DashboardProvider>().refresh(),
+                    onPressed: () =>
+                        context.read<DashboardProvider>().refresh(),
                     icon: const Icon(Icons.refresh),
                     tooltip: 'Refresh readings',
                   ),
@@ -110,7 +116,10 @@ class PondDashboardBody extends StatelessWidget {
               const SizedBox(height: AppSpacing.xs),
             ],
             if (pond.hasLocation) ...[
-              _PondLocationLine(latitude: pond.latitude!, longitude: pond.longitude!),
+              _PondLocationLine(
+                latitude: pond.latitude!,
+                longitude: pond.longitude!,
+              ),
               const SizedBox(height: AppSpacing.md),
             ],
             _PondStatusBanner(status: overallStatus(snapshot.readings)),
@@ -118,10 +127,17 @@ class PondDashboardBody extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  child: Text('Latest readings', style: Theme.of(context).textTheme.titleMedium),
+                  child: Text(
+                    'Latest readings',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
                 ),
                 const SizedBox(width: AppSpacing.sm),
-                _LastUpdated(timestamp: snapshot.reading(snapshot.readings.keys.first).timestamp),
+                _LastUpdated(
+                  timestamp: snapshot
+                      .reading(snapshot.readings.keys.first)
+                      .timestamp,
+                ),
               ],
             ),
             const SizedBox(height: AppSpacing.md),
@@ -130,12 +146,17 @@ class PondDashboardBody extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  child: Text('Feeding schedule', style: Theme.of(context).textTheme.titleMedium),
+                  child: Text(
+                    'Feeding schedule',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
                 ),
                 IconButton(
                   onPressed: () => _editPondSpecies(context, pond),
                   icon: const Icon(Icons.edit_outlined),
-                  tooltip: pond.speciesNames.isEmpty ? 'Add species' : 'Edit species',
+                  tooltip: pond.speciesNames.isEmpty
+                      ? 'Add species'
+                      : 'Edit species',
                   visualDensity: VisualDensity.compact,
                 ),
               ],
@@ -143,7 +164,10 @@ class PondDashboardBody extends StatelessWidget {
             const SizedBox(height: AppSpacing.md),
             _FeedingScheduleSection(pond: pond),
             const SizedBox(height: AppSpacing.xl),
-            Text('Water quality recommendations', style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              'Water quality recommendations',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             const SizedBox(height: AppSpacing.md),
             _AdvisoryList(
               icon: Icons.tips_and_updates_outlined,
@@ -152,10 +176,14 @@ class PondDashboardBody extends StatelessWidget {
               hasSpecies: pond.speciesNames.isNotEmpty,
               loading: dashboard.feedingLoading,
               error: dashboard.feedingError,
-              emptyMessage: 'No specific recommendations right now — readings look healthy.',
+              emptyMessage:
+                  'No specific recommendations right now — readings look healthy.',
             ),
             const SizedBox(height: AppSpacing.xl),
-            Text('Possible risks', style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              'Possible risks',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             const SizedBox(height: AppSpacing.md),
             _AdvisoryList(
               icon: Icons.warning_amber_outlined,
@@ -167,13 +195,23 @@ class PondDashboardBody extends StatelessWidget {
               emptyMessage: 'No notable risks identified right now.',
             ),
             const SizedBox(height: AppSpacing.xl),
-            Text('Individual trends', style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              'Individual trends',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             const SizedBox(height: AppSpacing.md),
             for (final type in MetricType.values) ...[
-              IndividualTrendChart(type: type, history: snapshot.history[type]!),
+              IndividualTrendChart(
+                type: type,
+                history: snapshot.history[type]!,
+                range: TrendRange.hourly,
+              ),
               const SizedBox(height: AppSpacing.lg),
             ],
-            Text('AI Recommended Species', style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              'AI Recommended Species',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             const SizedBox(height: AppSpacing.md),
             SpeciesRecommendationCard(
               recommendation: dashboard.recommendation,
@@ -192,7 +230,10 @@ class PondDashboardBody extends StatelessWidget {
 /// Re-fetches feeding/water-quality advisories on success, since they're
 /// keyed by [Pond.speciesNames].
 Future<void> _editPondSpecies(BuildContext context, Pond pond) async {
-  final species = await showSelectSpeciesDialog(context, initialSelection: pond.speciesNames);
+  final species = await showSelectSpeciesDialog(
+    context,
+    initialSelection: pond.speciesNames,
+  );
   if (species == null || !context.mounted) return;
 
   final ok = await context.read<PondProvider>().setSpecies(pond.id, species);
@@ -201,7 +242,11 @@ Future<void> _editPondSpecies(BuildContext context, Pond pond) async {
     context.read<DashboardProvider>().retryFeedingRecommendations();
   } else {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Couldn't save changes. Check your connection and try again.")),
+      const SnackBar(
+        content: Text(
+          "Couldn't save changes. Check your connection and try again.",
+        ),
+      ),
     );
   }
 }
@@ -231,8 +276,13 @@ class _FeedingScheduleSection extends StatelessWidget {
             child: const Icon(Icons.set_meal_outlined, size: 18),
           ),
           title: const Text('No fish species added yet'),
-          subtitle: const Text('Add species to see an AI-generated feeding plan.'),
-          trailing: TextButton(onPressed: () => _editPondSpecies(context, pond), child: const Text('Add')),
+          subtitle: const Text(
+            'Add species to see an AI-generated feeding plan.',
+          ),
+          trailing: TextButton(
+            onPressed: () => _editPondSpecies(context, pond),
+            child: const Text('Add'),
+          ),
         ),
       );
     }
@@ -242,13 +292,17 @@ class _FeedingScheduleSection extends StatelessWidget {
       children: [
         for (final (index, name) in pond.speciesNames.indexed)
           Padding(
-            padding: EdgeInsets.only(bottom: name == pond.speciesNames.last ? 0 : AppSpacing.sm),
+            padding: EdgeInsets.only(
+              bottom: name == pond.speciesNames.last ? 0 : AppSpacing.sm,
+            ),
             child: StaggeredEntrance(
               index: index,
               child: _FeedingSpeciesCard(
                 name: name,
                 recommendation: dashboard.feedingRecommendations[name],
-                loading: dashboard.feedingLoading && !dashboard.feedingRecommendations.containsKey(name),
+                loading:
+                    dashboard.feedingLoading &&
+                    !dashboard.feedingRecommendations.containsKey(name),
                 error: dashboard.feedingError,
               ),
             ),
@@ -278,7 +332,9 @@ class _FeedingSpeciesCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final localName = FishSpeciesCatalog.byName(name)?.localName;
-    final header = localName != null && localName != name ? '$name ($localName)' : name;
+    final header = localName != null && localName != name
+        ? '$name ($localName)'
+        : name;
 
     return Card(
       child: Padding(
@@ -296,13 +352,22 @@ class _FeedingSpeciesCard extends StatelessWidget {
                 ),
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
-                  child: Text(header, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                  child: Text(
+                    header,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
               ],
             ),
             const SizedBox(height: AppSpacing.md),
             if (recommendation != null) ...[
-              _FeedingDetailTile(icon: Icons.schedule, label: 'Feeding time', value: recommendation!.feedingTime),
+              _FeedingDetailTile(
+                icon: Icons.schedule,
+                label: 'Feeding time',
+                value: recommendation!.feedingTime,
+              ),
               const SizedBox(height: AppSpacing.sm),
               _FeedingDetailTile(
                 icon: Icons.repeat,
@@ -318,10 +383,17 @@ class _FeedingSpeciesCard extends StatelessWidget {
             ] else if (loading) ...[
               Row(
                 children: [
-                  const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                  const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
                   const SizedBox(width: AppSpacing.sm),
                   Expanded(
-                    child: Text('Asking the model for a feeding plan…', style: theme.textTheme.bodySmall),
+                    child: Text(
+                      'Asking the model for a feeding plan…',
+                      style: theme.textTheme.bodySmall,
+                    ),
                   ),
                 ],
               ),
@@ -329,12 +401,18 @@ class _FeedingSpeciesCard extends StatelessWidget {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.error_outline, size: 16, color: theme.colorScheme.error),
+                  Icon(
+                    Icons.error_outline,
+                    size: 16,
+                    color: theme.colorScheme.error,
+                  ),
                   const SizedBox(width: AppSpacing.xs + 2),
                   Expanded(
                     child: Text(
                       error!,
-                      style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.error,
+                      ),
                     ),
                   ),
                 ],
@@ -351,7 +429,11 @@ class _FeedingSpeciesCard extends StatelessWidget {
 /// frequency, or amount) — a tinted tile rather than a plain text line since
 /// Gemini's values are full sentences, not short numbers.
 class _FeedingDetailTile extends StatelessWidget {
-  const _FeedingDetailTile({required this.icon, required this.label, required this.value});
+  const _FeedingDetailTile({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
 
   final IconData icon;
   final String label;
@@ -440,7 +522,9 @@ class _AdvisoryList extends StatelessWidget {
             child: const Icon(Icons.set_meal_outlined, size: 18),
           ),
           title: const Text('No fish species added yet'),
-          subtitle: const Text('Add a species in "Feeding schedule" above to see this.'),
+          subtitle: const Text(
+            'Add a species in "Feeding schedule" above to see this.',
+          ),
         ),
       );
     }
@@ -451,7 +535,11 @@ class _AdvisoryList extends StatelessWidget {
           padding: const EdgeInsets.all(AppSpacing.lg),
           child: Row(
             children: [
-              const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.5)),
+              const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2.5),
+              ),
               const SizedBox(width: AppSpacing.md),
               const Expanded(child: Text('Asking the model for guidance…')),
             ],
@@ -478,7 +566,9 @@ class _AdvisoryList extends StatelessWidget {
                     Align(
                       alignment: Alignment.centerLeft,
                       child: TextButton(
-                        onPressed: () => context.read<DashboardProvider>().retryFeedingRecommendations(),
+                        onPressed: () => context
+                            .read<DashboardProvider>()
+                            .retryFeedingRecommendations(),
                         child: const Text('Retry'),
                       ),
                     ),
@@ -497,12 +587,18 @@ class _AdvisoryList extends StatelessWidget {
           padding: const EdgeInsets.all(AppSpacing.lg),
           child: Row(
             children: [
-              Icon(Icons.check_circle_outline, size: 18, color: theme.colorScheme.onSurfaceVariant),
+              Icon(
+                Icons.check_circle_outline,
+                size: 18,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
               const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: Text(
                   emptyMessage,
-                  style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ),
             ],
@@ -516,7 +612,9 @@ class _AdvisoryList extends StatelessWidget {
       children: [
         for (final (index, item) in items.indexed)
           Padding(
-            padding: EdgeInsets.only(bottom: item == items.last ? 0 : AppSpacing.sm),
+            padding: EdgeInsets.only(
+              bottom: item == items.last ? 0 : AppSpacing.sm,
+            ),
             child: StaggeredEntrance(
               index: index,
               child: Container(
@@ -524,14 +622,18 @@ class _AdvisoryList extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: accentColor.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(AppRadius.md),
-                  border: Border.all(color: accentColor.withValues(alpha: 0.25)),
+                  border: Border.all(
+                    color: accentColor.withValues(alpha: 0.25),
+                  ),
                 ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Icon(icon, size: 18, color: accentColor),
                     const SizedBox(width: AppSpacing.sm),
-                    Expanded(child: Text(item, style: theme.textTheme.bodyMedium)),
+                    Expanded(
+                      child: Text(item, style: theme.textTheme.bodyMedium),
+                    ),
                   ],
                 ),
               ),
@@ -554,11 +656,17 @@ class _PondLocationLine extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(Icons.location_on, size: 14, color: theme.colorScheme.onSurfaceVariant),
+        Icon(
+          Icons.location_on,
+          size: 14,
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
         const SizedBox(width: 4),
         Text(
           '${latitude.toStringAsFixed(4)}, ${longitude.toStringAsFixed(4)}',
-          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
         ),
       ],
     );
@@ -579,7 +687,8 @@ class _PondStatusBanner extends StatelessWidget {
     final color = status.colorOf(context);
     final message = switch (status) {
       ReadingStatus.normal => 'All readings are within a healthy range.',
-      ReadingStatus.warning => 'One or more readings are drifting outside the healthy range.',
+      ReadingStatus.warning =>
+        'One or more readings are drifting outside the healthy range.',
       ReadingStatus.critical => 'One or more readings need attention now.',
     };
 
@@ -600,7 +709,10 @@ class _PondStatusBanner extends StatelessWidget {
               children: [
                 Text(
                   'Pond status: ${status.label}',
-                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600, color: color),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: color,
+                  ),
                 ),
                 const SizedBox(height: 2),
                 Text(message, style: theme.textTheme.bodySmall),
@@ -623,7 +735,9 @@ class _LastUpdated extends StatelessWidget {
     final theme = Theme.of(context);
     return Text(
       'Updated ${_relativeTime(timestamp)}',
-      style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+      style: theme.textTheme.bodySmall?.copyWith(
+        color: theme.colorScheme.onSurfaceVariant,
+      ),
     );
   }
 

@@ -3,6 +3,7 @@ import 'dart:math';
 import '../models/metric_type.dart';
 import '../models/pond.dart';
 import '../models/sensor_reading.dart';
+import '../models/trend_range.dart';
 
 class _Band {
   const _Band(this.min, this.max);
@@ -46,7 +47,8 @@ class MockSensorService {
     final history = <MetricType, List<SensorReading>>{};
     for (final type in MetricType.values) {
       final band = _bands[type]!;
-      final baseline = band.min + baselineRandom.nextDouble() * (band.max - band.min);
+      final baseline =
+          band.min + baselineRandom.nextDouble() * (band.max - band.min);
       final jitter = _jitter[type]!;
       var value = baseline + (jitterRandom.nextDouble() - 0.5) * 2 * jitter;
       value = value.clamp(band.min, band.max);
@@ -76,11 +78,47 @@ class MockSensorService {
 
     final points = <SensorReading>[];
     for (var i = 0; i < _historyPoints - 1; i++) {
-      final timestamp = now.subtract(_historyInterval * (_historyPoints - 1 - i));
+      final timestamp = now.subtract(
+        _historyInterval * (_historyPoints - 1 - i),
+      );
       points.add(SensorReading(type: type, value: value, timestamp: timestamp));
-      value = (value + (walkRandom.nextDouble() - 0.5) * 2 * step).clamp(band.min, band.max);
+      value = (value + (walkRandom.nextDouble() - 0.5) * 2 * step).clamp(
+        band.min,
+        band.max,
+      );
     }
     points.add(SensorReading(type: type, value: currentValue, timestamp: now));
+    return points;
+  }
+
+  /// A self-contained synthetic series for the Analytics screen's day/week/
+  /// month/year filter — independent of [generateSnapshot]'s fixed recent
+  /// window. Seeded on the pond, metric, *and* range, so flipping between
+  /// ranges and back doesn't reshuffle a range's shape.
+  List<SensorReading> historyForRange(
+    Pond pond,
+    MetricType type,
+    TrendRange range,
+  ) {
+    final band = _bands[type]!;
+    final jitter = _jitter[type]!;
+    final walkRandom = Random(pond.seed ^ type.index ^ (range.index << 8));
+    final step = jitter * 2;
+    var value = band.min + walkRandom.nextDouble() * (band.max - band.min);
+
+    final now = DateTime.now();
+    final pointCount = range.pointCount;
+    final interval = range.interval;
+
+    final points = <SensorReading>[];
+    for (var i = 0; i < pointCount; i++) {
+      final timestamp = now.subtract(interval * (pointCount - 1 - i));
+      points.add(SensorReading(type: type, value: value, timestamp: timestamp));
+      value = (value + (walkRandom.nextDouble() - 0.5) * 2 * step).clamp(
+        band.min,
+        band.max,
+      );
+    }
     return points;
   }
 }
