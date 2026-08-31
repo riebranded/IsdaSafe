@@ -6,12 +6,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../services/auth_service.dart';
 import '../../theme/app_spacing.dart';
+import '../../widgets/rate_limit_banner.dart';
 
 const _kOtpLength = 6;
-// Matches send-semaphore-otp's server-side cooldown — keeping these in sync
-// means "Resend" never re-enables client-side before the server would
-// actually accept another send.
-const _kResendCooldown = Duration(seconds: 60);
 
 class OtpVerificationScreen extends StatefulWidget {
   const OtpVerificationScreen({
@@ -43,9 +40,16 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   final _otpFocusNode = FocusNode();
 
   Timer? _resendTimer;
-  var _secondsRemaining = _kResendCooldown.inSeconds;
+  var _secondsRemaining = AuthService.otpCooldownDuration.inSeconds;
   var _isVerifying = false;
   var _isResending = false;
+
+  /// Set when a Resend attempt is rejected — shown as a persistent inline
+  /// banner rather than (or alongside, for non-rate-limit failures) a
+  /// SnackBar, since a rate-limit message explaining why Resend is now
+  /// disabled for minutes needs to stay visible longer than a SnackBar's
+  /// few seconds, not disappear before the user has a chance to read it.
+  String? _resendError;
 
   @override
   void initState() {
@@ -65,13 +69,19 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     super.dispose();
   }
 
-  void _startResendCountdown() {
-    _secondsRemaining = _kResendCooldown.inSeconds;
+  void _startResendCountdown({Duration duration = AuthService.otpCooldownDuration}) {
+    _secondsRemaining = duration.inSeconds;
     _resendTimer?.cancel();
     _resendTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_secondsRemaining <= 1) {
         timer.cancel();
-        setState(() => _secondsRemaining = 0);
+        // The banner explaining why Resend was disabled is now stale —
+        // it's available again, so clear it rather than leave old text
+        // sitting above a re-enabled button.
+        setState(() {
+          _secondsRemaining = 0;
+          _resendError = null;
+        });
         return;
       }
       setState(() => _secondsRemaining -= 1);
@@ -122,7 +132,10 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   Future<void> _resend() async {
     if (_secondsRemaining > 0 || _isResending) return;
 
-    setState(() => _isResending = true);
+    setState(() {
+      _isResending = true;
+      _resendError = null;
+    });
     try {
       await AuthService.requestSemaphoreOtp(widget.phone);
       if (mounted) {
@@ -131,13 +144,34 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         _startResendCountdown();
       }
     } on AuthException catch (e) {
-      if (mounted) _showError(e.message);
+      if (mounted) _handleResendError(e.message);
     } catch (e) {
       if (mounted) _showError('Something went wrong. Please try again.');
       debugPrint('OtpVerificationScreen: resend error $e');
     } finally {
       if (mounted) setState(() => _isResending = false);
     }
+  }
+
+  /// A rate-limit rejection here means the 60s client-side cooldown either
+  /// let the user through early (clock drift, a resend from another
+  /// session/device) or, for the burst/daily caps, was never long enough to
+  /// begin with — those only clear after minutes, not seconds. Extending
+  /// the local cooldown to match keeps Resend properly disabled instead of
+  /// re-enabling in 60s and failing the same way again; the banner (see
+  /// build) explains why, since a SnackBar alone doesn't stay up long
+  /// enough to read the reason a button just got disabled for 10 minutes.
+  void _handleResendError(String message) {
+    if (message == AuthService.otpBurstOrDailyLimitMessage) {
+      _startResendCountdown(duration: AuthService.otpBurstCooldownDuration);
+    } else if (message != AuthService.otpCooldownMessage) {
+      // Not a rate limit at all (network error, server error, etc.) —
+      // Resend is already re-enabled (the guard at the top of _resend only
+      // fires once _secondsRemaining is 0), so there's nothing to extend.
+      _showError(message);
+      return;
+    }
+    setState(() => _resendError = message);
   }
 
   @override
@@ -209,10 +243,14 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                       Text("Didn't get a code?", style: theme.textTheme.bodyMedium),
                       TextButton(
                         onPressed: canResend ? _resend : null,
-                        child: Text(canResend ? 'Resend' : 'Resend in ${_secondsRemaining}s'),
+                        child: Text(canResend ? 'Resend' : 'Resend in ${formatCountdown(_secondsRemaining)}'),
                       ),
                     ],
                   ),
+                  if (_resendError != null) ...[
+                    const SizedBox(height: AppSpacing.sm),
+                    RateLimitBanner(message: _resendError!),
+                  ],
                 ],
               ),
             ),

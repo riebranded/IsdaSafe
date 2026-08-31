@@ -55,6 +55,18 @@ abstract final class AuthService {
     return result == true;
   }
 
+  /// True if [email] is already attached to another profile. Same shape
+  /// (and same RLS reasoning) as [isPhoneTaken] — checked proactively by
+  /// RegisterScreen alongside the phone check so a duplicate email and a
+  /// duplicate phone submitted together both surface at once, instead of
+  /// only ever discovering the email is taken later, from `signUpWithEmail`
+  /// throwing (which only runs at all once the phone check has already
+  /// passed).
+  static Future<bool> isEmailTaken(String email) async {
+    final result = await _client.rpc('is_email_taken', params: {'check_email': email});
+    return result == true;
+  }
+
   /// [pendingPhone] is stashed in `user_metadata` purely so [AuthGate] can
   /// recover it if the app is killed before phone verification finishes —
   /// `auth.users.phone` itself isn't set until the `verify-semaphore-otp`
@@ -90,11 +102,36 @@ abstract final class AuthService {
     return _auth.resetPasswordForEmail(email, captchaToken: captchaToken);
   }
 
+  /// [requestSemaphoreOtp]'s exact wording for the 60s per-user cooldown —
+  /// matches `COOLDOWN_SECONDS`'s message in `send-semaphore-otp/index.ts`.
+  /// Exposed so callers can tell a cooldown rejection apart from other
+  /// [AuthException]s (e.g. to extend a local resend timer to match)
+  /// without re-deriving the server's own copy.
+  static const otpCooldownMessage = 'Please wait before requesting another code.';
+
+  /// [requestSemaphoreOtp]'s exact wording for the burst (3/10min) or daily
+  /// (8/24h) send limits — matches `RATE_LIMITED_MESSAGE` in
+  /// `send-semaphore-otp/index.ts`. See [otpCooldownMessage].
+  static const otpBurstOrDailyLimitMessage = 'Too many attempts, please try again later.';
+
+  /// Matches `COOLDOWN_SECONDS` in `send-semaphore-otp/index.ts` — how long
+  /// to disable a local resend/retry control after [otpCooldownMessage].
+  static const otpCooldownDuration = Duration(seconds: 60);
+
+  /// Matches `BURST_WINDOW_MINUTES` in `send-semaphore-otp/index.ts` — how
+  /// long to disable a local resend/retry control after
+  /// [otpBurstOrDailyLimitMessage]. (The daily cap can be longer still, but
+  /// there's no way to tell the two apart from the error message alone —
+  /// this is the shorter of the two, so a caller may occasionally need to
+  /// wait out a second rejection rather than the full 24h up front.)
+  static const otpBurstCooldownDuration = Duration(minutes: 10);
+
   /// Requests a phone-verification SMS for [e164Phone] via the
   /// `send-semaphore-otp` Edge Function, which generates/stores the code
   /// server-side and sends it through Semaphore. Throws [AuthException] on
   /// failure (including rate-limit rejections, surfaced with a
-  /// user-facing message from the Edge Function).
+  /// user-facing message from the Edge Function — see [otpCooldownMessage]
+  /// and [otpBurstOrDailyLimitMessage]).
   static Future<void> requestSemaphoreOtp(String e164Phone) async {
     debugPrint('AuthService: requesting Semaphore OTP for $e164Phone...');
     try {

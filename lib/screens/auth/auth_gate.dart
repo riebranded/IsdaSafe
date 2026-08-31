@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../services/auth_service.dart';
+import '../../theme/app_spacing.dart';
+import '../../widgets/rate_limit_banner.dart';
 import '../app_shell.dart';
 import 'login_screen.dart';
 import 'otp_verification_screen.dart';
@@ -95,11 +99,44 @@ class _PendingPhoneVerification extends StatefulWidget {
 
 class _PendingPhoneVerificationState extends State<_PendingPhoneVerification> {
   late Future<void> _future;
+  Timer? _retryTimer;
+  var _secondsRemaining = 0;
+
+  /// Identifies which [_future] the current countdown (if any) was armed
+  /// for, so the rate-limit branch in [build] arms it exactly once per
+  /// send attempt instead of re-arming itself on every rebuild once
+  /// [_secondsRemaining] reaches 0 and the button becomes tappable again.
+  Future<void>? _countdownArmedFor;
 
   @override
   void initState() {
     super.initState();
     _future = _send();
+  }
+
+  @override
+  void dispose() {
+    _retryTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startRetryCountdown(Duration duration) {
+    if (!mounted) return;
+    _retryTimer?.cancel();
+    setState(() => _secondsRemaining = duration.inSeconds);
+    _retryTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_secondsRemaining <= 1) {
+        timer.cancel();
+        setState(() => _secondsRemaining = 0);
+        return;
+      }
+      setState(() => _secondsRemaining -= 1);
+    });
+  }
+
+  void _retry() {
+    if (_secondsRemaining > 0) return;
+    setState(() => _future = _send());
   }
 
   Future<void> _send() async {
@@ -136,6 +173,25 @@ class _PendingPhoneVerificationState extends State<_PendingPhoneVerification> {
         if (snapshot.hasError) {
           final error = snapshot.error;
           final message = error is AuthException ? error.message : 'Failed to send verification code.';
+
+          // A user recovered here (session restored, but phone still
+          // unverified) can easily have already burned through
+          // send-semaphore-otp's send limit before they ever left — e.g.
+          // exiting mid-signup after a couple of resends, then logging
+          // back in with the same email later. Without gating Retry the
+          // same way OtpVerificationScreen gates Resend, tapping it just
+          // repeats the same rate-limit failure instantly, with no
+          // indication of why or how long to actually wait.
+          final isCooldown = message == AuthService.otpCooldownMessage;
+          final isBurstOrDaily = message == AuthService.otpBurstOrDailyLimitMessage;
+          if ((isCooldown || isBurstOrDaily) && _countdownArmedFor != _future) {
+            _countdownArmedFor = _future;
+            final duration = isBurstOrDaily ? AuthService.otpBurstCooldownDuration : AuthService.otpCooldownDuration;
+            WidgetsBinding.instance.addPostFrameCallback((_) => _startRetryCountdown(duration));
+          }
+          final isRateLimited = isCooldown || isBurstOrDaily;
+          final canRetry = !isRateLimited || _secondsRemaining == 0;
+
           return Scaffold(
             body: Center(
               child: Padding(
@@ -143,11 +199,14 @@ class _PendingPhoneVerificationState extends State<_PendingPhoneVerification> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(message, textAlign: TextAlign.center),
-                    const SizedBox(height: 16),
+                    if (isRateLimited)
+                      RateLimitBanner(message: message)
+                    else
+                      Text(message, textAlign: TextAlign.center),
+                    const SizedBox(height: AppSpacing.md),
                     FilledButton(
-                      onPressed: () => setState(() => _future = _send()),
-                      child: const Text('Retry'),
+                      onPressed: canRetry ? _retry : null,
+                      child: Text(canRetry ? 'Retry' : 'Retry in ${formatCountdown(_secondsRemaining)}'),
                     ),
                     TextButton(
                       onPressed: AuthService.signOut,

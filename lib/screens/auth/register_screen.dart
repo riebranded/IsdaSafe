@@ -7,6 +7,7 @@ import '../../services/auth_service.dart';
 import '../../theme/app_spacing.dart';
 import '../../widgets/captcha_field.dart';
 import '../../widgets/password_strength_checklist.dart';
+import '../../widgets/rate_limit_banner.dart';
 import 'otp_verification_screen.dart';
 
 /// This app only serves Philippine mobile numbers, so the calling code is
@@ -15,9 +16,32 @@ const _kPhCountryCode = '+63';
 
 /// PH mobile numbers are commonly typed with their local trunk prefix
 /// ("09171234567"), but E.164 drops it — the country code replaces it, not
-/// precedes it. Concatenating "+63" directly onto a leading-0 number
-/// produces an invalid "+6309171234567" that send-semaphore-otp rejects.
-String _stripLeadingTrunkZero(String digits) => digits.startsWith('0') ? digits.substring(1) : digits;
+/// precedes it. Concatenating "+63" directly onto a leading-0 number would
+/// produce an invalid "+6309171234567" that send-semaphore-otp rejects, so
+/// a leading 0 is stripped live as it's typed (see [_phoneInputFormatters])
+/// rather than requiring the user to type exactly 10 digits with no zero.
+class _StripLeadingTrunkZeroFormatter extends TextInputFormatter {
+  const _StripLeadingTrunkZeroFormatter();
+
+  @override
+  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+    if (!newValue.text.startsWith('0')) return newValue;
+    final stripped = newValue.text.substring(1);
+    final newOffset = (newValue.selection.baseOffset - 1).clamp(0, stripped.length);
+    return TextEditingValue(text: stripped, selection: TextSelection.collapsed(offset: newOffset));
+  }
+}
+
+/// Digits only, a leading trunk "0" silently dropped, capped at 10 —
+/// exactly the digits that follow "+63" in a valid PH mobile E.164 number,
+/// so anything left in the field once these formatters have run is either
+/// a complete number or an in-progress prefix of one, never something
+/// send-semaphore-otp would reject as malformed.
+final _phoneInputFormatters = <TextInputFormatter>[
+  FilteringTextInputFormatter.digitsOnly,
+  const _StripLeadingTrunkZeroFormatter(),
+  LengthLimitingTextInputFormatter(10),
+];
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -52,6 +76,23 @@ class _RegisterScreenState extends State<RegisterScreen> {
   var _obscureConfirmPassword = true;
   String? _captchaToken;
 
+  /// Set only for a rate-limit rejection from the initial Semaphore OTP
+  /// send — shown as a persistent inline banner rather than the transient
+  /// SnackBar [_showError] uses for other errors, since a rate-limit
+  /// message needs to stay legible longer than a SnackBar's few seconds
+  /// (mirrors OtpVerificationScreen's Resend banner).
+  String? _rateLimitError;
+
+  /// Set when the email/phone just submitted turns out to already belong
+  /// to another account. Shown as the relevant field's own `errorText`
+  /// instead of a SnackBar — pointing at *which* field is the problem is
+  /// clearer than a generic toast, and it's what every other validation
+  /// error on this form already looks like. Cleared as soon as the user
+  /// edits that field again, so a stale "already registered" doesn't sit
+  /// under a value they've since changed.
+  String? _emailTakenError;
+  String? _phoneTakenError;
+
   static final _emailRegExp = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
 
   @override
@@ -81,6 +122,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// Supabase's own wording for this varies by GoTrue version ("User
+  /// already registered", "A user with this email address has already
+  /// been registered", ...) and isn't documented as a stable contract the
+  /// way send-semaphore-otp's messages are — so this matches loosely
+  /// rather than pinning one exact string that could silently stop
+  /// matching after a Supabase upgrade.
+  bool _looksLikeDuplicateEmail(String message) {
+    final lower = message.toLowerCase();
+    return lower.contains('already registered') || lower.contains('already exists');
   }
 
   /// Same "does this Google account already have an account?" check as
@@ -141,12 +193,40 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     final fullName = _fullNameController.text.trim();
     final email = _emailController.text.trim();
-    final e164Phone = '$_kPhCountryCode${_stripLeadingTrunkZero(_phoneController.text.trim())}';
+    final e164Phone = '$_kPhCountryCode${_phoneController.text.trim()}';
 
-    setState(() => _isSubmitting = true);
+    setState(() {
+      _isSubmitting = true;
+      _rateLimitError = null;
+      _emailTakenError = null;
+      _phoneTakenError = null;
+    });
     try {
-      if (await AuthService.isPhoneTaken(e164Phone)) {
-        if (mounted) _showError('This phone number is already registered.');
+      // Checked together (not one-then-the-other-if-the-first-passes) so a
+      // phone *and* email that are both already taken both surface at
+      // once — a sequential "check phone, return early if taken" would
+      // never even reach the email check in that case, and vice versa if
+      // email were checked first.
+      final isGoogleFlow = _hasGoogleSession;
+      final phoneTakenFuture = AuthService.isPhoneTaken(e164Phone);
+      // The Google-prefill flow never calls signUpWithEmail (no new email
+      // account is being created), so there's nothing to check here — and
+      // the email field is fixed/uneditable in that mode anyway.
+      final emailTakenFuture = isGoogleFlow ? Future.value(false) : AuthService.isEmailTaken(email);
+      final [phoneTaken, emailTaken] = await Future.wait([phoneTakenFuture, emailTakenFuture]);
+
+      if (phoneTaken || emailTaken) {
+        if (mounted) {
+          setState(() {
+            if (phoneTaken) _phoneTakenError = 'This phone number is already registered.';
+            if (emailTaken) _emailTakenError = 'An account with this email already exists.';
+          });
+          // Setting the state above doesn't itself re-run the fields'
+          // validators (that only happens on user interaction or an
+          // explicit validate() call) — without this, the error(s) just
+          // set wouldn't actually show up until the user typed something.
+          _formKey.currentState?.validate();
+        }
         return;
       }
 
@@ -206,7 +286,28 @@ class _RegisterScreenState extends State<RegisterScreen> {
       );
     } on AuthException catch (e) {
       AuthService.isManagingPhoneVerification = false;
-      if (mounted) _showError(e.message);
+      final isRateLimit =
+          e.message == AuthService.otpCooldownMessage || e.message == AuthService.otpBurstOrDailyLimitMessage;
+      // Supabase's own signUp() error for a duplicate email — thrown before
+      // anything else in this flow runs, so (unlike the phone/OTP failures
+      // above) nothing's been created yet for this attempt.
+      final isDuplicateEmail = !_hasGoogleSession && _looksLikeDuplicateEmail(e.message);
+      // The account (and, for the email/password path, the session) was
+      // already created by the time requestSemaphoreOtp can fail here — a
+      // rate-limit rejection doesn't mean signup failed, just that the SMS
+      // hasn't gone out yet. Keeping the message on screen (instead of a
+      // SnackBar that can be missed) makes that distinction clearer before
+      // the user tries "Create account" again.
+      if (mounted) {
+        if (isDuplicateEmail) {
+          setState(() => _emailTakenError = 'An account with this email already exists.');
+          _formKey.currentState?.validate();
+        } else if (isRateLimit) {
+          setState(() => _rateLimitError = e.message);
+        } else {
+          _showError(e.message);
+        }
+      }
     } catch (e) {
       AuthService.isManagingPhoneVerification = false;
       if (mounted) _showError('Something went wrong. Please try again.');
@@ -305,11 +406,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       keyboardType: TextInputType.emailAddress,
                       textInputAction: TextInputAction.next,
                       decoration: const InputDecoration(labelText: 'Email address', prefixIcon: Icon(Icons.email_outlined)),
+                      onChanged: (_) {
+                        if (_emailTakenError != null) setState(() => _emailTakenError = null);
+                      },
                       validator: (value) {
                         final trimmed = value?.trim() ?? '';
                         if (trimmed.isEmpty) return 'Enter your email';
                         if (!_emailRegExp.hasMatch(trimmed)) return 'Enter a valid email address';
-                        return null;
+                        return _emailTakenError;
                       },
                     ),
                     const SizedBox(height: AppSpacing.md),
@@ -318,17 +422,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       enabled: !busy,
                       keyboardType: TextInputType.phone,
                       textInputAction: TextInputAction.next,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      inputFormatters: _phoneInputFormatters,
                       decoration: const InputDecoration(
                         labelText: 'Mobile number',
                         prefixIcon: Icon(Icons.phone_outlined),
                         prefixText: '$_kPhCountryCode ',
                         helperText: 'e.g. 9171234567 — the leading 0 is optional',
                       ),
+                      onChanged: (_) {
+                        if (_phoneTakenError != null) setState(() => _phoneTakenError = null);
+                      },
                       validator: (value) {
-                        final digits = _stripLeadingTrunkZero(value?.trim() ?? '');
-                        if (digits.length != 10) return 'Enter a valid 10-digit mobile number';
-                        return null;
+                        if ((value ?? '').length != 10) return 'Enter a valid 10-digit mobile number';
+                        return _phoneTakenError;
                       },
                     ),
                     if (!_hasGoogleSession) ...[
@@ -378,6 +484,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
                           : Text(_hasGoogleSession ? 'Continue' : 'Create account'),
                     ),
+                    if (_rateLimitError != null) ...[
+                      const SizedBox(height: AppSpacing.sm),
+                      RateLimitBanner(message: _rateLimitError!),
+                    ],
                     const SizedBox(height: AppSpacing.lg),
                     if (_hasGoogleSession)
                       Center(
