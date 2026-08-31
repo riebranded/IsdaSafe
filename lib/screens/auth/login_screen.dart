@@ -19,33 +19,15 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-
-  /// How long the solved widget stays on screen before collapsing, so its
-  /// own checkmark animation gets to finish playing instead of being cut
-  /// off by an instant hide.
-  static const _captchaHideDelay = Duration(milliseconds: 900);
+  final _captchaKey = GlobalKey<CaptchaFieldState>();
 
   var _isSubmitting = false;
   var _isGoogleSubmitting = false;
   var _obscurePassword = true;
   String? _captchaToken;
-  var _showCaptcha = true;
 
   void _handleCaptchaToken(String? token) {
     setState(() => _captchaToken = token);
-    if (token == null) {
-      // Expired/errored — show it again immediately, no reason to delay.
-      setState(() => _showCaptcha = true);
-      return;
-    }
-    Future.delayed(_captchaHideDelay, () {
-      // Only hide if this is still the token that triggered the delay —
-      // it may have already expired or been reset (e.g. by a submit
-      // attempt) by the time this fires.
-      if (mounted && _captchaToken == token) {
-        setState(() => _showCaptcha = false);
-      }
-    });
   }
 
   static final _emailRegExp = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
@@ -83,16 +65,10 @@ class _LoginScreenState extends State<LoginScreen> {
       if (mounted) _showError('Something went wrong. Please try again.');
       debugPrint('LoginScreen: sign-in error $e');
     } finally {
-      // Tokens are single-use, and the widget hides itself shortly after
-      // being solved — bring it back immediately for a fresh challenge
-      // before the next attempt, whether this one succeeded or failed.
-      if (mounted) {
-        setState(() {
-          _captchaToken = null;
-          _showCaptcha = true;
-          _isSubmitting = false;
-        });
-      }
+      // Tokens are single-use — always fetch a fresh one, whether this
+      // attempt succeeded or failed.
+      _captchaKey.currentState?.reset();
+      if (mounted) setState(() => _isSubmitting = false);
     }
   }
 
@@ -183,6 +159,14 @@ class _LoginScreenState extends State<LoginScreen> {
     final busy = _isSubmitting || _isGoogleSubmitting;
 
     return SingleChildScrollView(
+      // Content is trimmed to fit within a standard viewport without
+      // scrolling (see the spacing pass in _buildForm) — locking physics
+      // here keeps it that way rather than letting it rubber-band/scroll
+      // on taller screens. If a genuinely short viewport (e.g. keyboard
+      // open on a small phone) ever overflows, this will clip instead of
+      // scrolling to reveal the rest — revert to default physics if that
+      // trade-off turns out to be worse than the scroll.
+      physics: const NeverScrollableScrollPhysics(),
       padding: const EdgeInsets.all(AppSpacing.xl),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 420),
@@ -217,7 +201,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: AppSpacing.xl),
+              const SizedBox(height: AppSpacing.lg),
               TextFormField(
                 controller: _emailController,
                 enabled: !busy,
@@ -267,15 +251,13 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: const Text('Forgot password?'),
                 ),
               ),
-              // Hidden a moment after solving (see _handleCaptchaToken)
-              // — reappears immediately when a fresh challenge is
-              // needed for the next attempt (see _submit's finally).
-              if (_showCaptcha) ...[
-                const SizedBox(height: AppSpacing.sm),
-                Center(
-                  child: CaptchaField(onTokenChanged: _handleCaptchaToken),
+              const SizedBox(height: AppSpacing.sm),
+              Center(
+                child: CaptchaField(
+                  key: _captchaKey,
+                  onTokenChanged: _handleCaptchaToken,
                 ),
-              ],
+              ),
               const SizedBox(height: AppSpacing.md),
               FilledButton(
                 onPressed: (busy || _captchaToken == null) ? null : _submit,
@@ -287,7 +269,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       )
                     : const Text('Log in'),
               ),
-              const SizedBox(height: AppSpacing.lg),
+              const SizedBox(height: AppSpacing.md),
               Row(
                 children: [
                   const Expanded(child: Divider()),
@@ -300,7 +282,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   const Expanded(child: Divider()),
                 ],
               ),
-              const SizedBox(height: AppSpacing.lg),
+              const SizedBox(height: AppSpacing.md),
               OutlinedButton.icon(
                 onPressed: busy ? null : _submitWithGoogle,
                 icon: _isGoogleSubmitting
@@ -312,7 +294,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     : const Icon(Icons.g_mobiledata, size: 28),
                 label: const Text('Continue with Google'),
               ),
-              const SizedBox(height: AppSpacing.xl),
+              const SizedBox(height: AppSpacing.sm),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [

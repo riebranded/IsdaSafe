@@ -282,6 +282,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ),
                       const SizedBox(height: AppSpacing.lg),
                     ],
+                    if (!_hasGoogleSession) ...[
+                      Center(
+                        child: CaptchaField(
+                          key: _captchaKey,
+                          onTokenChanged: (token) => setState(() => _captchaToken = token),
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                    ],
                     TextFormField(
                       controller: _fullNameController,
                       enabled: !busy,
@@ -360,13 +369,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         ),
                         validator: (value) => value == _passwordController.text ? null : 'Passwords do not match',
                         onFieldSubmitted: (_) => _submit(),
-                      ),
-                      const SizedBox(height: AppSpacing.md),
-                      Center(
-                        child: CaptchaField(
-                          key: _captchaKey,
-                          onTokenChanged: (token) => setState(() => _captchaToken = token),
-                        ),
                       ),
                     ],
                     const SizedBox(height: AppSpacing.xl),
