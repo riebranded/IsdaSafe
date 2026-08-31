@@ -44,7 +44,7 @@ abstract final class AuthService {
   /// the profile phone-verified immediately instead. The phone-uniqueness
   /// check ([isPhoneTaken]) still runs regardless — flip this back to
   /// `false` once Semaphore is ready to re-enable real OTP delivery.
-  static const bool bypassOtpVerification = true;
+  static const bool bypassOtpVerification = false;
 
   /// True if [e164Phone] is already attached to another profile. Backed by
   /// a SECURITY DEFINER RPC ([public.is_phone_taken]) since `profiles`' RLS
