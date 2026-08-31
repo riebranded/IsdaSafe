@@ -317,8 +317,8 @@ class _LoginScreenState extends State<LoginScreen> {
 }
 
 /// Wide-layout (web/desktop) left panel. Always rendered in the brand navy
-/// from the logo — regardless of app theme — with a short feature list so
-/// it reads as a proper marketing panel rather than just a centered logo.
+/// from the logo — regardless of app theme — as a simple centered logo
+/// treatment.
 class _BrandingPanel extends StatelessWidget {
   const _BrandingPanel({required this.theme});
 
@@ -326,13 +326,6 @@ class _BrandingPanel extends StatelessWidget {
 
   static const _navy = Color(0xFF0B2644);
   static const _navyDeep = Color(0xFF081D37);
-  static const _cream = Color(0xFFFDF6E3);
-
-  static const _features = [
-    (Icons.water_drop_outlined, 'Real-time water quality tracking'),
-    (Icons.set_meal_outlined, 'AI-powered fish species recommendations'),
-    (Icons.location_on_outlined, 'Map every pond you manage'),
-  ];
 
   @override
   Widget build(BuildContext context) {
@@ -378,59 +371,11 @@ class _BrandingPanel extends StatelessWidget {
                   ),
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: AppSpacing.xxl),
-                for (final feature in _features) ...[
-                  _FeatureRow(
-                    icon: feature.$1,
-                    label: feature.$2,
-                    cream: _cream,
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                ],
               ],
             ),
           ),
         ),
       ),
-    );
-  }
-}
-
-class _FeatureRow extends StatelessWidget {
-  const _FeatureRow({
-    required this.icon,
-    required this.label,
-    required this.cream,
-  });
-
-  final IconData icon;
-  final String label;
-  final Color cream;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(AppSpacing.sm),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(AppRadius.md),
-          ),
-          child: Icon(icon, color: cream, size: 20),
-        ),
-        const SizedBox(width: AppSpacing.md),
-        Expanded(
-          child: Text(
-            label,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.92),
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ),
-      ],
     );
   }
 }
