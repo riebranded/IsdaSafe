@@ -1,7 +1,17 @@
+import 'pond_verification.dart';
+
 class Pond {
-  Pond({required this.id, required this.name, this.latitude, this.longitude, List<String>? speciesNames})
-      : speciesNames = speciesNames ?? [],
-        seed = id.hashCode;
+  Pond({
+    required this.id,
+    required this.name,
+    this.latitude,
+    this.longitude,
+    List<String>? speciesNames,
+    this.verificationMethod,
+    this.verificationStatus = VerificationStatus.verified,
+    this.verificationMessage,
+  }) : speciesNames = speciesNames ?? [],
+       seed = id.hashCode;
 
   final String id;
   String name;
@@ -19,8 +29,21 @@ class Pond {
   /// recommendation, which is driven by live readings instead.
   List<String> speciesNames;
 
+  /// How the pond was verified when added (null for ponds created before
+  /// verification existed).
+  final VerificationMethod? verificationMethod;
+
+  /// Background verification progress; set by the server (see
+  /// `verify-pond`). Ponds from before verification count as verified.
+  VerificationStatus verificationStatus;
+
+  /// Why the pond was rejected, or what went wrong (null otherwise).
+  String? verificationMessage;
+
   /// Stable per-pond seed used to derive consistent mock sensor baselines.
   final int seed;
+
+  bool get isVerified => verificationStatus == VerificationStatus.verified;
 
   bool get hasLocation => latitude != null && longitude != null;
 }

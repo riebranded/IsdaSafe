@@ -38,14 +38,46 @@ class CaptchaField extends StatefulWidget {
 }
 
 class CaptchaFieldState extends State<CaptchaField> {
-  final _controller = TurnstileController();
+  var _controller = TurnstileController();
+
+  /// Bumped to throw the Turnstile widget away and build a new one — the only
+  /// way back when its script never loaded, since there's then nothing for
+  /// `refreshToken` to reset.
+  var _generation = 0;
   Timer? _recoveryTimer;
 
   /// Discards the current (now spent, or about to expire) token and starts a
   /// fresh challenge. Call after every submit attempt.
   void reset() {
     widget.onTokenChanged(null);
-    _controller.refreshToken();
+    _refresh();
+  }
+
+  /// `refreshToken` ends up in Turnstile's `reset()`, which throws ("Nothing to
+  /// reset found for provided container") when the widget's container doesn't
+  /// exist — the script timed out, the widget hid itself after an error, or a
+  /// sign-in already navigated away. It's async, so an unawaited call would be
+  /// an uncaught promise error. When a reset isn't possible, rebuild the widget
+  /// from scratch so it re-loads the script and renders a new challenge.
+  Future<void> _refresh() async {
+    if (!mounted) return;
+    try {
+      await _controller.refreshToken();
+    } catch (e) {
+      debugPrint('CaptchaField: reset failed ($e) — rebuilding widget.');
+      _rebuild();
+    }
+  }
+
+  void _rebuild() {
+    if (!mounted) return;
+    final old = _controller;
+    setState(() {
+      _controller = TurnstileController();
+      _generation++;
+    });
+    // Disposed after the frame that stops using it.
+    WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
   }
 
   /// On a non-retryable error (or a script-load timeout), `cloudflare_turnstile`
@@ -60,10 +92,7 @@ class CaptchaFieldState extends State<CaptchaField> {
   void _recoverFromError() {
     widget.onTokenChanged(null);
     _recoveryTimer?.cancel();
-    _recoveryTimer = Timer(const Duration(seconds: 3), () {
-      if (!mounted) return;
-      _controller.refreshToken();
-    });
+    _recoveryTimer = Timer(const Duration(seconds: 3), _refresh);
   }
 
   @override
@@ -103,6 +132,7 @@ class CaptchaFieldState extends State<CaptchaField> {
       // that flash instead of showing a jarring black box mid-form.
       color: theme.colorScheme.surface,
       child: CloudflareTurnstile(
+        key: ValueKey(_generation),
         siteKey: siteKey,
         // Matches the "localhost" hostname registered against the widget for
         // native builds (see docs/AUTH_SETUP.md) — irrelevant on web, where
@@ -126,7 +156,9 @@ class CaptchaFieldState extends State<CaptchaField> {
           _recoverFromError();
         },
         onTimeout: () {
-          debugPrint('CaptchaField: Turnstile script load timed out — auto-recovering.');
+          debugPrint(
+            'CaptchaField: Turnstile script load timed out — auto-recovering.',
+          );
           _recoverFromError();
         },
       ),

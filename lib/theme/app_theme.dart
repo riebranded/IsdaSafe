@@ -170,9 +170,21 @@ class AppTheme {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.lg)),
         backgroundColor: colorScheme.surfaceContainerHigh,
       ),
+      // Floating card-style snackbars: a raised surface (not the default dark
+      // slab) with a hairline border, brand-coloured action and a close button.
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
+        elevation: 6,
+        backgroundColor: colorScheme.surfaceContainerHigh,
+        contentTextStyle: textTheme.bodyMedium?.copyWith(color: colorScheme.onSurface),
+        actionTextColor: colorScheme.primary,
+        showCloseIcon: true,
+        closeIconColor: colorScheme.onSurfaceVariant,
+        insetPadding: const EdgeInsets.fromLTRB(AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.lg),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          side: BorderSide(color: colorScheme.outlineVariant),
+        ),
       ),
       popupMenuTheme: PopupMenuThemeData(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),

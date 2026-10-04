@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app.dart';
+import 'providers/notification_provider.dart';
 import 'providers/pond_provider.dart';
 import 'providers/theme_provider.dart';
 
@@ -24,15 +25,30 @@ Future<void> main() async {
     final googleIosClientId = dotenv.env['GOOGLE_IOS_CLIENT_ID'];
     final googleWebClientId = dotenv.env['GOOGLE_WEB_CLIENT_ID'];
     await GoogleSignIn.instance.initialize(
-      clientId: (googleIosClientId?.isNotEmpty ?? false) ? googleIosClientId : null,
-      serverClientId: (googleWebClientId?.isNotEmpty ?? false) ? googleWebClientId : null,
+      clientId: (googleIosClientId?.isNotEmpty ?? false)
+          ? googleIosClientId
+          : null,
+      serverClientId: (googleWebClientId?.isNotEmpty ?? false)
+          ? googleWebClientId
+          : null,
     );
   }
+
+  final pondProvider = PondProvider();
 
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => PondProvider()),
+        ChangeNotifierProvider.value(value: pondProvider),
+        // A verification result arrives as a notification; re-fetch ponds so
+        // their status badge updates live.
+        ChangeNotifierProvider(
+          create: (_) => NotificationProvider(
+            onNewNotification: (n) {
+              if (n.isPondVerification) pondProvider.refresh();
+            },
+          ),
+        ),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
       ],
       child: const IsdaSafeApp(),

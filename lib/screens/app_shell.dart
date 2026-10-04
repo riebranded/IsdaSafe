@@ -3,13 +3,16 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../models/app_notification.dart';
 import '../models/pond.dart';
 import '../models/reading_bands.dart';
+import '../providers/notification_provider.dart';
 import '../providers/pond_provider.dart';
 import '../services/auth_service.dart';
 import '../services/pond_snapshot_cache.dart';
 import '../theme/app_spacing.dart';
-import '../widgets/pond_dialogs.dart';
+import '../widgets/add_pond_flow.dart';
+import '../widgets/notification_toast.dart';
 import '../widgets/status_badge.dart';
 import 'analytics_screen.dart';
 import 'dashboard_screen.dart';
@@ -17,24 +20,34 @@ import 'notifications_screen.dart';
 import 'pond_map_screen.dart';
 import 'settings_screen.dart';
 
-void _showPondSaveError(BuildContext context) {
-  ScaffoldMessenger.of(context).showSnackBar(
-    const SnackBar(content: Text("Couldn't save changes. Check your connection and try again.")),
-  );
-}
-
 enum _Destination {
-  dashboard(label: 'Dashboard', icon: Icons.dashboard_outlined, selectedIcon: Icons.dashboard),
+  dashboard(
+    label: 'Dashboard',
+    icon: Icons.dashboard_outlined,
+    selectedIcon: Icons.dashboard,
+  ),
   map(label: 'Map', icon: Icons.map_outlined, selectedIcon: Icons.map),
-  analytics(label: 'Analytics', icon: Icons.analytics_outlined, selectedIcon: Icons.analytics),
+  analytics(
+    label: 'Analytics',
+    icon: Icons.analytics_outlined,
+    selectedIcon: Icons.analytics,
+  ),
   notifications(
     label: 'Notifications',
     icon: Icons.notifications_outlined,
     selectedIcon: Icons.notifications,
   ),
-  settings(label: 'Settings', icon: Icons.settings_outlined, selectedIcon: Icons.settings);
+  settings(
+    label: 'Settings',
+    icon: Icons.settings_outlined,
+    selectedIcon: Icons.settings,
+  );
 
-  const _Destination({required this.label, required this.icon, required this.selectedIcon});
+  const _Destination({
+    required this.label,
+    required this.icon,
+    required this.selectedIcon,
+  });
 
   final String label;
   final IconData icon;
@@ -63,6 +76,70 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   final _cache = PondSnapshotCache();
   var _selectedIndex = 0;
+  StreamSubscription? _incomingSub;
+
+  @override
+  void initState() {
+    super.initState();
+    // Announce results (e.g. pond verification) the moment they arrive, on
+    // top of the unread badge and the Notifications list.
+    _incomingSub = context.read<NotificationProvider>().incoming.listen(
+      _showIncoming,
+    );
+  }
+
+  @override
+  void dispose() {
+    _incomingSub?.cancel();
+    super.dispose();
+  }
+
+  void _showIncoming(AppNotification notification) {
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    final (icon, color) = notificationVisual(context, notification);
+    final pondId = notification.pondId;
+    // "Photos needed" goes straight to the photo modal; everything else opens
+    // the Notifications list.
+    final wantsPhotos =
+        notification.type == 'pond_needs_photos' && pondId != null;
+
+    void open() {
+      messenger.hideCurrentSnackBar();
+      if (!mounted) return;
+      if (wantsPhotos) {
+        openAddPhotosForPond(context, pondId);
+      } else if (MediaQuery.sizeOf(context).width >= kWideLayoutBreakpoint) {
+        // The wide layout has a Notifications destination; mobile pushes it
+        // from the bell.
+        setState(() => _selectedIndex = _Destination.notifications.index);
+      } else {
+        _openNotifications(context);
+      }
+    }
+
+    // The pop-up is the card itself (see NotificationToast), so the SnackBar
+    // chrome is stripped away.
+    messenger.showSnackBar(
+      SnackBar(
+        duration: const Duration(seconds: 12),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        padding: EdgeInsets.zero,
+        showCloseIcon: false,
+        content: NotificationToast(
+          icon: icon,
+          color: color,
+          title: notification.title,
+          message: notification.body,
+          actionLabel: wantsPhotos ? 'Add photos' : 'View',
+          onAction: open,
+          onClose: messenger.hideCurrentSnackBar,
+        ),
+      ),
+    );
+  }
 
   /// Bottom nav destinations on mobile — Notifications is intentionally
   /// excluded; it's reached via the greeting bar's bell icon instead.
@@ -84,27 +161,7 @@ class _AppShellState extends State<AppShell> {
   /// via a Dashboard sub-button or a Dashboard card. Null until one is picked.
   String? _selectedPondId;
 
-  Future<void> _addPond(BuildContext context) async {
-    final draft = await showAddPondDialog(context);
-    if (draft == null || !context.mounted) return;
-
-    final pond = await context.read<PondProvider>().addPond(
-          draft.name,
-          latitude: draft.latitude,
-          longitude: draft.longitude,
-        );
-    if (pond == null) {
-      if (context.mounted) _showPondSaveError(context);
-      return;
-    }
-    if (!context.mounted) return;
-
-    final species = await showSelectSpeciesDialog(context);
-    if (species != null && context.mounted) {
-      final ok = await context.read<PondProvider>().setSpecies(pond.id, species);
-      if (!ok && context.mounted) _showPondSaveError(context);
-    }
-  }
+  Future<void> _addPond(BuildContext context) => runAddPondFlow(context);
 
   /// Opens Notifications as its own page (from the mobile greeting bar's
   /// bell). On mobile it isn't a bottom-nav tab, so it's a pushed route with
@@ -132,7 +189,9 @@ class _AppShellState extends State<AppShell> {
   Widget build(BuildContext context) {
     final ponds = context.watch<PondProvider>().ponds;
     // Drop a stale selection if the pond was removed.
-    final selectedPondId = ponds.any((p) => p.id == _selectedPondId) ? _selectedPondId : null;
+    final selectedPondId = ponds.any((p) => p.id == _selectedPondId)
+        ? _selectedPondId
+        : null;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -162,7 +221,9 @@ class _AppShellState extends State<AppShell> {
           appBar: isWide
               ? null
               : _MobileTopBar(
-                  onOpenProfile: () => setState(() => _selectedIndex = _Destination.settings.index),
+                  onOpenProfile: () => setState(
+                    () => _selectedIndex = _Destination.settings.index,
+                  ),
                   onOpenNotifications: () => _openNotifications(context),
                 ),
           floatingActionButton: _selectedIndex == 0
@@ -180,7 +241,8 @@ class _AppShellState extends State<AppShell> {
                       ponds: ponds,
                       selectedIndex: _selectedIndex,
                       selectedPondId: selectedPondId,
-                      statusFor: (pond) => overallStatus(_cache.snapshotFor(pond).readings),
+                      statusFor: (pond) =>
+                          overallStatus(_cache.snapshotFor(pond).readings),
                       onSelectDestination: (index) => setState(() {
                         _selectedIndex = index;
                         // Tapping the Dashboard button itself returns to the
@@ -198,7 +260,9 @@ class _AppShellState extends State<AppShell> {
               ? null
               : NavigationBar(
                   selectedIndex: _bottomNavIndex,
-                  onDestinationSelected: (index) => setState(() => _selectedIndex = _bottomDestinations[index].index),
+                  onDestinationSelected: (index) => setState(
+                    () => _selectedIndex = _bottomDestinations[index].index,
+                  ),
                   destinations: [
                     for (final d in _bottomDestinations)
                       NavigationDestination(
@@ -217,7 +281,10 @@ class _AppShellState extends State<AppShell> {
 /// Mobile top bar: a greeting with the user's avatar (top-left) and a
 /// notification bell (top-right). Replaces the plain per-screen AppBar title.
 class _MobileTopBar extends StatefulWidget implements PreferredSizeWidget {
-  const _MobileTopBar({required this.onOpenProfile, required this.onOpenNotifications});
+  const _MobileTopBar({
+    required this.onOpenProfile,
+    required this.onOpenNotifications,
+  });
 
   final VoidCallback onOpenProfile;
   final VoidCallback onOpenNotifications;
@@ -230,8 +297,8 @@ class _MobileTopBar extends StatefulWidget implements PreferredSizeWidget {
 }
 
 class _MobileTopBarState extends State<_MobileTopBar> {
-  late Future<({String fullName, String email, String? photoUrl})?> _profileFuture =
-      AuthService.fetchCurrentProfile();
+  late Future<({String fullName, String email, String? photoUrl})?>
+  _profileFuture = AuthService.fetchCurrentProfile();
   StreamSubscription? _authSub;
 
   @override
@@ -273,14 +340,18 @@ class _MobileTopBarState extends State<_MobileTopBar> {
         final fullName = (profile?.fullName.isNotEmpty ?? false)
             ? profile!.fullName
             : (currentUser?.userMetadata?['full_name'] as String?) ?? '';
-        final email = (profile?.email.isNotEmpty ?? false) ? profile!.email : (currentUser?.email ?? '');
+        final email = (profile?.email.isNotEmpty ?? false)
+            ? profile!.email
+            : (currentUser?.email ?? '');
         final photoUrl = profile?.photoUrl;
         // First name for the greeting; fall back to the email, then a neutral word.
         final displayName = fullName.isNotEmpty
             ? fullName.split(' ').first
             : (email.isNotEmpty ? email : 'there');
         final initialSource = fullName.isNotEmpty ? fullName : email;
-        final initial = initialSource.isNotEmpty ? initialSource[0].toUpperCase() : '?';
+        final initial = initialSource.isNotEmpty
+            ? initialSource[0].toUpperCase()
+            : '?';
 
         return AppBar(
           toolbarHeight: 72,
@@ -293,9 +364,14 @@ class _MobileTopBarState extends State<_MobileTopBar> {
               child: CircleAvatar(
                 radius: 20,
                 backgroundColor: theme.colorScheme.primary,
-                backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
+                backgroundImage: photoUrl != null
+                    ? NetworkImage(photoUrl)
+                    : null,
                 child: photoUrl == null
-                    ? Text(initial, style: TextStyle(color: theme.colorScheme.onPrimary))
+                    ? Text(
+                        initial,
+                        style: TextStyle(color: theme.colorScheme.onPrimary),
+                      )
                     : null,
               ),
             ),
@@ -304,10 +380,17 @@ class _MobileTopBarState extends State<_MobileTopBar> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(_greeting, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+              Text(
+                _greeting,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
               Text(
                 displayName,
-                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -316,7 +399,10 @@ class _MobileTopBarState extends State<_MobileTopBar> {
           actions: [
             IconButton(
               onPressed: widget.onOpenNotifications,
-              icon: const Icon(Icons.notifications_outlined),
+              icon: _UnreadBadge(
+                count: context.watch<NotificationProvider>().unreadCount,
+                child: const Icon(Icons.notifications_outlined),
+              ),
               tooltip: 'Notifications',
             ),
             const SizedBox(width: AppSpacing.xs),
@@ -350,6 +436,9 @@ class _SidePanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final unreadNotifications = context
+        .watch<NotificationProvider>()
+        .unreadCount;
 
     return SizedBox(
       width: _railWidth,
@@ -359,12 +448,22 @@ class _SidePanel extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.lg, AppSpacing.md, AppSpacing.sm),
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.xl,
+                AppSpacing.lg,
+                AppSpacing.md,
+                AppSpacing.sm,
+              ),
               child: Row(
                 children: [
                   ClipRRect(
                     borderRadius: BorderRadius.circular(AppRadius.sm),
-                    child: Image.asset('assets/branding/logo.png', width: 28, height: 28, fit: BoxFit.cover),
+                    child: Image.asset(
+                      'assets/branding/logo.png',
+                      width: 28,
+                      height: 28,
+                      fit: BoxFit.cover,
+                    ),
                   ),
                   const SizedBox(width: AppSpacing.sm),
                   Text('IsdaSafe', style: theme.textTheme.headlineSmall),
@@ -383,6 +482,9 @@ class _SidePanel extends StatelessWidget {
                         icon: d.icon,
                         selectedIcon: d.selectedIcon,
                         label: d.label,
+                        badgeCount: d == _Destination.notifications
+                            ? unreadNotifications
+                            : 0,
                         selected: selectedIndex == index,
                         onTap: () => onSelectDestination(index),
                       ),
@@ -394,7 +496,8 @@ class _SidePanel extends StatelessWidget {
                             key: ValueKey('pond-nav-${pond.id}'),
                             pond: pond,
                             status: statusFor(pond),
-                            selected: selectedIndex == 0 && selectedPondId == pond.id,
+                            selected:
+                                selectedIndex == 0 && selectedPondId == pond.id,
                             onTap: () => onSelectPond(pond),
                           ),
                     ],
@@ -420,37 +523,58 @@ class _NavItem extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.onTap,
+    this.badgeCount = 0,
   });
 
   final IconData icon;
   final IconData selectedIcon;
   final String label;
+  final int badgeCount;
   final bool selected;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final fg = selected ? theme.colorScheme.onSecondaryContainer : theme.colorScheme.onSurfaceVariant;
+    final fg = selected
+        ? theme.colorScheme.onSecondaryContainer
+        : theme.colorScheme.onSurfaceVariant;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 2),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: 2,
+      ),
       child: Material(
-        color: selected ? theme.colorScheme.secondaryContainer : Colors.transparent,
+        color: selected
+            ? theme.colorScheme.secondaryContainer
+            : Colors.transparent,
         borderRadius: BorderRadius.circular(AppRadius.pill),
         child: InkWell(
           borderRadius: BorderRadius.circular(AppRadius.pill),
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.md),
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.md,
+              vertical: AppSpacing.md,
+            ),
             child: Row(
               children: [
-                Icon(selected ? selectedIcon : icon, size: 24, color: fg),
+                _UnreadBadge(
+                  count: badgeCount,
+                  child: Icon(
+                    selected ? selectedIcon : icon,
+                    size: 24,
+                    color: fg,
+                  ),
+                ),
                 const SizedBox(width: AppSpacing.md),
                 Text(
                   label,
                   style: theme.textTheme.titleSmall?.copyWith(
-                    color: selected ? theme.colorScheme.onSecondaryContainer : theme.colorScheme.onSurface,
+                    color: selected
+                        ? theme.colorScheme.onSecondaryContainer
+                        : theme.colorScheme.onSurface,
                   ),
                 ),
               ],
@@ -485,13 +609,18 @@ class _PondSubButton extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(AppSpacing.xl, 1, AppSpacing.md, 1),
       child: Material(
-        color: selected ? theme.colorScheme.secondaryContainer : Colors.transparent,
+        color: selected
+            ? theme.colorScheme.secondaryContainer
+            : Colors.transparent,
         borderRadius: BorderRadius.circular(AppRadius.md),
         child: InkWell(
           borderRadius: BorderRadius.circular(AppRadius.md),
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.md,
+              vertical: AppSpacing.sm,
+            ),
             child: Row(
               children: [
                 Icon(Icons.circle, size: 10, color: status.colorOf(context)),
@@ -527,8 +656,8 @@ class _AccountSection extends StatefulWidget {
 }
 
 class _AccountSectionState extends State<_AccountSection> {
-  late Future<({String fullName, String email, String? photoUrl})?> _profileFuture =
-      AuthService.fetchCurrentProfile();
+  late Future<({String fullName, String email, String? photoUrl})?>
+  _profileFuture = AuthService.fetchCurrentProfile();
   StreamSubscription? _authSub;
 
   @override
@@ -560,13 +689,20 @@ class _AccountSectionState extends State<_AccountSection> {
         // Falls back to the synchronously-available session data while the
         // `profiles` fetch (needed for photo_url) is still in flight, so the
         // row shows a name/email immediately instead of flashing empty.
-        final fallbackName = (currentUser?.userMetadata?['full_name'] as String?) ?? '';
+        final fallbackName =
+            (currentUser?.userMetadata?['full_name'] as String?) ?? '';
         final fallbackEmail = currentUser?.email ?? '';
-        final fullName = (profile?.fullName.isNotEmpty ?? false) ? profile!.fullName : fallbackName;
-        final email = (profile?.email.isNotEmpty ?? false) ? profile!.email : fallbackEmail;
+        final fullName = (profile?.fullName.isNotEmpty ?? false)
+            ? profile!.fullName
+            : fallbackName;
+        final email = (profile?.email.isNotEmpty ?? false)
+            ? profile!.email
+            : fallbackEmail;
         final photoUrl = profile?.photoUrl;
         final displayName = fullName.isNotEmpty ? fullName : email;
-        final initial = displayName.isNotEmpty ? displayName[0].toUpperCase() : '?';
+        final initial = displayName.isNotEmpty
+            ? displayName[0].toUpperCase()
+            : '?';
 
         return PopupMenuButton<String>(
           tooltip: 'Account',
@@ -578,15 +714,23 @@ class _AccountSectionState extends State<_AccountSection> {
             PopupMenuItem(value: 'signOut', child: Text('Sign out')),
           ],
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.md),
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.md,
+              vertical: AppSpacing.md,
+            ),
             child: Row(
               children: [
                 CircleAvatar(
                   radius: 18,
                   backgroundColor: theme.colorScheme.primary,
-                  backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
+                  backgroundImage: photoUrl != null
+                      ? NetworkImage(photoUrl)
+                      : null,
                   child: photoUrl == null
-                      ? Text(initial, style: TextStyle(color: theme.colorScheme.onPrimary))
+                      ? Text(
+                          initial,
+                          style: TextStyle(color: theme.colorScheme.onPrimary),
+                        )
                       : null,
                 ),
                 const SizedBox(width: AppSpacing.sm),
@@ -599,24 +743,49 @@ class _AccountSectionState extends State<_AccountSection> {
                         displayName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                       if (email.isNotEmpty && email != displayName)
                         Text(
                           email,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
                         ),
                     ],
                   ),
                 ),
-                Icon(Icons.more_vert, size: 18, color: theme.colorScheme.onSurfaceVariant),
+                Icon(
+                  Icons.more_vert,
+                  size: 18,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ],
             ),
           ),
         );
       },
+    );
+  }
+}
+
+/// Wraps [child] with a small count badge when [count] is above zero.
+class _UnreadBadge extends StatelessWidget {
+  const _UnreadBadge({required this.count, required this.child});
+
+  final int count;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Badge(
+      isLabelVisible: count > 0,
+      label: Text(count > 9 ? '9+' : '$count'),
+      child: child,
     );
   }
 }

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:isdasafev2/models/pond.dart';
+import 'package:isdasafev2/models/pond_verification.dart';
 import 'package:isdasafev2/services/pond_repository.dart';
 
 /// In-memory [PondRepository] fake — lets [PondProvider] be exercised in
@@ -9,14 +10,15 @@ import 'package:isdasafev2/services/pond_repository.dart';
 /// so existing widget tests that reference those ids keep working unchanged.
 class FakePondRepository implements PondRepository {
   FakePondRepository({List<Pond>? seed, String? userId = 'test-user'})
-      : _ponds = seed ?? defaultSeed(),
-        _userId = userId;
+    : _ponds = seed ?? defaultSeed(),
+      // ignore: prefer_initializing_formals
+      _userId = userId;
 
   static List<Pond> defaultSeed() => [
-        Pond(id: 'pond-a', name: 'Pond A', latitude: 14.3500, longitude: 121.2500),
-        Pond(id: 'pond-b', name: 'Pond B', latitude: 14.8100, longitude: 120.7500),
-        Pond(id: 'pond-c', name: 'Pond C', latitude: 14.9500, longitude: 120.7000),
-      ];
+    Pond(id: 'pond-a', name: 'Pond A', latitude: 14.3500, longitude: 121.2500),
+    Pond(id: 'pond-b', name: 'Pond B', latitude: 14.8100, longitude: 120.7500),
+    Pond(id: 'pond-c', name: 'Pond C', latitude: 14.9500, longitude: 120.7000),
+  ];
 
   final List<Pond> _ponds;
   String? _userId;
@@ -56,9 +58,17 @@ class FakePondRepository implements PondRepository {
     required String name,
     required double latitude,
     required double longitude,
+    PondVerification? verification,
   }) async {
     _maybeFail();
-    final pond = Pond(id: 'fake-${_nextId++}', name: name, latitude: latitude, longitude: longitude);
+    final pond = Pond(
+      id: 'fake-${_nextId++}',
+      name: name,
+      latitude: latitude,
+      longitude: longitude,
+      verificationMethod: verification?.method,
+      verificationStatus: VerificationStatus.pending,
+    );
     _ponds.add(pond);
     return pond;
   }
@@ -66,6 +76,49 @@ class FakePondRepository implements PondRepository {
   @override
   Future<void> updatePond(String id, Map<String, Object?> patch) async {
     _maybeFail();
+  }
+
+  /// Ids passed to [requestVerification], in order.
+  final verificationRequests = <String>[];
+
+  /// Set true to make the next [requestVerification] throw.
+  bool failNextVerificationRequest = false;
+
+  /// Photo paths passed to [requestVerification], by pond id.
+  final evidenceRequests = <String, List<String>>{};
+
+  /// Set true to make the next [uploadEvidencePhotos] throw.
+  bool failNextEvidenceUpload = false;
+
+  @override
+  Future<List<String>> uploadEvidencePhotos({
+    required String uid,
+    required String pondId,
+    required List<PondPhoto> photos,
+  }) async {
+    if (failNextEvidenceUpload) {
+      failNextEvidenceUpload = false;
+      throw Exception('fake upload failure');
+    }
+    return [
+      for (final (i, _) in photos.indexed) '$uid/$pondId/evidence-$i.jpg',
+    ];
+  }
+
+  @override
+  Future<void> requestVerification(
+    String pondId, {
+    List<String>? photoPaths,
+  }) async {
+    if (photoPaths != null) {
+      evidenceRequests[pondId] = photoPaths;
+      return;
+    }
+    if (failNextVerificationRequest) {
+      failNextVerificationRequest = false;
+      throw Exception('fake verification request failure');
+    }
+    verificationRequests.add(pondId);
   }
 
   @override

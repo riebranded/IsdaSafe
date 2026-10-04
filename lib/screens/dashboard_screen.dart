@@ -6,10 +6,13 @@ import '../models/pond.dart';
 import '../models/reading_bands.dart';
 import '../models/sensor_reading.dart';
 import '../providers/dashboard_provider.dart';
+import '../models/app_notification.dart';
+import '../providers/notification_provider.dart';
 import '../providers/pond_provider.dart';
 import '../services/pond_snapshot_cache.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/location_picker_map.dart';
+import '../widgets/add_pond_flow.dart';
 import '../widgets/pond_dialogs.dart';
 import '../widgets/reading_grid.dart';
 import '../widgets/staggered_entrance.dart';
@@ -21,7 +24,11 @@ import 'pond_dashboard_screen.dart';
 /// informational.
 void _showSaveError(BuildContext context) {
   ScaffoldMessenger.of(context).showSnackBar(
-    const SnackBar(content: Text("Couldn't save changes. Check your connection and try again.")),
+    const SnackBar(
+      content: Text(
+        "Couldn't save changes. Check your connection and try again.",
+      ),
+    ),
   );
 }
 
@@ -84,10 +91,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (location == null || !context.mounted) return;
 
     final ok = await context.read<PondProvider>().setLocation(
-          pond.id,
-          latitude: location.latitude,
-          longitude: location.longitude,
-        );
+      pond.id,
+      latitude: location.latitude,
+      longitude: location.longitude,
+    );
     if (!ok && context.mounted) _showSaveError(context);
   }
 
@@ -98,8 +105,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
         title: const Text('Remove pond'),
         content: Text('Remove "${pond.name}"? This cannot be undone.'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Remove')),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Remove'),
+          ),
         ],
       ),
     );
@@ -113,13 +126,72 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  /// A just-verified pond with no species yet, paired with the unread
+  /// notification that announced it — that notification is what makes the
+  /// prompt appear (and dismissing the prompt marks it read), so ponds that
+  /// were verified long ago and never got species aren't nagged about.
+  (Pond, AppNotification)? _speciesPrompt(
+    List<Pond> ponds,
+    List<AppNotification> notifications,
+  ) {
+    for (final n in notifications) {
+      if (n.isRead || n.type != 'pond_verified' || n.pondId == null) continue;
+      for (final pond in ponds) {
+        if (pond.id == n.pondId && pond.speciesNames.isEmpty) return (pond, n);
+      }
+    }
+    return null;
+  }
+
+  Future<void> _addSpecies(
+    BuildContext context,
+    Pond pond,
+    AppNotification notification,
+  ) async {
+    final provider = context.read<PondProvider>();
+    final notifications = context.read<NotificationProvider>();
+    final species = await showSelectSpeciesDialog(context);
+    // Dismissed without choosing: keep the prompt so they can come back to it.
+    if (species == null || !context.mounted) return;
+    final ok = await provider.setSpecies(pond.id, species);
+    if (!context.mounted) return;
+    if (!ok) {
+      _showSaveError(context);
+      return;
+    }
+    notifications.markRead(notification.id);
+  }
+
+  Future<void> _retryVerification(
+    BuildContext context,
+    List<Pond> ponds,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final provider = context.read<PondProvider>();
+    var allSent = true;
+    for (final pond in ponds) {
+      allSent = await provider.retryVerification(pond.id) && allSent;
+    }
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          allSent
+              ? "Verification restarted. We'll notify you when it's done."
+              : "Couldn't restart verification. Check your connection and try again.",
+        ),
+      ),
+    );
+  }
+
   void _openPond(BuildContext context, Pond pond) {
     // Wide layout: select the pond so the inline detail pane shows it (the
     // side panel stays visible). Narrow layout: push the full-screen view.
     if (widget.showDetailPane && widget.onSelectPond != null) {
       widget.onSelectPond!(pond);
     } else {
-      Navigator.of(context).push(MaterialPageRoute(builder: (_) => PondDashboardScreen(pond: pond)));
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => PondDashboardScreen(pond: pond)),
+      );
     }
   }
 
@@ -132,28 +204,48 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return const Center(child: CircularProgressIndicator());
     }
 
+    final needsPhotos = pondProvider.needsPhotosPonds;
+    final retryable = [
+      ...pondProvider.pendingPonds,
+      ...pondProvider.failedPonds,
+    ];
+    // Everything not on the dashboard yet but on its way (or awaiting photos).
+    final unverified = [...retryable, ...needsPhotos];
+    final notifications = context.watch<NotificationProvider>().notifications;
+    final prompt = _speciesPrompt(ponds, notifications);
+    final banners = <Widget>[
+      if (prompt != null)
+        _SpeciesPromptBanner(
+          pond: prompt.$1,
+          onAdd: () => _addSpecies(context, prompt.$1, prompt.$2),
+          onLater: () =>
+              context.read<NotificationProvider>().markRead(prompt.$2.id),
+        ),
+      if (retryable.isNotEmpty)
+        _VerificationBanner(
+          pending: pondProvider.pendingPonds,
+          failed: pondProvider.failedPonds,
+          onRetry: () => _retryVerification(context, retryable),
+        ),
+    ];
+    final banner = banners.isEmpty
+        ? null
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final (i, b) in banners.indexed) ...[
+                if (i > 0) const SizedBox(height: AppSpacing.md),
+                b,
+              ],
+            ],
+          );
+
     if (ponds.isEmpty) {
-      return _EmptyDashboard(onAddPond: () async {
-        final draft = await showAddPondDialog(context);
-        if (draft == null || !context.mounted) return;
-
-        final pond = await context.read<PondProvider>().addPond(
-              draft.name,
-              latitude: draft.latitude,
-              longitude: draft.longitude,
-            );
-        if (pond == null) {
-          if (context.mounted) _showSaveError(context);
-          return;
-        }
-        if (!context.mounted) return;
-
-        final species = await showSelectSpeciesDialog(context);
-        if (species != null && context.mounted) {
-          final ok = await context.read<PondProvider>().setSpecies(pond.id, species);
-          if (!ok && context.mounted) _showSaveError(context);
-        }
-      });
+      return _EmptyDashboard(
+        banner: banner,
+        waitingForVerification: unverified.isNotEmpty,
+        onAddPond: () => runAddPondFlow(context),
+      );
     }
 
     // Wide layout: a selected pond takes over the content area (side panel
@@ -164,13 +256,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (selected != null) {
         return _PondDetailView(pond: selected, onBack: widget.onClearPond);
       }
-      return _pondList(ponds);
+      if (banner == null) return _pondList(ponds);
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.lg,
+              AppSpacing.lg,
+              0,
+            ),
+            child: banner,
+          ),
+          Expanded(child: _pondList(ponds)),
+        ],
+      );
     }
 
-    return _mobileList(ponds);
+    return _mobileList(ponds, banner: banner);
   }
 
-  Widget _mobileList(List<Pond> ponds) {
+  Widget _mobileList(List<Pond> ponds, {Widget? banner}) {
     var normal = 0;
     var warning = 0;
     var critical = 0;
@@ -196,6 +303,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           AppSpacing.xxl + AppSpacing.xl,
         ),
         children: [
+          if (banner != null) ...[
+            banner,
+            const SizedBox(height: AppSpacing.lg),
+          ],
           _StatusSummary(normal: normal, warning: warning, critical: critical),
           const SizedBox(height: AppSpacing.lg),
           for (final (index, pond) in ponds.indexed) ...[
@@ -274,7 +385,12 @@ class _PondDetailView extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(AppSpacing.sm, AppSpacing.sm, AppSpacing.lg, 0),
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.sm,
+            AppSpacing.sm,
+            AppSpacing.lg,
+            0,
+          ),
           child: TextButton.icon(
             onPressed: onBack,
             icon: const Icon(Icons.arrow_back),
@@ -298,9 +414,14 @@ class _PondDetailView extends StatelessWidget {
     );
   }
 }
+
 /// Mobile overview header: how many ponds are Normal / Warning / Critical.
 class _StatusSummary extends StatelessWidget {
-  const _StatusSummary({required this.normal, required this.warning, required this.critical});
+  const _StatusSummary({
+    required this.normal,
+    required this.warning,
+    required this.critical,
+  });
 
   final int normal;
   final int warning;
@@ -310,18 +431,40 @@ class _StatusSummary extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Expanded(child: _SummaryTile(count: normal, label: 'Normal', status: ReadingStatus.normal)),
+        Expanded(
+          child: _SummaryTile(
+            count: normal,
+            label: 'Normal',
+            status: ReadingStatus.normal,
+          ),
+        ),
         const SizedBox(width: AppSpacing.sm),
-        Expanded(child: _SummaryTile(count: warning, label: 'Warning', status: ReadingStatus.warning)),
+        Expanded(
+          child: _SummaryTile(
+            count: warning,
+            label: 'Warning',
+            status: ReadingStatus.warning,
+          ),
+        ),
         const SizedBox(width: AppSpacing.sm),
-        Expanded(child: _SummaryTile(count: critical, label: 'Critical', status: ReadingStatus.critical)),
+        Expanded(
+          child: _SummaryTile(
+            count: critical,
+            label: 'Critical',
+            status: ReadingStatus.critical,
+          ),
+        ),
       ],
     );
   }
 }
 
 class _SummaryTile extends StatelessWidget {
-  const _SummaryTile({required this.count, required this.label, required this.status});
+  const _SummaryTile({
+    required this.count,
+    required this.label,
+    required this.status,
+  });
 
   final int count;
   final String label;
@@ -333,7 +476,10 @@ class _SummaryTile extends StatelessWidget {
     final color = status.colorOf(context);
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.md),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.md,
+      ),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(AppRadius.lg),
@@ -347,12 +493,20 @@ class _SummaryTile extends StatelessWidget {
               const SizedBox(width: AppSpacing.xs),
               Text(
                 '$count',
-                style: theme.textTheme.headlineSmall?.copyWith(color: color, fontWeight: FontWeight.w700),
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  color: color,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ],
           ),
           const SizedBox(height: 2),
-          Text(label, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+          Text(
+            label,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
         ],
       ),
     );
@@ -422,10 +576,19 @@ class _MobilePondCard extends StatelessWidget {
                       if (value == 'location') onEditLocation();
                       if (value == 'remove') onRemove();
                     },
-                    itemBuilder: (context) => const [
-                      PopupMenuItem(value: 'rename', child: Text('Rename')),
-                      PopupMenuItem(value: 'location', child: Text('Edit location')),
-                      PopupMenuItem(value: 'remove', child: Text('Remove')),
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 'rename',
+                        child: Text('Rename'),
+                      ),
+                      const PopupMenuItem(
+                        value: 'location',
+                        child: Text('Edit location'),
+                      ),
+                      const PopupMenuItem(
+                        value: 'remove',
+                        child: Text('Remove'),
+                      ),
                     ],
                   ),
                 ],
@@ -434,7 +597,12 @@ class _MobilePondCard extends StatelessWidget {
               Row(
                 children: [
                   for (final type in MetricType.values)
-                    Expanded(child: _ReadingChip(type: type, value: readings[type]!.value)),
+                    Expanded(
+                      child: _ReadingChip(
+                        type: type,
+                        value: readings[type]!.value,
+                      ),
+                    ),
                 ],
               ),
             ],
@@ -493,22 +661,26 @@ class _PondLocationLine extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(Icons.location_on_outlined, size: 14, color: theme.colorScheme.onSurfaceVariant),
+        Icon(
+          Icons.location_on_outlined,
+          size: 14,
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
         const SizedBox(width: 4),
         Flexible(
           child: Text(
             text,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
           ),
         ),
       ],
     );
   }
 }
-
-
 
 class _PondSummaryCard extends StatelessWidget {
   const _PondSummaryCard({
@@ -563,10 +735,19 @@ class _PondSummaryCard extends StatelessWidget {
                       if (value == 'location') onEditLocation();
                       if (value == 'remove') onRemove();
                     },
-                    itemBuilder: (context) => const [
-                      PopupMenuItem(value: 'rename', child: Text('Rename')),
-                      PopupMenuItem(value: 'location', child: Text('Edit location')),
-                      PopupMenuItem(value: 'remove', child: Text('Remove')),
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 'rename',
+                        child: Text('Rename'),
+                      ),
+                      const PopupMenuItem(
+                        value: 'location',
+                        child: Text('Edit location'),
+                      ),
+                      const PopupMenuItem(
+                        value: 'remove',
+                        child: Text('Remove'),
+                      ),
                     ],
                   ),
                 ],
@@ -581,10 +762,191 @@ class _PondSummaryCard extends StatelessWidget {
   }
 }
 
+/// Shown right after a pond is verified: the moment to ask which fish it holds
+/// (used for feeding-time suggestions), rather than before it's even confirmed.
+class _SpeciesPromptBanner extends StatelessWidget {
+  const _SpeciesPromptBanner({
+    required this.pond,
+    required this.onAdd,
+    required this.onLater,
+  });
+
+  final Pond pond;
+  final VoidCallback onAdd;
+  final VoidCallback onLater;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.primaryContainer,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.verified, color: scheme.onPrimaryContainer),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '“${pond.name}” is verified',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          color: scheme.onPrimaryContainer,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Tell us which fish or shrimp it holds to get feeding-time suggestions.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: scheme.onPrimaryContainer,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Wrap(
+                spacing: AppSpacing.sm,
+                children: [
+                  TextButton(onPressed: onLater, child: const Text('Later')),
+                  FilledButton(
+                    onPressed: onAdd,
+                    child: const Text('Add species'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Tells the owner their not-yet-verified ponds aren't on the dashboard yet:
+/// still being checked (with a retry in case it's stuck), or the check itself
+/// failed. Rejected ponds aren't mentioned here — the notification explains.
+class _VerificationBanner extends StatelessWidget {
+  const _VerificationBanner({
+    required this.pending,
+    required this.failed,
+    required this.onRetry,
+  });
+
+  final List<Pond> pending;
+  final List<Pond> failed;
+  final VoidCallback onRetry;
+
+  String _names(List<Pond> ponds) =>
+      ponds.length == 1 ? '“${ponds.first.name}”' : '${ponds.length} ponds';
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final hasFailed = failed.isNotEmpty;
+
+    final title = hasFailed
+        ? "We couldn't finish verifying ${_names(failed)}"
+        : 'Verifying ${_names(pending)}…';
+    final body = hasFailed
+        ? 'A technical problem stopped the check. Retry to try again.'
+        : "It will appear here once it's verified. We'll send you a "
+              'notification when it is.';
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: hasFailed ? scheme.tertiaryContainer : scheme.secondaryContainer,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            hasFailed
+                ? Icon(Icons.error_outline, color: scheme.onTertiaryContainer)
+                : SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      color: scheme.onSecondaryContainer,
+                    ),
+                  ),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      color: hasFailed
+                          ? scheme.onTertiaryContainer
+                          : scheme.onSecondaryContainer,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    body,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: hasFailed
+                          ? scheme.onTertiaryContainer
+                          : scheme.onSecondaryContainer,
+                    ),
+                  ),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton(
+                      onPressed: onRetry,
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(0, 32),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: Text(hasFailed ? 'Retry' : 'Taking long? Retry'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _EmptyDashboard extends StatelessWidget {
-  const _EmptyDashboard({required this.onAddPond});
+  const _EmptyDashboard({
+    required this.onAddPond,
+    this.banner,
+    this.waitingForVerification = false,
+  });
 
   final VoidCallback onAddPond;
+
+  /// Shown above the empty state while ponds await verification.
+  final Widget? banner;
+
+  /// Swaps "No ponds yet" for wording that says a pond is on its way.
+  final bool waitingForVerification;
 
   @override
   Widget build(BuildContext context) {
@@ -596,22 +958,53 @@ class _EmptyDashboard extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (banner != null) ...[
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: banner,
+              ),
+              const SizedBox(height: AppSpacing.xl),
+            ],
             Container(
               width: 88,
               height: 88,
-              decoration: BoxDecoration(color: theme.colorScheme.primaryContainer, shape: BoxShape.circle),
-              child: Icon(Icons.water_drop_outlined, size: 44, color: theme.colorScheme.onPrimaryContainer),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primaryContainer,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.water_drop_outlined,
+                size: 44,
+                color: theme.colorScheme.onPrimaryContainer,
+              ),
             ),
             const SizedBox(height: AppSpacing.lg),
-            Text('No ponds yet', style: theme.textTheme.titleMedium),
+            Text(
+              waitingForVerification
+                  ? 'Your pond is on its way'
+                  : 'No ponds yet',
+              style: theme.textTheme.titleMedium,
+            ),
             const SizedBox(height: AppSpacing.xs),
             Text(
-              'Add a pond to start tracking its water quality and\nsee which fish species it can support.',
+              waitingForVerification
+                  ? 'Verified ponds show up here with their live water quality.'
+                  : 'Add a pond to start tracking its water quality and\nsee which fish species it can support.',
               textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
             const SizedBox(height: AppSpacing.xl),
-            FilledButton.icon(onPressed: onAddPond, icon: const Icon(Icons.add), label: const Text('Add your first pond')),
+            FilledButton.icon(
+              onPressed: onAddPond,
+              icon: const Icon(Icons.add),
+              label: Text(
+                waitingForVerification
+                    ? 'Add another pond'
+                    : 'Add your first pond',
+              ),
+            ),
           ],
         ),
       ),
