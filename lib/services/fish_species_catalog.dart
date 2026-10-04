@@ -31,16 +31,6 @@ class FishSpeciesCatalog {
       ammoniaRange: MetricRange(0, 0.1),
       feedingTimes: ['6:00 AM', '6:00 PM'],
     ),
-    FishSpecies(
-      name: 'Tiger Shrimp',
-      localName: 'Sugpo',
-      tempRange: MetricRange(26, 31),
-      phRange: MetricRange(7.5, 8.5),
-      doRange: MetricRange(4, 8),
-      ammoniaRange: MetricRange(0, 0.02),
-      feedingTimes: ['6:00 AM', '11:00 AM', '4:00 PM', '9:00 PM'],
-      assignableToPond: false,
-    ),
   ];
 
   /// Looks up a catalog entry by [FishSpecies.name] — used to resolve the

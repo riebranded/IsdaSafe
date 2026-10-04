@@ -39,4 +39,12 @@ class PondSnapshotCache {
     MetricType type,
     TrendRange range,
   ) => _sensorService.historyForRange(pond, type, range);
+
+  /// Trend data for a custom [start]..[end] timeframe.
+  List<SensorReading> historyForPeriod(
+    Pond pond,
+    MetricType type,
+    DateTime start,
+    DateTime end,
+  ) => _sensorService.historyForPeriod(pond, type, start, end);
 }

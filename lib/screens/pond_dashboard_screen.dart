@@ -124,55 +124,51 @@ class PondDashboardBody extends StatelessWidget {
             ],
             _PondStatusBanner(status: overallStatus(snapshot.readings)),
             const SizedBox(height: AppSpacing.lg),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Latest readings',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.sm),
-                _LastUpdated(
-                  timestamp: snapshot
-                      .reading(snapshot.readings.keys.first)
-                      .timestamp,
-                ),
-              ],
+            _SectionHeader(
+              icon: Icons.sensors,
+              title: 'Latest readings',
+              trailing: _LastUpdated(
+                timestamp: snapshot
+                    .reading(snapshot.readings.keys.first)
+                    .timestamp,
+              ),
             ),
             const SizedBox(height: AppSpacing.md),
             ReadingGrid(readings: snapshot.readings, history: snapshot.history),
             const SizedBox(height: AppSpacing.xl),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Feeding schedule',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ),
-                IconButton(
-                  onPressed: () => _editPondSpecies(context, pond),
-                  icon: const Icon(Icons.edit_outlined),
-                  tooltip: pond.speciesNames.isEmpty
-                      ? 'Add species'
-                      : 'Edit species',
-                  visualDensity: VisualDensity.compact,
-                ),
-              ],
+            _SectionHeader(
+              icon: Icons.set_meal_outlined,
+              title: 'Feeding schedule',
+              trailing: IconButton(
+                onPressed: () => _editPondSpecies(context, pond),
+                icon: const Icon(Icons.edit_outlined),
+                tooltip: pond.speciesNames.isEmpty
+                    ? 'Add species'
+                    : 'Edit species',
+                visualDensity: VisualDensity.compact,
+              ),
             ),
             const SizedBox(height: AppSpacing.md),
             _FeedingScheduleSection(pond: pond),
             const SizedBox(height: AppSpacing.xl),
-            Text(
-              'Water quality recommendations',
-              style: Theme.of(context).textTheme.titleMedium,
+            _SectionHeader(
+              icon: Icons.tips_and_updates_outlined,
+              title: 'Water quality recommendations',
+              trailing: _CountPill(
+                count: _advisories(
+                  dashboard,
+                  (r) => r.waterQualityRecommendations,
+                ).length,
+              ),
             ),
             const SizedBox(height: AppSpacing.md),
             _AdvisoryList(
               icon: Icons.tips_and_updates_outlined,
               accentColor: Theme.of(context).colorScheme.primary,
-              items: dashboard.waterQualityRecommendations,
+              items: _advisories(
+                dashboard,
+                (r) => r.waterQualityRecommendations,
+              ),
               hasSpecies: pond.speciesNames.isNotEmpty,
               loading: dashboard.feedingLoading,
               error: dashboard.feedingError,
@@ -180,25 +176,26 @@ class PondDashboardBody extends StatelessWidget {
                   'No specific recommendations right now — readings look healthy.',
             ),
             const SizedBox(height: AppSpacing.xl),
-            Text(
-              'Possible risks',
-              style: Theme.of(context).textTheme.titleMedium,
+            _SectionHeader(
+              icon: Icons.warning_amber_outlined,
+              title: 'Possible risks',
+              trailing: _CountPill(
+                count: _advisories(dashboard, (r) => r.possibleRisks).length,
+                color: context.statusColors.warning,
+              ),
             ),
             const SizedBox(height: AppSpacing.md),
             _AdvisoryList(
               icon: Icons.warning_amber_outlined,
               accentColor: context.statusColors.warning,
-              items: dashboard.possibleRisks,
+              items: _advisories(dashboard, (r) => r.possibleRisks),
               hasSpecies: pond.speciesNames.isNotEmpty,
               loading: dashboard.feedingLoading,
               error: dashboard.feedingError,
               emptyMessage: 'No notable risks identified right now.',
             ),
             const SizedBox(height: AppSpacing.xl),
-            Text(
-              'Individual trends',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
+            _SectionHeader(icon: Icons.show_chart, title: 'Individual trends'),
             const SizedBox(height: AppSpacing.md),
             for (final type in MetricType.values) ...[
               IndividualTrendChart(
@@ -208,13 +205,14 @@ class PondDashboardBody extends StatelessWidget {
               ),
               const SizedBox(height: AppSpacing.lg),
             ],
-            Text(
-              'AI Recommended Species',
-              style: Theme.of(context).textTheme.titleMedium,
+            _SectionHeader(
+              icon: Icons.auto_awesome_outlined,
+              title: 'AI Recommended Species',
             ),
             const SizedBox(height: AppSpacing.md),
             SpeciesRecommendationCard(
               recommendation: dashboard.recommendation,
+              readings: snapshot.readings,
               loading: dashboard.recommendationLoading,
               error: dashboard.recommendationError,
             ),
@@ -490,7 +488,60 @@ class _FeedingDetailTile extends StatelessWidget {
 /// Each item renders as its own [accentColor]-tinted tile rather than a
 /// single enclosing card, so a long list of distinct tips/risks stays easy
 /// to scan.
-class _AdvisoryList extends StatelessWidget {
+/// One tip or risk, with the species (of this pond's) it applies to.
+typedef _Advisory = ({String text, List<String> species});
+
+/// Merges the per-species advice picked by [pick] into one list: identical
+/// advice shared by several species appears once, tagged with all of them.
+List<_Advisory> _advisories(
+  DashboardProvider dashboard,
+  List<String> Function(FeedingRecommendation) pick,
+) {
+  final bySpecies = <String, List<String>>{};
+  for (final entry in dashboard.feedingRecommendations.entries) {
+    for (final text in pick(entry.value)) {
+      bySpecies.putIfAbsent(text, () => []).add(entry.key);
+    }
+  }
+  return [
+    for (final entry in bySpecies.entries)
+      (text: entry.key, species: entry.value),
+  ];
+}
+
+/// How many items a section lists before collapsing the rest behind
+/// "Show more".
+const _advisoryPreviewCount = 3;
+
+class _CountPill extends StatelessWidget {
+  const _CountPill({required this.count, this.color});
+
+  final int count;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    if (count == 0) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    final c = color ?? theme.colorScheme.primary;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+      decoration: BoxDecoration(
+        color: c.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+      ),
+      child: Text(
+        '$count',
+        style: theme.textTheme.labelMedium?.copyWith(
+          color: c,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+class _AdvisoryList extends StatefulWidget {
   const _AdvisoryList({
     required this.icon,
     required this.accentColor,
@@ -503,15 +554,29 @@ class _AdvisoryList extends StatelessWidget {
 
   final IconData icon;
   final Color accentColor;
-  final List<String> items;
+  final List<_Advisory> items;
   final bool hasSpecies;
   final bool loading;
   final String? error;
   final String emptyMessage;
 
   @override
+  State<_AdvisoryList> createState() => _AdvisoryListState();
+}
+
+class _AdvisoryListState extends State<_AdvisoryList> {
+  var _expanded = false;
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final icon = widget.icon;
+    final accentColor = widget.accentColor;
+    final items = widget.items;
+    final hasSpecies = widget.hasSpecies;
+    final loading = widget.loading;
+    final error = widget.error;
+    final emptyMessage = widget.emptyMessage;
 
     if (!hasSpecies) {
       return Card(
@@ -561,7 +626,7 @@ class _AdvisoryList extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(error!, style: theme.textTheme.bodyMedium),
+                    Text(error, style: theme.textTheme.bodyMedium),
                     const SizedBox(height: AppSpacing.xs),
                     Align(
                       alignment: Alignment.centerLeft,
@@ -587,59 +652,170 @@ class _AdvisoryList extends StatelessWidget {
           padding: const EdgeInsets.all(AppSpacing.lg),
           child: Row(
             children: [
-              Icon(
-                Icons.check_circle_outline,
-                size: 18,
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: Text(
-                  emptyMessage,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: context.statusColors.good.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                ),
+                child: Icon(
+                  Icons.check_circle_outline,
+                  size: 18,
+                  color: context.statusColors.good,
                 ),
               ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(child: Text(emptyMessage)),
             ],
           ),
         ),
       );
     }
 
+    final collapsible = items.length > _advisoryPreviewCount;
+    final shown = collapsible && !_expanded
+        ? items.take(_advisoryPreviewCount).toList()
+        : items;
+    // Species tags only help when more than one species could be meant.
+    final showSpecies = hasSpecies && items.any((i) => i.species.isNotEmpty);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (final (index, item) in items.indexed)
+        for (final (index, item) in shown.indexed)
           Padding(
             padding: EdgeInsets.only(
-              bottom: item == items.last ? 0 : AppSpacing.sm,
+              bottom: index == shown.length - 1 ? 0 : AppSpacing.sm,
             ),
             child: StaggeredEntrance(
               index: index,
               child: Container(
                 padding: const EdgeInsets.all(AppSpacing.md),
                 decoration: BoxDecoration(
-                  color: accentColor.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(AppRadius.md),
-                  border: Border.all(
-                    color: accentColor.withValues(alpha: 0.25),
-                  ),
+                  color: theme.colorScheme.surface,
+                  borderRadius: BorderRadius.circular(AppRadius.lg),
+                  border: Border.all(color: theme.colorScheme.outlineVariant),
                 ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(icon, size: 18, color: accentColor),
-                    const SizedBox(width: AppSpacing.sm),
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: accentColor.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(AppRadius.sm),
+                      ),
+                      child: Icon(icon, size: 18, color: accentColor),
+                    ),
+                    const SizedBox(width: AppSpacing.md),
                     Expanded(
-                      child: Text(item, style: theme.textTheme.bodyMedium),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(item.text, style: theme.textTheme.bodyMedium),
+                          if (showSpecies && item.species.isNotEmpty) ...[
+                            const SizedBox(height: AppSpacing.sm),
+                            Wrap(
+                              spacing: AppSpacing.xs,
+                              runSpacing: AppSpacing.xs,
+                              children: [
+                                for (final name in item.species)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: theme
+                                          .colorScheme
+                                          .surfaceContainerHighest,
+                                      borderRadius: BorderRadius.circular(
+                                        AppRadius.pill,
+                                      ),
+                                    ),
+                                    child: Text(
+                                      name,
+                                      style: theme.textTheme.labelSmall
+                                          ?.copyWith(
+                                            color: theme
+                                                .colorScheme
+                                                .onSurfaceVariant,
+                                          ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
                   ],
                 ),
               ),
             ),
           ),
+        if (collapsible)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () => setState(() => _expanded = !_expanded),
+              icon: Icon(
+                _expanded ? Icons.expand_less : Icons.expand_more,
+                size: 18,
+              ),
+              label: Text(
+                _expanded
+                    ? 'Show less'
+                    : 'Show ${items.length - _advisoryPreviewCount} more',
+              ),
+            ),
+          ),
       ],
+    );
+  }
+}
+
+/// Heading shared by every section of the pond page: a tinted icon tile, the
+/// title, and an optional trailing widget (a timestamp, an edit button).
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({
+    required this.icon,
+    required this.title,
+    this.trailing,
+  });
+
+  final IconData icon;
+  final String title;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Padding(
+      padding: EdgeInsets.zero,
+      child: Row(
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: scheme.primary.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+            ),
+            child: Icon(icon, size: 18, color: scheme.primary),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(child: Text(title, style: theme.textTheme.titleMedium)),
+          if (trailing != null) ...[
+            const SizedBox(width: AppSpacing.sm),
+            trailing!,
+          ],
+        ],
+      ),
     );
   }
 }
@@ -701,7 +877,15 @@ class _PondStatusBanner extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(status.icon, color: color, size: 28),
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.18),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(status.icon, color: color, size: 24),
+          ),
           const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(

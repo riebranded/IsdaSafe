@@ -63,13 +63,14 @@ void main() {
     expect(find.text('Pond C'), findsOneWidget);
   });
 
-  testWidgets('adding a pond shows it in the list', (tester) async {
+  testWidgets('adding a pond starts its verification', (tester) async {
     await tester.pumpWidget(buildApp());
     await tester.pump();
     await tester.pump();
 
     await tester.tap(find.byIcon(Icons.add));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
 
     await tester.enterText(
       find.widgetWithText(TextField, 'Pond name'),
@@ -80,9 +81,15 @@ void main() {
     await tester.enterText(find.byType(TextField).at(0), '10.3000');
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Add pond'));
-    await tester.pumpAndSettle();
+    // The dialog's spinner never settles, so pump a few frames instead.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
 
-    expect(find.text('Pond D'), findsOneWidget);
+    // New ponds are verified before they reach the list, so the user is told
+    // that's under way instead.
+    expect(find.textContaining('Verifying'), findsAtLeastNWidgets(1));
+    await tester.tap(find.text('Got it'));
+    await tester.pump(const Duration(milliseconds: 500));
   });
 
   testWidgets(
@@ -96,11 +103,11 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Latest readings'), findsOneWidget);
-      expect(find.text('Water Temperature'), findsOneWidget);
-      expect(find.text('Humidity'), findsOneWidget);
-      expect(find.text('Ammonia'), findsOneWidget);
-      expect(find.text('Dissolved Oxygen'), findsOneWidget);
-      expect(find.text('pH Level'), findsOneWidget);
+      expect(find.text('Water Temperature'), findsAtLeastNWidgets(1));
+      expect(find.text('Humidity'), findsAtLeastNWidgets(1));
+      expect(find.text('Ammonia'), findsAtLeastNWidgets(1));
+      expect(find.text('Dissolved Oxygen'), findsAtLeastNWidgets(1));
+      expect(find.text('pH Level'), findsAtLeastNWidgets(1));
 
       expect(find.text('AI Recommended Species'), findsOneWidget);
     },

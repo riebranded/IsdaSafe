@@ -78,6 +78,18 @@ extension TrendRangeInfo on TrendRange {
   }
 }
 
+/// An x-axis label for [time] on a custom timeframe spanning [span]: the time
+/// of day for a day or two, "Oct 4" for up to a few months, otherwise
+/// "Oct 2026".
+String formatCustomTimestamp(DateTime time, Duration span) {
+  if (span <= const Duration(days: 2)) {
+    return TrendRange.hourly.formatTimestamp(time);
+  }
+  final month = _monthNames[time.month - 1].substring(0, 3);
+  if (span <= const Duration(days: 92)) return '$month ${time.day}';
+  return '$month ${time.year}';
+}
+
 const _monthNames = [
   'January',
   'February',

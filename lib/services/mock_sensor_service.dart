@@ -121,4 +121,39 @@ class MockSensorService {
     }
     return points;
   }
+
+  /// A synthetic series between [start] and [end] for a user-picked custom
+  /// timeframe: about one point per day (8 to 12 points in all), seeded on
+  /// the pond, metric and dates so reopening the same period gives the same
+  /// shape.
+  List<SensorReading> historyForPeriod(
+    Pond pond,
+    MetricType type,
+    DateTime start,
+    DateTime end,
+  ) {
+    final band = _bands[type]!;
+    final jitter = _jitter[type]!;
+    final seed =
+        pond.seed ^
+        type.index ^
+        start.millisecondsSinceEpoch ^
+        end.millisecondsSinceEpoch;
+    final walkRandom = Random(seed);
+    final step = jitter * 2;
+    var value = band.min + walkRandom.nextDouble() * (band.max - band.min);
+
+    final span = end.difference(start);
+    final pointCount = (span.inDays + 1).clamp(8, 12);
+    final points = <SensorReading>[];
+    for (var i = 0; i < pointCount; i++) {
+      final timestamp = start.add(span * (i / (pointCount - 1)));
+      points.add(SensorReading(type: type, value: value, timestamp: timestamp));
+      value = (value + (walkRandom.nextDouble() - 0.5) * 2 * step).clamp(
+        band.min,
+        band.max,
+      );
+    }
+    return points;
+  }
 }
