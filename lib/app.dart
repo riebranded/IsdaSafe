@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 
+import 'l10n/language_provider.dart';
 import 'providers/theme_provider.dart';
 import 'screens/auth/auth_gate.dart';
 import 'theme/app_theme.dart';
+import 'l10n/tr.dart';
 
 /// Suppresses the draggable scrollbar Flutter draws by default on
 /// mouse-based platforms (web, desktop) for every scrollable widget.
@@ -28,13 +31,18 @@ class IsdaSafeApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final themeMode = context.watch<ThemeProvider>().themeMode;
+    // Also what makes the widgets below re-run when the language changes.
+    final languageProvider = context.watch<LanguageProvider>();
 
     return MaterialApp(
-      title: 'IsdaSafe',
+      title: 'IsdaSafe'.tr,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: themeMode,
+      locale: languageProvider.locale,
+      supportedLocales: const [Locale('en'), Locale('fil')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       scrollBehavior: const _NoScrollbarBehavior(),
       // On wide screens a floating snackbar would span the whole window; keep
       // it a readable card instead. (Phones keep the themed side insets.)

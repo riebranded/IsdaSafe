@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/auth_service.dart';
 import '../../theme/app_spacing.dart';
 import '../../widgets/rate_limit_banner.dart';
+import '../../l10n/tr.dart';
 
 const _kOtpLength = 6;
 
@@ -89,7 +90,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message.tr)));
   }
 
   String get _code => _otpController.text;
@@ -122,7 +123,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       debugPrint('OtpVerificationScreen: verify AuthException: ${e.message}');
       if (mounted) _showError(e.message);
     } catch (e) {
-      if (mounted) _showError('Something went wrong. Please try again.');
+      if (mounted) _showError('Something went wrong. Please try again.'.tr);
       debugPrint('OtpVerificationScreen: verify error $e');
     } finally {
       if (mounted) setState(() => _isVerifying = false);
@@ -140,13 +141,13 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       await AuthService.requestSemaphoreOtp(widget.phone);
       if (mounted) {
         _otpController.clear();
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Verification code resent.')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Verification code resent.'.tr)));
         _startResendCountdown();
       }
     } on AuthException catch (e) {
       if (mounted) _handleResendError(e.message);
     } catch (e) {
-      if (mounted) _showError('Something went wrong. Please try again.');
+      if (mounted) _showError('Something went wrong. Please try again.'.tr);
       debugPrint('OtpVerificationScreen: resend error $e');
     } finally {
       if (mounted) setState(() => _isResending = false);
@@ -180,7 +181,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     final canResend = _secondsRemaining == 0 && !_isResending;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Verify your number')),
+      appBar: AppBar(title: Text('Verify your number'.tr)),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -193,10 +194,10 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                 children: [
                   Icon(Icons.sms_outlined, size: 48, color: theme.colorScheme.primary),
                   const SizedBox(height: AppSpacing.md),
-                  Text('Enter verification code', style: theme.textTheme.headlineSmall, textAlign: TextAlign.center),
+                  Text('Enter verification code'.tr, style: theme.textTheme.headlineSmall, textAlign: TextAlign.center),
                   const SizedBox(height: AppSpacing.xs),
                   Text(
-                    'We sent a 6-digit code to ${widget.phone}',
+                    'We sent a 6-digit code to {0}'.trf([widget.phone]),
                     style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                     textAlign: TextAlign.center,
                   ),
@@ -234,16 +235,16 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                     onPressed: (!_isVerifying && _code.length == _kOtpLength) ? _verify : null,
                     child: _isVerifying
                         ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Text('Verify'),
+                        : Text('Verify'.tr),
                   ),
                   const SizedBox(height: AppSpacing.lg),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text("Didn't get a code?", style: theme.textTheme.bodyMedium),
+                      Text('Didn\'t get a code?'.tr, style: theme.textTheme.bodyMedium),
                       TextButton(
                         onPressed: canResend ? _resend : null,
-                        child: Text(canResend ? 'Resend' : 'Resend in ${formatCountdown(_secondsRemaining)}'),
+                        child: Text(canResend ? 'Resend'.tr : 'Resend in {0}'.trf([formatCountdown(_secondsRemaining)])),
                       ),
                     ],
                   ),

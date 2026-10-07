@@ -7,7 +7,10 @@ import '../providers/pond_provider.dart';
 import '../services/pond_snapshot_cache.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/individual_trend_chart.dart';
+import '../widgets/metric_detail_view.dart';
+import '../widgets/modal_date_range_picker.dart';
 import '../widgets/reading_history_table.dart';
+import '../l10n/tr.dart';
 
 /// A pond selector plus that pond's per-metric trends and raw reading
 /// history — lets a farmer switch between ponds without leaving Analytics.
@@ -28,16 +31,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   DateTimeRange? _custom;
 
   Future<void> _pickCustomRange() async {
-    final now = DateTime.now();
-    final picked = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime(now.year - 2),
-      lastDate: now,
-      initialDateRange:
-          _custom ??
-          DateTimeRange(start: now.subtract(const Duration(days: 7)), end: now),
-      helpText: 'Select a timeframe',
-    );
+    final picked = await showModalDateRangePicker(context, initial: _custom);
     if (picked == null || !mounted) return;
     setState(() => _custom = picked);
   }
@@ -55,7 +49,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     if (ponds.isEmpty) {
       return Center(
         child: Text(
-          'Add a pond to see its trends here.',
+          'Add a pond to see its trends here.'.tr,
           style: theme.textTheme.bodyMedium,
         ),
       );
@@ -136,7 +130,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                   OutlinedButton.icon(
                     onPressed: _pickCustomRange,
                     icon: const Icon(Icons.date_range, size: 18),
-                    label: const Text('Custom'),
+                    label: Text('Custom'.tr),
                   )
                 else
                   InputChip(
@@ -144,13 +138,13 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                     label: Text(_customLabel(custom)),
                     onPressed: _pickCustomRange,
                     onDeleted: () => setState(() => _custom = null),
-                    deleteButtonTooltipMessage: 'Clear custom timeframe',
+                    deleteButtonTooltipMessage: 'Clear custom timeframe'.tr,
                   ),
               ],
             ),
           ),
           const SizedBox(height: AppSpacing.lg),
-          Text('Individual trends', style: theme.textTheme.titleMedium),
+          Text('Individual trends'.tr, style: theme.textTheme.titleMedium),
           const SizedBox(height: AppSpacing.md),
           for (final type in MetricType.values) ...[
             IndividualTrendChart(
@@ -158,10 +152,18 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
               history: rangedHistory[type]!,
               range: _range,
               timeFormat: custom == null ? null : timeFormat,
+              onTap: () => showMetricDetail(
+                context,
+                pond: selected,
+                type: type,
+                cache: widget.cache,
+                initialRange: _range,
+                initialCustom: custom,
+              ),
             ),
             const SizedBox(height: AppSpacing.lg),
           ],
-          Text('Individual readings', style: theme.textTheme.titleMedium),
+          Text('Individual readings'.tr, style: theme.textTheme.titleMedium),
           const SizedBox(height: AppSpacing.md),
           ReadingHistoryTable(history: rangedHistory),
         ],

@@ -1,5 +1,6 @@
 import 'metric_type.dart';
 import 'sensor_reading.dart';
+import '../l10n/tr.dart';
 
 class MetricRange {
   const MetricRange(this.min, this.max);
@@ -48,8 +49,9 @@ enum Suitability {
   partial('Partly suitable'),
   unsuitable('Not suitable');
 
-  const Suitability(this.label);
-  final String label;
+  const Suitability(String label) : _label = label;
+  final String _label;
+  String get label => _label.tr;
 }
 
 /// A species' [Suitability] for a set of readings, plus which readings fall
@@ -76,7 +78,9 @@ extension SpeciesSuitability on FishSpecies {
       final reading = readings[entry.key];
       if (reading == null || entry.value.contains(reading.value)) continue;
       final tooLow = reading.value < entry.value.min;
-      issues.add('${entry.key.label} too ${tooLow ? 'low' : 'high'}');
+      issues.add(
+        (tooLow ? '{0} too low' : '{0} too high').trf([entry.key.label]),
+      );
     }
     final level = issues.isEmpty
         ? Suitability.suitable

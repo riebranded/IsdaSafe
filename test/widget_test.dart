@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:isdasafev2/app.dart';
 import 'package:isdasafev2/providers/notification_provider.dart';
 import 'package:isdasafev2/providers/pond_provider.dart';
+import 'package:isdasafev2/l10n/language_provider.dart';
 import 'package:isdasafev2/providers/theme_provider.dart';
 import 'package:isdasafev2/screens/app_shell.dart';
 
@@ -48,6 +49,7 @@ void main() {
               NotificationProvider(repository: FakeNotificationRepository()),
         ),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ChangeNotifierProvider(create: (_) => LanguageProvider()),
       ],
       child: const IsdaSafeApp(home: AppShell()),
     );

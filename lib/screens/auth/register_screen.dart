@@ -7,41 +7,10 @@ import '../../services/auth_service.dart';
 import '../../theme/app_spacing.dart';
 import '../../widgets/captcha_field.dart';
 import '../../widgets/password_strength_checklist.dart';
+import '../../widgets/phone_input.dart';
 import '../../widgets/rate_limit_banner.dart';
 import 'otp_verification_screen.dart';
-
-/// This app only serves Philippine mobile numbers, so the calling code is
-/// fixed rather than offered as a choice.
-const _kPhCountryCode = '+63';
-
-/// PH mobile numbers are commonly typed with their local trunk prefix
-/// ("09171234567"), but E.164 drops it — the country code replaces it, not
-/// precedes it. Concatenating "+63" directly onto a leading-0 number would
-/// produce an invalid "+6309171234567" that send-semaphore-otp rejects, so
-/// a leading 0 is stripped live as it's typed (see [_phoneInputFormatters])
-/// rather than requiring the user to type exactly 10 digits with no zero.
-class _StripLeadingTrunkZeroFormatter extends TextInputFormatter {
-  const _StripLeadingTrunkZeroFormatter();
-
-  @override
-  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
-    if (!newValue.text.startsWith('0')) return newValue;
-    final stripped = newValue.text.substring(1);
-    final newOffset = (newValue.selection.baseOffset - 1).clamp(0, stripped.length);
-    return TextEditingValue(text: stripped, selection: TextSelection.collapsed(offset: newOffset));
-  }
-}
-
-/// Digits only, a leading trunk "0" silently dropped, capped at 10 —
-/// exactly the digits that follow "+63" in a valid PH mobile E.164 number,
-/// so anything left in the field once these formatters have run is either
-/// a complete number or an in-progress prefix of one, never something
-/// send-semaphore-otp would reject as malformed.
-final _phoneInputFormatters = <TextInputFormatter>[
-  FilteringTextInputFormatter.digitsOnly,
-  const _StripLeadingTrunkZeroFormatter(),
-  LengthLimitingTextInputFormatter(10),
-];
+import '../../l10n/tr.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -103,10 +72,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
     });
     if (_hasGoogleSession) {
       final user = AuthService.currentUser!;
-      _fullNameController.text = (user.userMetadata?['full_name'] as String?) ?? '';
+      _fullNameController.text =
+          (user.userMetadata?['full_name'] as String?) ?? '';
       _emailController.text = user.email ?? '';
       _googlePhotoUrl =
-          (user.userMetadata?['avatar_url'] as String?) ?? (user.userMetadata?['picture'] as String?);
+          (user.userMetadata?['avatar_url'] as String?) ??
+          (user.userMetadata?['picture'] as String?);
     }
   }
 
@@ -121,7 +92,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message.tr)));
   }
 
   /// Supabase's own wording for this varies by GoTrue version ("User
@@ -132,7 +105,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
   /// matching after a Supabase upgrade.
   bool _looksLikeDuplicateEmail(String message) {
     final lower = message.toLowerCase();
-    return lower.contains('already registered') || lower.contains('already exists');
+    return lower.contains('already registered') ||
+        lower.contains('already exists');
   }
 
   /// Same "does this Google account already have an account?" check as
@@ -149,7 +123,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     } on AuthException catch (e) {
       if (mounted) _showError(e.message);
     } catch (e) {
-      if (mounted) _showError('Something went wrong. Please try again.');
+      if (mounted) _showError('Something went wrong. Please try again.'.tr);
       debugPrint('RegisterScreen: Google sign-in error $e');
     } finally {
       if (mounted) setState(() => _isGoogleSubmitting = false);
@@ -172,7 +146,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         _pickedImageMimeType = xfile.mimeType ?? 'image/jpeg';
       });
     } catch (e) {
-      if (mounted) _showError('Could not open the image picker.');
+      if (mounted) _showError('Could not open the image picker.'.tr);
       debugPrint('RegisterScreen: image pick error $e');
     }
   }
@@ -183,7 +157,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Future<String?> _resolvePhotoUrl() {
     final bytes = _pickedImageBytes;
     if (bytes == null) return Future.value(_googlePhotoUrl);
-    return AuthService.uploadAvatar(bytes: bytes, contentType: _pickedImageMimeType ?? 'image/jpeg');
+    return AuthService.uploadAvatar(
+      bytes: bytes,
+      contentType: _pickedImageMimeType ?? 'image/jpeg',
+    );
   }
 
   Future<void> _submit() async {
@@ -193,7 +170,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     final fullName = _fullNameController.text.trim();
     final email = _emailController.text.trim();
-    final e164Phone = '$_kPhCountryCode${_phoneController.text.trim()}';
+    final e164Phone = '$kPhCountryCode${_phoneController.text.trim()}';
 
     setState(() {
       _isSubmitting = true;
@@ -212,14 +189,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
       // The Google-prefill flow never calls signUpWithEmail (no new email
       // account is being created), so there's nothing to check here — and
       // the email field is fixed/uneditable in that mode anyway.
-      final emailTakenFuture = isGoogleFlow ? Future.value(false) : AuthService.isEmailTaken(email);
-      final [phoneTaken, emailTaken] = await Future.wait([phoneTakenFuture, emailTakenFuture]);
+      final emailTakenFuture = isGoogleFlow
+          ? Future.value(false)
+          : AuthService.isEmailTaken(email);
+      final [phoneTaken, emailTaken] = await Future.wait([
+        phoneTakenFuture,
+        emailTakenFuture,
+      ]);
 
       if (phoneTaken || emailTaken) {
         if (mounted) {
           setState(() {
-            if (phoneTaken) _phoneTakenError = 'This phone number is already registered.';
-            if (emailTaken) _emailTakenError = 'An account with this email already exists.';
+            if (phoneTaken)
+              _phoneTakenError =
+                  'The number is already in use by other account'.tr;
+            if (emailTaken)
+              _emailTakenError = 'An account with this email already exists.'.tr;
           });
           // Setting the state above doesn't itself re-run the fields'
           // validators (that only happens on user interaction or an
@@ -252,7 +237,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
       final photoUrl = await _resolvePhotoUrl();
 
       if (AuthService.bypassOtpVerification) {
-        debugPrint('RegisterScreen: OTP bypass enabled — marking profile verified without SMS.');
+        debugPrint(
+          'RegisterScreen: OTP bypass enabled — marking profile verified without SMS.',
+        );
         await AuthService.upsertProfile(
           fullName: fullName,
           email: email,
@@ -287,11 +274,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
     } on AuthException catch (e) {
       AuthService.isManagingPhoneVerification = false;
       final isRateLimit =
-          e.message == AuthService.otpCooldownMessage || e.message == AuthService.otpBurstOrDailyLimitMessage;
+          e.message == AuthService.otpCooldownMessage ||
+          e.message == AuthService.otpBurstOrDailyLimitMessage;
       // Supabase's own signUp() error for a duplicate email — thrown before
       // anything else in this flow runs, so (unlike the phone/OTP failures
       // above) nothing's been created yet for this attempt.
-      final isDuplicateEmail = !_hasGoogleSession && _looksLikeDuplicateEmail(e.message);
+      final isDuplicateEmail =
+          !_hasGoogleSession && _looksLikeDuplicateEmail(e.message);
       // The account (and, for the email/password path, the session) was
       // already created by the time requestSemaphoreOtp can fail here — a
       // rate-limit rejection doesn't mean signup failed, just that the SMS
@@ -300,7 +289,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
       // the user tries "Create account" again.
       if (mounted) {
         if (isDuplicateEmail) {
-          setState(() => _emailTakenError = 'An account with this email already exists.');
+          setState(
+            () =>
+                _emailTakenError = 'An account with this email already exists.'.tr,
+          );
           _formKey.currentState?.validate();
         } else if (isRateLimit) {
           setState(() => _rateLimitError = e.message);
@@ -310,7 +302,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       }
     } catch (e) {
       AuthService.isManagingPhoneVerification = false;
-      if (mounted) _showError('Something went wrong. Please try again.');
+      if (mounted) _showError('Something went wrong. Please try again.'.tr);
       debugPrint('RegisterScreen: sign-up error $e');
     } finally {
       // Tokens are single-use — always fetch a fresh one, whether this
@@ -327,7 +319,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final busy = _isSubmitting || _isGoogleSubmitting;
 
     return Scaffold(
-      appBar: AppBar(title: Text(_hasGoogleSession ? 'Finish setting up' : 'Create account')),
+      appBar: AppBar(
+        title: Text(_hasGoogleSession ? 'Finish setting up'.tr : 'Create account'.tr),
+      ),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -344,14 +338,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     const SizedBox(height: AppSpacing.lg),
                     if (_hasGoogleSession) ...[
                       Text(
-                        'Signed in as ${_emailController.text} via Google',
+                        'Signed in as {0} via Google'.trf([_emailController.text]),
                         style: theme.textTheme.bodyMedium,
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: AppSpacing.xs),
                       Text(
-                        'Just need your mobile number to finish setting up your account.',
-                        style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                        'Just need your mobile number to finish setting up your account.'.tr,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: AppSpacing.lg),
@@ -359,15 +355,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       OutlinedButton.icon(
                         onPressed: busy ? null : _continueWithGoogle,
                         icon: _isGoogleSubmitting
-                            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
                             : const Icon(Icons.g_mobiledata, size: 28),
-                        label: const Text('Continue with Google'),
+                        label: Text('Continue with Google'.tr),
                       ),
                       const SizedBox(height: AppSpacing.xs),
                       Text(
-                        'Already have an account with this Google login? You’ll be '
-                        'signed straight in instead.',
-                        style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                        'Already have an account with this Google login? You’ll be signed straight in instead.'.tr,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: AppSpacing.lg),
@@ -375,7 +378,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         children: [
                           const Expanded(child: Divider()),
                           Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: AppSpacing.sm,
+                            ),
                             child: Text('or', style: theme.textTheme.bodySmall),
                           ),
                           const Expanded(child: Divider()),
@@ -387,7 +392,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       Center(
                         child: CaptchaField(
                           key: _captchaKey,
-                          onTokenChanged: (token) => setState(() => _captchaToken = token),
+                          onTokenChanged: (token) =>
+                              setState(() => _captchaToken = token),
                         ),
                       ),
                       const SizedBox(height: AppSpacing.md),
@@ -396,8 +402,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       controller: _fullNameController,
                       enabled: !busy,
                       textInputAction: TextInputAction.next,
-                      decoration: const InputDecoration(labelText: 'Full name', prefixIcon: Icon(Icons.person_outline)),
-                      validator: (value) => (value == null || value.trim().isEmpty) ? 'Enter your full name' : null,
+                      decoration: InputDecoration(
+                        labelText: 'Full name'.tr,
+                        prefixIcon: Icon(Icons.person_outline),
+                      ),
+                      validator: (value) =>
+                          (value == null || value.trim().isEmpty)
+                          ? 'Enter your full name'.tr
+                          : null,
                     ),
                     const SizedBox(height: AppSpacing.md),
                     TextFormField(
@@ -405,14 +417,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       enabled: !busy && !_hasGoogleSession,
                       keyboardType: TextInputType.emailAddress,
                       textInputAction: TextInputAction.next,
-                      decoration: const InputDecoration(labelText: 'Email address', prefixIcon: Icon(Icons.email_outlined)),
+                      decoration: InputDecoration(
+                        labelText: 'Email address'.tr,
+                        prefixIcon: Icon(Icons.email_outlined),
+                      ),
                       onChanged: (_) {
-                        if (_emailTakenError != null) setState(() => _emailTakenError = null);
+                        if (_emailTakenError != null)
+                          setState(() => _emailTakenError = null);
                       },
                       validator: (value) {
                         final trimmed = value?.trim() ?? '';
-                        if (trimmed.isEmpty) return 'Enter your email';
-                        if (!_emailRegExp.hasMatch(trimmed)) return 'Enter a valid email address';
+                        if (trimmed.isEmpty) return 'Enter your email'.tr;
+                        if (!_emailRegExp.hasMatch(trimmed))
+                          return 'Enter a valid email address'.tr;
                         return _emailTakenError;
                       },
                     ),
@@ -422,18 +439,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       enabled: !busy,
                       keyboardType: TextInputType.phone,
                       textInputAction: TextInputAction.next,
-                      inputFormatters: _phoneInputFormatters,
-                      decoration: const InputDecoration(
-                        labelText: 'Mobile number',
+                      inputFormatters: phoneInputFormatters,
+                      decoration: InputDecoration(
+                        labelText: 'Mobile number'.tr,
                         prefixIcon: Icon(Icons.phone_outlined),
-                        prefixText: '$_kPhCountryCode ',
-                        helperText: 'e.g. 9171234567 — the leading 0 is optional',
+                        prefixText: '$kPhCountryCode ',
+                        helperText:
+                            'e.g. 9171234567 — the leading 0 is optional'.tr,
                       ),
                       onChanged: (_) {
-                        if (_phoneTakenError != null) setState(() => _phoneTakenError = null);
+                        if (_phoneTakenError != null)
+                          setState(() => _phoneTakenError = null);
                       },
                       validator: (value) {
-                        if ((value ?? '').length != 10) return 'Enter a valid 10-digit mobile number';
+                        if ((value ?? '').length != 10)
+                          return 'Enter a valid 10-digit mobile number'.tr;
                         return _phoneTakenError;
                       },
                     ),
@@ -445,15 +465,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         obscureText: _obscurePassword,
                         textInputAction: TextInputAction.next,
                         decoration: InputDecoration(
-                          labelText: 'Password',
+                          labelText: 'Password'.tr,
                           prefixIcon: const Icon(Icons.lock_outline),
                           suffixIcon: IconButton(
-                            icon: Icon(_obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined),
-                            onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                            icon: Icon(
+                              _obscurePassword
+                                  ? Icons.visibility_outlined
+                                  : Icons.visibility_off_outlined,
+                            ),
+                            onPressed: () => setState(
+                              () => _obscurePassword = !_obscurePassword,
+                            ),
                           ),
                         ),
-                        validator: (value) =>
-                            isStrongPassword(value ?? '') ? null : 'Password does not meet all requirements',
+                        validator: (value) => isStrongPassword(value ?? '')
+                            ? null
+                            : 'Password does not meet all requirements'.tr,
                       ),
                       const SizedBox(height: AppSpacing.sm),
                       PasswordStrengthChecklist(password: _password),
@@ -464,25 +491,42 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         obscureText: _obscureConfirmPassword,
                         textInputAction: TextInputAction.done,
                         decoration: InputDecoration(
-                          labelText: 'Confirm password',
+                          labelText: 'Confirm password'.tr,
                           prefixIcon: const Icon(Icons.lock_outline),
                           suffixIcon: IconButton(
                             icon: Icon(
-                              _obscureConfirmPassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                              _obscureConfirmPassword
+                                  ? Icons.visibility_outlined
+                                  : Icons.visibility_off_outlined,
                             ),
-                            onPressed: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword),
+                            onPressed: () => setState(
+                              () => _obscureConfirmPassword =
+                                  !_obscureConfirmPassword,
+                            ),
                           ),
                         ),
-                        validator: (value) => value == _passwordController.text ? null : 'Passwords do not match',
+                        validator: (value) => value == _passwordController.text
+                            ? null
+                            : 'Passwords do not match'.tr,
                         onFieldSubmitted: (_) => _submit(),
                       ),
                     ],
                     const SizedBox(height: AppSpacing.xl),
                     FilledButton(
-                      onPressed: (busy || (!_hasGoogleSession && _captchaToken == null)) ? null : _submit,
+                      onPressed:
+                          (busy ||
+                              (!_hasGoogleSession && _captchaToken == null))
+                          ? null
+                          : _submit,
                       child: _isSubmitting
-                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                          : Text(_hasGoogleSession ? 'Continue' : 'Create account'),
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : Text(
+                              _hasGoogleSession ? 'Continue'.tr : 'Create account'.tr,
+                            ),
                     ),
                     if (_rateLimitError != null) ...[
                       const SizedBox(height: AppSpacing.sm),
@@ -493,17 +537,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       Center(
                         child: TextButton(
                           onPressed: busy ? null : AuthService.signOut,
-                          child: const Text('Not you? Sign out'),
+                          child: Text('Not you? Sign out'.tr),
                         ),
                       )
                     else
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Text('Already have an account?', style: theme.textTheme.bodyMedium),
+                          Text(
+                            'Already have an account?'.tr,
+                            style: theme.textTheme.bodyMedium,
+                          ),
                           TextButton(
-                            onPressed: busy ? null : () => Navigator.of(context).pop(),
-                            child: const Text('Log in'),
+                            onPressed: busy
+                                ? null
+                                : () => Navigator.of(context).pop(),
+                            child: Text('Log in'.tr),
                           ),
                         ],
                       ),
@@ -537,7 +586,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
             backgroundColor: theme.colorScheme.surfaceContainerHighest,
             backgroundImage: image,
             child: image == null
-                ? Icon(Icons.person, size: 40, color: theme.colorScheme.onSurfaceVariant)
+                ? Icon(
+                    Icons.person,
+                    size: 40,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  )
                 : null,
           ),
           Positioned(
@@ -551,7 +604,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 onTap: busy ? null : _pickImage,
                 child: Padding(
                   padding: const EdgeInsets.all(6),
-                  child: Icon(Icons.camera_alt, size: 16, color: theme.colorScheme.onPrimary),
+                  child: Icon(
+                    Icons.camera_alt,
+                    size: 16,
+                    color: theme.colorScheme.onPrimary,
+                  ),
                 ),
               ),
             ),

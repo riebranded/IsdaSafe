@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/tr.dart';
 
 enum ReadingStatus { normal, warning, critical }
 
@@ -20,11 +21,11 @@ extension ReadingStatusInfo on ReadingStatus {
   String get label {
     switch (this) {
       case ReadingStatus.normal:
-        return 'Normal';
+        return 'Normal'.tr;
       case ReadingStatus.warning:
-        return 'Warning';
+        return 'Warning'.tr;
       case ReadingStatus.critical:
-        return 'Critical';
+        return 'Critical'.tr;
     }
   }
 }

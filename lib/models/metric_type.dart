@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/tr.dart';
 
 enum MetricType { temperature, humidity, ammonia, dissolvedOxygen, ph }
 
@@ -6,15 +7,15 @@ extension MetricTypeInfo on MetricType {
   String get label {
     switch (this) {
       case MetricType.temperature:
-        return 'Water Temperature';
+        return 'Water Temperature'.tr;
       case MetricType.humidity:
-        return 'Humidity';
+        return 'Humidity'.tr;
       case MetricType.ammonia:
-        return 'Ammonia';
+        return 'Ammonia'.tr;
       case MetricType.dissolvedOxygen:
-        return 'Dissolved Oxygen';
+        return 'Dissolved Oxygen'.tr;
       case MetricType.ph:
-        return 'pH Level';
+        return 'pH Level'.tr;
     }
   }
 

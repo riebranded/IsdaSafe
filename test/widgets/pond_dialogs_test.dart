@@ -360,10 +360,10 @@ void main() {
 
     expect(find.textContaining('Pond X'), findsOneWidget);
     expect(find.text('Checking your pond photos'), findsOneWidget);
-    expect(find.textContaining('notification in the app'), findsOneWidget);
+    expect(find.textContaining('notify you on your device'), findsOneWidget);
     // SMS is switched off, so the dialog must not promise a text.
     expect(find.textContaining('text'), findsNothing);
-    expect(find.textContaining('notification in the app'), findsOneWidget);
+    expect(find.textContaining('notify you on your device'), findsOneWidget);
     expect(find.textContaining('appears on your dashboard'), findsOneWidget);
 
     await tester.tap(find.text('Got it'));

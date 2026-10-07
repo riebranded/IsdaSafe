@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/reading_status.dart';
 import '../theme/app_theme.dart';
+import '../l10n/tr.dart';
 
 export '../models/reading_status.dart';
 
@@ -34,7 +35,7 @@ class StatusBadge extends StatelessWidget {
     final labelStyle = Theme.of(context).textTheme.labelMedium ?? const TextStyle(fontSize: 12);
 
     return Semantics(
-      label: '${status.label} status',
+      label: '{0} status'.trf([status.label]),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(

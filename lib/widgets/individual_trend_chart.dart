@@ -7,6 +7,7 @@ import '../models/trend_range.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_theme.dart';
 import 'status_badge.dart';
+import '../l10n/tr.dart';
 
 /// One metric as a card: on the left its name, latest value, status, healthy
 /// range and when it was last updated; on the right its trend on its own
@@ -19,7 +20,12 @@ class IndividualTrendChart extends StatelessWidget {
     required this.history,
     required this.range,
     this.timeFormat,
+    this.onTap,
   });
+
+  /// Makes the card tappable (e.g. to open a detailed view). The chart's own
+  /// tap/drag scrubbing still takes precedence over it.
+  final VoidCallback? onTap;
 
   final MetricType type;
   final List<SensorReading> history;
@@ -40,12 +46,16 @@ class IndividualTrendChart extends StatelessWidget {
     final latest = history.last;
     final status = metricBands[type]!.statusFor(latest.value);
 
-    final details = _Details(
+    final detailsContent = _Details(
       type: type,
       latest: latest,
       status: status,
       color: color,
+      showChevron: onTap != null,
     );
+    final details = onTap == null
+        ? detailsContent
+        : InkWell(onTap: onTap, child: detailsContent);
     final chart = _Chart(
       type: type,
       history: history,
@@ -84,39 +94,43 @@ class IndividualTrendChart extends StatelessWidget {
   }
 }
 
+/// The healthy band, from the warning thresholds (the range outside which a
+/// reading stops being "normal").
+String healthyRangeLabel(MetricType type) {
+  final bands = metricBands[type]!;
+  final lo = bands.warningLow, hi = bands.warningHigh;
+  final unit = type.unit.isEmpty ? '' : ' ${type.unit}';
+  if (lo != null && hi != null) {
+    return '${type.formatValue(lo)} – ${type.formatValue(hi)}$unit';
+  }
+  if (hi != null) return 'Up to {0}{1}'.trf([type.formatValue(hi), unit]);
+  if (lo != null) return 'At least {0}{1}'.trf([type.formatValue(lo), unit]);
+  return '—';
+}
+
 class _Details extends StatelessWidget {
   const _Details({
     required this.type,
     required this.latest,
     required this.status,
     required this.color,
+    required this.showChevron,
   });
 
   final MetricType type;
   final SensorReading latest;
   final ReadingStatus status;
   final Color color;
+  final bool showChevron;
 
-  /// The healthy band, from the warning thresholds (the range outside which a
-  /// reading stops being "normal").
-  String _healthyRange() {
-    final bands = metricBands[type]!;
-    final lo = bands.warningLow, hi = bands.warningHigh;
-    final unit = type.unit.isEmpty ? '' : ' ${type.unit}';
-    if (lo != null && hi != null) {
-      return '${type.formatValue(lo)} – ${type.formatValue(hi)}$unit';
-    }
-    if (hi != null) return 'Up to ${type.formatValue(hi)}$unit';
-    if (lo != null) return 'At least ${type.formatValue(lo)}$unit';
-    return '—';
-  }
+  String _healthyRange() => healthyRangeLabel(type);
 
   String _lastUpdated() {
     final diff = DateTime.now().difference(latest.timestamp);
-    if (diff.inMinutes < 1) return 'Just now';
-    if (diff.inMinutes < 60) return '${diff.inMinutes} min ago';
-    if (diff.inHours < 24) return '${diff.inHours} hours ago';
-    return '${diff.inDays} days ago';
+    if (diff.inMinutes < 1) return 'Just now'.tr;
+    if (diff.inMinutes < 60) return '{0} min ago'.trf([diff.inMinutes]);
+    if (diff.inHours < 24) return '{0} hours ago'.trf([diff.inHours]);
+    return '{0} days ago'.trf([diff.inDays]);
   }
 
   @override
@@ -151,6 +165,12 @@ class _Details extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
+              if (showChevron)
+                Icon(
+                  Icons.open_in_full,
+                  size: 16,
+                  color: scheme.onSurfaceVariant,
+                ),
             ],
           ),
           const SizedBox(height: AppSpacing.md),
@@ -200,7 +220,7 @@ class _Details extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Healthy range',
+                    'Healthy range'.tr,
                     style: theme.textTheme.labelSmall?.copyWith(
                       color: scheme.onSurfaceVariant,
                     ),
@@ -218,7 +238,7 @@ class _Details extends StatelessWidget {
               const SizedBox(width: AppSpacing.xs),
               Expanded(
                 child: Text(
-                  'Last updated: ${_lastUpdated()}',
+                  'Last updated: {0}'.trf([_lastUpdated()]),
                   style: theme.textTheme.labelSmall?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),

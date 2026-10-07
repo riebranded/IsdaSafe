@@ -5,6 +5,7 @@ import 'package:cloudflare_turnstile/cloudflare_turnstile.dart';
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import '../l10n/tr.dart';
 
 /// `cloudflare_turnstile` renders through `flutter_inappwebview` on native
 /// platforms, which only ships Android/iOS/Windows/macOS implementations —
@@ -108,7 +109,7 @@ class CaptchaFieldState extends State<CaptchaField> {
 
     if (!isCaptchaSupported) {
       return Text(
-        "Verification isn't available on this platform.",
+        'Verification isn\'t available on this platform.'.tr,
         style: theme.textTheme.bodySmall?.copyWith(
           color: theme.colorScheme.error,
         ),
@@ -118,7 +119,7 @@ class CaptchaFieldState extends State<CaptchaField> {
     final siteKey = dotenv.env['TURNSTILE_SITE_KEY'] ?? '';
     if (siteKey.isEmpty) {
       return Text(
-        'Missing TURNSTILE_SITE_KEY — see docs/AUTH_SETUP.md.',
+        'Missing TURNSTILE_SITE_KEY — see docs/AUTH_SETUP.md.'.tr,
         style: theme.textTheme.bodySmall?.copyWith(
           color: theme.colorScheme.error,
         ),

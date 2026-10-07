@@ -4,21 +4,26 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/app_notification.dart';
+import '../models/feeding_recommendation.dart';
 import '../models/pond.dart';
 import '../models/reading_bands.dart';
 import '../providers/notification_provider.dart';
+import '../providers/pond_chat_provider.dart';
 import '../providers/pond_provider.dart';
 import '../services/auth_service.dart';
 import '../services/pond_snapshot_cache.dart';
+import '../services/recommendation_cache.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/add_pond_flow.dart';
 import '../widgets/notification_toast.dart';
+import '../widgets/pond_chat_sheet.dart';
 import '../widgets/status_badge.dart';
 import 'analytics_screen.dart';
 import 'dashboard_screen.dart';
 import 'notifications_screen.dart';
 import 'pond_map_screen.dart';
 import 'settings_screen.dart';
+import '../l10n/tr.dart';
 
 enum _Destination {
   dashboard(
@@ -44,12 +49,13 @@ enum _Destination {
   );
 
   const _Destination({
-    required this.label,
+    required String label,
     required this.icon,
     required this.selectedIcon,
-  });
+  }) : _label = label;
 
-  final String label;
+  final String _label;
+  String get label => _label.tr;
   final IconData icon;
   final IconData selectedIcon;
 }
@@ -131,9 +137,9 @@ class _AppShellState extends State<AppShell> {
         content: NotificationToast(
           icon: icon,
           color: color,
-          title: notification.title,
+          title: notification.title.tr,
           message: notification.body,
-          actionLabel: wantsPhotos ? 'Add photos' : 'View',
+          actionLabel: wantsPhotos ? 'Add photos'.tr : 'View'.tr,
           onAction: open,
           onClose: messenger.hideCurrentSnackBar,
         ),
@@ -163,6 +169,76 @@ class _AppShellState extends State<AppShell> {
 
   Future<void> _addPond(BuildContext context) => runAddPondFlow(context);
 
+  /// Opens the assistant for the pond being viewed, or — from the pond list —
+  /// for the only pond, or the one the user picks.
+  Future<void> _openChat(
+    BuildContext context,
+    List<Pond> ponds,
+    String? selectedPondId,
+  ) async {
+    if (ponds.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Add a pond first to chat about it.'.tr)),
+      );
+      return;
+    }
+    Pond? pond = ponds.where((p) => p.id == selectedPondId).firstOrNull;
+    pond ??= ponds.length == 1 ? ponds.first : await _pickPond(context, ponds);
+    if (pond == null || !context.mounted) return;
+
+    final target = pond;
+    await showPondChat(
+      context,
+      pond: target,
+      contextBuilder: () => buildPondChatContext(
+        target,
+        readings: _cache.snapshotFor(target).readings,
+        feeding: {
+          for (final name in target.speciesNames)
+            if (RecommendationCache.instance.feeding(target.id, name)
+                case final FeedingRecommendation r)
+              name: r,
+        },
+      ),
+    );
+  }
+
+  Future<Pond?> _pickPond(BuildContext context, List<Pond> ponds) {
+    return showModalBottomSheet<Pond>(
+      context: context,
+      showDragHandle: true,
+      useSafeArea: true,
+      constraints: const BoxConstraints(maxWidth: 720),
+      builder: (context) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg,
+                0,
+                AppSpacing.lg,
+                AppSpacing.sm,
+              ),
+              child: Text(
+                'Which pond?'.tr,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+            for (final pond in ponds)
+              ListTile(
+                key: ValueKey('chat-pond-${pond.id}'),
+                leading: const Icon(Icons.water_drop_outlined),
+                title: Text(pond.name),
+                trailing: const Icon(Icons.auto_awesome, size: 18),
+                onTap: () => Navigator.of(context).pop(pond),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   /// Opens Notifications as its own page (from the mobile greeting bar's
   /// bell). On mobile it isn't a bottom-nav tab, so it's a pushed route with
   /// its own back button rather than an [IndexedStack] switch.
@@ -170,7 +246,7 @@ class _AppShellState extends State<AppShell> {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => Scaffold(
-          appBar: AppBar(title: const Text('Notifications')),
+          appBar: AppBar(title: Text('Notifications'.tr)),
           body: NotificationsScreen(cache: _cache),
         ),
       ),
@@ -225,12 +301,16 @@ class _AppShellState extends State<AppShell> {
                     () => _selectedIndex = _Destination.settings.index,
                   ),
                   onOpenNotifications: () => _openNotifications(context),
+                  onAddPond: _selectedIndex == 0
+                      ? () => _addPond(context)
+                      : null,
                 ),
           floatingActionButton: _selectedIndex == 0
               ? FloatingActionButton.extended(
-                  onPressed: () => _addPond(context),
-                  icon: const Icon(Icons.add),
-                  label: const Text('Add pond'),
+                  onPressed: () => _openChat(context, ponds, selectedPondId),
+                  icon: const Icon(Icons.auto_awesome),
+                  label: Text('Ask AI'.tr),
+                  tooltip: 'Ask the pond assistant'.tr,
                 )
               : null,
           body: isWide
@@ -252,7 +332,36 @@ class _AppShellState extends State<AppShell> {
                       onSelectPond: _selectPond,
                     ),
                     const VerticalDivider(width: 1),
-                    Expanded(child: content),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (_selectedIndex == 0)
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(
+                                AppSpacing.lg,
+                                AppSpacing.md,
+                                AppSpacing.lg,
+                                0,
+                              ),
+                              child: Row(
+                                children: [
+                                  if (selectedPondId == null &&
+                                      ponds.isNotEmpty)
+                                    PondsHeader(count: ponds.length),
+                                  const Spacer(),
+                                  FilledButton.icon(
+                                    onPressed: () => _addPond(context),
+                                    icon: const Icon(Icons.add),
+                                    label: Text('Add pond'.tr),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          Expanded(child: content),
+                        ],
+                      ),
+                    ),
                   ],
                 )
               : content,
@@ -284,10 +393,14 @@ class _MobileTopBar extends StatefulWidget implements PreferredSizeWidget {
   const _MobileTopBar({
     required this.onOpenProfile,
     required this.onOpenNotifications,
+    this.onAddPond,
   });
 
   final VoidCallback onOpenProfile;
   final VoidCallback onOpenNotifications;
+
+  /// Shown as an "Add pond" button in the top right when non-null (Dashboard only).
+  final VoidCallback? onAddPond;
 
   @override
   Size get preferredSize => const Size.fromHeight(72);
@@ -323,9 +436,9 @@ class _MobileTopBarState extends State<_MobileTopBar> {
 
   String get _greeting {
     final hour = DateTime.now().hour;
-    if (hour < 12) return 'Good morning';
-    if (hour < 18) return 'Good afternoon';
-    return 'Good evening';
+    if (hour < 12) return 'Good morning'.tr;
+    if (hour < 18) return 'Good afternoon'.tr;
+    return 'Good evening'.tr;
   }
 
   @override
@@ -397,13 +510,19 @@ class _MobileTopBarState extends State<_MobileTopBar> {
             ],
           ),
           actions: [
+            if (widget.onAddPond != null)
+              IconButton.filledTonal(
+                onPressed: widget.onAddPond,
+                icon: const Icon(Icons.add),
+                tooltip: 'Add pond'.tr,
+              ),
             IconButton(
               onPressed: widget.onOpenNotifications,
               icon: _UnreadBadge(
                 count: context.watch<NotificationProvider>().unreadCount,
                 child: const Icon(Icons.notifications_outlined),
               ),
-              tooltip: 'Notifications',
+              tooltip: 'Notifications'.tr,
             ),
             const SizedBox(width: AppSpacing.xs),
           ],
@@ -466,7 +585,7 @@ class _SidePanel extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: AppSpacing.sm),
-                  Text('IsdaSafe', style: theme.textTheme.headlineSmall),
+                  Text('IsdaSafe'.tr, style: theme.textTheme.headlineSmall),
                 ],
               ),
             ),
@@ -705,13 +824,13 @@ class _AccountSectionState extends State<_AccountSection> {
             : '?';
 
         return PopupMenuButton<String>(
-          tooltip: 'Account',
+          tooltip: 'Account'.tr,
           offset: const Offset(0, -8),
           onSelected: (value) {
             if (value == 'signOut') AuthService.signOut();
           },
-          itemBuilder: (context) => const [
-            PopupMenuItem(value: 'signOut', child: Text('Sign out')),
+          itemBuilder: (context) => [
+            PopupMenuItem(value: 'signOut', child: Text('Sign out'.tr)),
           ],
           child: Padding(
             padding: const EdgeInsets.symmetric(

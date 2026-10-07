@@ -9,6 +9,7 @@ import '../providers/dashboard_provider.dart';
 import '../services/fish_species_catalog.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_theme.dart';
+import '../l10n/tr.dart';
 
 /// Shows the AI-predicted species for a pond's current readings, backed by
 /// the Render-hosted `/predict` endpoint (see [DashboardProvider]). Renders
@@ -51,10 +52,10 @@ class SpeciesRecommendationCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Asking the model for a recommendation…'),
+                    Text('Asking the model for a recommendation…'.tr),
                     const SizedBox(height: 2),
                     Text(
-                      'This can take up to a minute if the server has been idle.',
+                      'This can take up to a minute if the server has been idle.'.tr,
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
@@ -89,7 +90,7 @@ class SpeciesRecommendationCard extends StatelessWidget {
                         onPressed: () => context
                             .read<DashboardProvider>()
                             .retryRecommendation(),
-                        child: const Text('Retry'),
+                        child: Text('Retry'.tr),
                       ),
                     ),
                   ],
@@ -222,8 +223,8 @@ class _SpeciesRow extends StatelessWidget {
                         ),
                         child: Text(
                           confidence == null
-                              ? 'AI pick'
-                              : 'AI pick · ${(confidence! * 100).toStringAsFixed(0)}%',
+                              ? 'AI pick'.tr
+                              : 'AI pick · {0}%'.trf([(confidence! * 100).toStringAsFixed(0)]),
                           style: theme.textTheme.labelSmall?.copyWith(
                             color: scheme.primary,
                             fontWeight: FontWeight.w600,

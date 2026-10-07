@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
+import '../l10n/tr.dart';
 
 /// Country-wide default view (roughly the geographic center of the
 /// Philippines) shown when a pond has no prior location to anchor on.
@@ -333,8 +334,7 @@ class _ManualLocationEntryState extends State<_ManualLocationEntry> {
               const SizedBox(height: 8),
             ],
             Text(
-              "Map view isn't available on this platform. "
-              'Enter coordinates manually.',
+              'Map view isn\'t available on this platform. Enter coordinates manually.'.tr,
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -346,7 +346,7 @@ class _ManualLocationEntryState extends State<_ManualLocationEntry> {
                 signed: true,
                 decimal: true,
               ),
-              decoration: const InputDecoration(labelText: 'Latitude'),
+              decoration: InputDecoration(labelText: 'Latitude'.tr),
               onChanged: _handleChanged,
             ),
             const SizedBox(height: 8),
@@ -356,7 +356,7 @@ class _ManualLocationEntryState extends State<_ManualLocationEntry> {
                 signed: true,
                 decimal: true,
               ),
-              decoration: const InputDecoration(labelText: 'Longitude'),
+              decoration: InputDecoration(labelText: 'Longitude'.tr),
               onChanged: _handleChanged,
             ),
             if (widget.onLocateMe != null) ...[
@@ -370,7 +370,7 @@ class _ManualLocationEntryState extends State<_ManualLocationEntry> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.my_location),
-                label: const Text('Use my current location'),
+                label: Text('Use my current location'.tr),
               ),
             ],
           ],

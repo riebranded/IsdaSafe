@@ -6,7 +6,9 @@ import '../../theme/app_spacing.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/auth_dialogs.dart';
 import '../../widgets/captcha_field.dart';
+import '../../widgets/language_toggle.dart';
 import 'register_screen.dart';
+import '../../l10n/tr.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -42,7 +44,7 @@ class _LoginScreenState extends State<LoginScreen> {
   void _showError(String message) {
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    ).showSnackBar(SnackBar(content: Text(message.tr)));
   }
 
   Future<void> _submit() async {
@@ -62,7 +64,7 @@ class _LoginScreenState extends State<LoginScreen> {
     } on AuthException catch (e) {
       if (mounted) _showError(e.message);
     } catch (e) {
-      if (mounted) _showError('Something went wrong. Please try again.');
+      if (mounted) _showError('Something went wrong. Please try again.'.tr);
       debugPrint('LoginScreen: sign-in error $e');
     } finally {
       // Tokens are single-use — always fetch a fresh one, whether this
@@ -79,7 +81,7 @@ class _LoginScreenState extends State<LoginScreen> {
     } on AuthException catch (e) {
       if (mounted) _showError(e.message);
     } catch (e) {
-      if (mounted) _showError('Something went wrong. Please try again.');
+      if (mounted) _showError('Something went wrong. Please try again.'.tr);
       debugPrint('LoginScreen: Google sign-in error $e');
     } finally {
       if (mounted) setState(() => _isGoogleSubmitting = false);
@@ -176,6 +178,11 @@ class _LoginScreenState extends State<LoginScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
+              const Align(
+                alignment: Alignment.centerRight,
+                child: LanguageToggle(compact: true),
+              ),
+              const SizedBox(height: AppSpacing.sm),
               if (!isWide) ...[
                 ClipRRect(
                   borderRadius: BorderRadius.circular(AppRadius.md),
@@ -189,13 +196,13 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: AppSpacing.md),
               ],
               Text(
-                'Welcome back',
+                'Welcome back'.tr,
                 style: theme.textTheme.headlineSmall,
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: AppSpacing.xs),
               Text(
-                'Log in to IsdaSafe to continue',
+                'Log in to IsdaSafe to continue'.tr,
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -207,15 +214,15 @@ class _LoginScreenState extends State<LoginScreen> {
                 enabled: !busy,
                 keyboardType: TextInputType.emailAddress,
                 textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(
-                  labelText: 'Email',
+                decoration: InputDecoration(
+                  labelText: 'Email'.tr,
                   prefixIcon: Icon(Icons.email_outlined),
                 ),
                 validator: (value) {
                   final trimmed = value?.trim() ?? '';
-                  if (trimmed.isEmpty) return 'Enter your email';
+                  if (trimmed.isEmpty) return 'Enter your email'.tr;
                   if (!_emailRegExp.hasMatch(trimmed)) {
-                    return 'Enter a valid email address';
+                    return 'Enter a valid email address'.tr;
                   }
                   return null;
                 },
@@ -227,7 +234,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 obscureText: _obscurePassword,
                 textInputAction: TextInputAction.done,
                 decoration: InputDecoration(
-                  labelText: 'Password',
+                  labelText: 'Password'.tr,
                   prefixIcon: const Icon(Icons.lock_outline),
                   suffixIcon: IconButton(
                     icon: Icon(
@@ -240,7 +247,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 validator: (value) => (value == null || value.isEmpty)
-                    ? 'Enter your password'
+                    ? 'Enter your password'.tr
                     : null,
                 onFieldSubmitted: (_) => _submit(),
               ),
@@ -248,7 +255,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 alignment: Alignment.centerRight,
                 child: TextButton(
                   onPressed: busy ? null : _forgotPassword,
-                  child: const Text('Forgot password?'),
+                  child: Text('Forgot password?'.tr),
                 ),
               ),
               const SizedBox(height: AppSpacing.sm),
@@ -267,7 +274,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         height: 20,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Text('Log in'),
+                    : Text('Log in'.tr),
               ),
               const SizedBox(height: AppSpacing.md),
               Row(
@@ -292,19 +299,19 @@ class _LoginScreenState extends State<LoginScreen> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.g_mobiledata, size: 28),
-                label: const Text('Continue with Google'),
+                label: Text('Continue with Google'.tr),
               ),
               const SizedBox(height: AppSpacing.sm),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    "Don't have an account?",
+                    'Don\'t have an account?'.tr,
                     style: theme.textTheme.bodyMedium,
                   ),
                   TextButton(
                     onPressed: busy ? null : _goToRegister,
-                    child: const Text('Register'),
+                    child: Text('Register'.tr),
                   ),
                 ],
               ),
@@ -356,7 +363,7 @@ class _BrandingPanel extends StatelessWidget {
                 ),
                 const SizedBox(height: AppSpacing.lg),
                 Text(
-                  'IsdaSafe',
+                  'IsdaSafe'.tr,
                   style: theme.textTheme.headlineMedium?.copyWith(
                     color: Colors.white,
                     fontWeight: FontWeight.w700,
@@ -365,7 +372,7 @@ class _BrandingPanel extends StatelessWidget {
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
-                  'Monitor your ponds, wherever you are.',
+                  'Monitor your ponds, wherever you are.'.tr,
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: Colors.white.withValues(alpha: 0.75),
                   ),

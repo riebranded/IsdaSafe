@@ -1,3 +1,4 @@
+import '../l10n/language_provider.dart';
 import '../models/feeding_recommendation.dart';
 import '../models/species_recommendation.dart';
 
@@ -40,24 +41,30 @@ class RecommendationCache {
   /// The cached feeding/water-quality advisory for [pondId] + [species], or
   /// null if there isn't one or it's older than [ttl].
   FeedingRecommendation? feeding(String pondId, String species) {
-    final entry = _feeding[pondId]?[species];
+    final entry = _feeding[pondId]?[_key(species)];
     if (entry == null || _isStale(entry.fetchedAt)) return null;
     return entry.value;
   }
 
   void putFeeding(String pondId, String species, FeedingRecommendation value) {
-    (_feeding[pondId] ??= {})[species] = _Entry(value, DateTime.now());
+    (_feeding[pondId] ??= {})[_key(species)] = _Entry(value, DateTime.now());
   }
 
   /// Drops cached feeding entries for species no longer assigned to the pond.
   void pruneFeeding(String pondId, Iterable<String> keepSpecies) {
-    _feeding[pondId]?.removeWhere((name, _) => !keepSpecies.contains(name));
+    final keep = keepSpecies.map(_key).toSet();
+    _feeding[pondId]?.removeWhere((name, _) => !keep.contains(name));
   }
 
   bool isFeedingFresh(String pondId, String species) {
-    final entry = _feeding[pondId]?[species];
+    final entry = _feeding[pondId]?[_key(species)];
     return entry != null && !_isStale(entry.fetchedAt);
   }
+
+  /// Advice is written by the AI in the app's current language, so it's cached
+  /// per language — switching language fetches fresh text instead of reusing
+  /// the other language's.
+  String _key(String species) => '$species|${LanguageProvider.current.code}';
 
   bool _isStale(DateTime fetchedAt) => DateTime.now().difference(fetchedAt) >= ttl;
 }

@@ -2,6 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../l10n/tr.dart';
+
+import '../l10n/language_provider.dart';
 import '../models/feeding_recommendation.dart';
 import '../models/pond.dart';
 import '../models/sensor_reading.dart';
@@ -23,10 +26,12 @@ class DashboardProvider extends ChangeNotifier {
     SpeciesRecommendationService? recommendationService,
     FeedingRecommendationService? feedingService,
     RecommendationCache? cache,
-  })  : _sensorService = sensorService ?? MockSensorService(),
-        _recommendationService = recommendationService ?? HttpSpeciesRecommendationService(),
-        _feedingService = feedingService ?? HttpFeedingRecommendationService(),
-        _cache = cache ?? RecommendationCache.instance {
+  }) : _sensorService = sensorService ?? MockSensorService(),
+       _recommendationService =
+           recommendationService ?? HttpSpeciesRecommendationService(),
+       _feedingService =
+           feedingService ?? SupabaseFeedingRecommendationService(),
+       _cache = cache ?? RecommendationCache.instance {
     // Show whatever's still fresh from a previous visit to this pond's
     // dashboard immediately, before refresh() decides whether it needs to
     // hit the server at all.
@@ -35,6 +40,7 @@ class DashboardProvider extends ChangeNotifier {
       final cached = _cache.feeding(_pond.id, name);
       if (cached != null) _feedingRecommendations[name] = cached;
     }
+    LanguageProvider.revision.addListener(_onLanguageChanged);
     refresh();
   }
 
@@ -59,20 +65,42 @@ class DashboardProvider extends ChangeNotifier {
   String? get recommendationError => _recommendationError;
 
   /// Feeding/water-quality advisory per species name in [Pond.speciesNames].
-  Map<String, FeedingRecommendation> get feedingRecommendations => _feedingRecommendations;
+  Map<String, FeedingRecommendation> get feedingRecommendations =>
+      _feedingRecommendations;
   bool get feedingLoading => _feedingLoading;
   String? get feedingError => _feedingError;
 
   /// Water-quality recommendations across every assigned species, deduped
   /// (species share one pond, so the same reading-driven advice often
   /// repeats across each species' call).
-  List<String> get waterQualityRecommendations =>
-      _feedingRecommendations.values.expand((r) => r.waterQualityRecommendations).toSet().toList();
+  List<String> get waterQualityRecommendations => _feedingRecommendations.values
+      .expand((r) => r.waterQualityRecommendations)
+      .toSet()
+      .toList();
 
   /// Possible risks across every assigned species, deduped like
   /// [waterQualityRecommendations].
-  List<String> get possibleRisks =>
-      _feedingRecommendations.values.expand((r) => r.possibleRisks).toSet().toList();
+  List<String> get possibleRisks => _feedingRecommendations.values
+      .expand((r) => r.possibleRisks)
+      .toSet()
+      .toList();
+
+  /// The advice text is in the old language — drop it and ask again.
+  void _onLanguageChanged() {
+    _feedingRecommendations.clear();
+    for (final name in _pond.speciesNames) {
+      final cached = _cache.feeding(_pond.id, name);
+      if (cached != null) _feedingRecommendations[name] = cached;
+    }
+    notifyListeners();
+    retryFeedingRecommendations();
+  }
+
+  @override
+  void dispose() {
+    LanguageProvider.revision.removeListener(_onLanguageChanged);
+    super.dispose();
+  }
 
   void refresh() {
     final snapshot = _sensorService.generateSnapshot(_pond);
@@ -117,12 +145,14 @@ class DashboardProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _recommendation = await _recommendationService.recommend(snapshot.readings);
+      _recommendation = await _recommendationService.recommend(
+        snapshot.readings,
+      );
       _cache.putSpecies(_pond.id, _recommendation!);
     } catch (e) {
       _recommendation = null;
       _cache.clearSpecies(_pond.id);
-      _recommendationError = e.toString().replaceFirst('Exception: ', '');
+      _recommendationError = e.toString().replaceFirst('Exception: ', '').tr;
     } finally {
       _recommendationLoading = false;
       notifyListeners();
@@ -133,7 +163,9 @@ class DashboardProvider extends ChangeNotifier {
     final speciesNames = _pond.speciesNames;
 
     // Drop cached data for species no longer assigned to the pond.
-    _feedingRecommendations.removeWhere((name, _) => !speciesNames.contains(name));
+    _feedingRecommendations.removeWhere(
+      (name, _) => !speciesNames.contains(name),
+    );
     _cache.pruneFeeding(_pond.id, speciesNames);
 
     if (speciesNames.isEmpty) {
@@ -145,7 +177,9 @@ class DashboardProvider extends ChangeNotifier {
 
     // Only re-ask the model for species that are missing or whose cached
     // feeding schedule/water-quality advisory/risks have gone stale.
-    final namesToFetch = speciesNames.where((name) => !_cache.isFeedingFresh(_pond.id, name)).toList();
+    final namesToFetch = speciesNames
+        .where((name) => !_cache.isFeedingFresh(_pond.id, name))
+        .toList();
 
     if (namesToFetch.isEmpty) {
       _feedingError = null;
@@ -160,11 +194,14 @@ class DashboardProvider extends ChangeNotifier {
     String? error;
     for (final name in namesToFetch) {
       try {
-        final recommendation = await _feedingService.recommend(species: name, readings: snapshot.readings);
+        final recommendation = await _feedingService.recommend(
+          species: name,
+          readings: snapshot.readings,
+        );
         _feedingRecommendations[name] = recommendation;
         _cache.putFeeding(_pond.id, name, recommendation);
       } catch (e) {
-        error = e.toString().replaceFirst('Exception: ', '');
+        error = e.toString().replaceFirst('Exception: ', '').tr;
       }
     }
 

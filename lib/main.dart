@@ -6,9 +6,12 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app.dart';
+import 'l10n/language_provider.dart';
 import 'providers/notification_provider.dart';
 import 'providers/pond_provider.dart';
 import 'providers/theme_provider.dart';
+import 'services/auth_service.dart';
+import 'services/system_notification_service.dart';
 
 //Test
 
@@ -20,6 +23,9 @@ Future<void> main() async {
     url: dotenv.env['SUPABASE_URL']!,
     publishableKey: dotenv.env['SUPABASE_ANON_KEY']!,
   );
+
+  AuthService.listenForPasswordRecovery();
+  await SystemNotificationService.instance.init();
 
   if (!kIsWeb) {
     final googleIosClientId = dotenv.env['GOOGLE_IOS_CLIENT_ID'];
@@ -45,11 +51,15 @@ Future<void> main() async {
         ChangeNotifierProvider(
           create: (_) => NotificationProvider(
             onNewNotification: (n) {
-              if (n.isPondVerification) pondProvider.refresh();
+              if (n.isPondVerification) {
+                pondProvider.refresh();
+                SystemNotificationService.instance.showPondUpdate(n);
+              }
             },
           ),
         ),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ChangeNotifierProvider(create: (_) => LanguageProvider()),
       ],
       child: const IsdaSafeApp(),
     ),

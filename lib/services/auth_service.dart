@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -51,7 +52,10 @@ abstract final class AuthService {
   /// only lets a user read their own row — a plain `select` here would
   /// always come back empty regardless of who else has claimed the number.
   static Future<bool> isPhoneTaken(String e164Phone) async {
-    final result = await _client.rpc('is_phone_taken', params: {'check_phone': e164Phone});
+    final result = await _client.rpc(
+      'is_phone_taken',
+      params: {'check_phone': e164Phone},
+    );
     return result == true;
   }
 
@@ -63,7 +67,10 @@ abstract final class AuthService {
   /// throwing (which only runs at all once the phone check has already
   /// passed).
   static Future<bool> isEmailTaken(String email) async {
-    final result = await _client.rpc('is_email_taken', params: {'check_email': email});
+    final result = await _client.rpc(
+      'is_email_taken',
+      params: {'check_email': email},
+    );
     return result == true;
   }
 
@@ -95,11 +102,27 @@ abstract final class AuthService {
     required String password,
     required String captchaToken,
   }) {
-    return _auth.signInWithPassword(email: email, password: password, captchaToken: captchaToken);
+    return _auth.signInWithPassword(
+      email: email,
+      password: password,
+      captchaToken: captchaToken,
+    );
   }
 
-  static Future<void> resetPasswordForEmail(String email, {required String captchaToken}) {
-    return _auth.resetPasswordForEmail(email, captchaToken: captchaToken);
+  static Future<void> resetPasswordForEmail(
+    String email, {
+    required String captchaToken,
+  }) {
+    return _auth.resetPasswordForEmail(email, captchaToken: captchaToken, redirectTo: _siteBase());
+  }
+
+  /// Checks the one-time code from the password-reset email. On success
+  /// Supabase opens a recovery session and emits `passwordRecovery`, which
+  /// [listenForPasswordRecovery] turns into the set-new-password screen.
+  /// Needs the project's "Reset password" email template to include
+  /// `{{ .Token }}`.
+  static Future<void> verifyRecoveryCode(String email, String code) async {
+    await _auth.verifyOTP(email: email, token: code, type: OtpType.recovery);
   }
 
   /// [requestSemaphoreOtp]'s exact wording for the 60s per-user cooldown —
@@ -107,12 +130,14 @@ abstract final class AuthService {
   /// Exposed so callers can tell a cooldown rejection apart from other
   /// [AuthException]s (e.g. to extend a local resend timer to match)
   /// without re-deriving the server's own copy.
-  static const otpCooldownMessage = 'Please wait before requesting another code.';
+  static const otpCooldownMessage =
+      'Please wait before requesting another code.';
 
   /// [requestSemaphoreOtp]'s exact wording for the burst (3/10min) or daily
   /// (8/24h) send limits — matches `RATE_LIMITED_MESSAGE` in
   /// `send-semaphore-otp/index.ts`. See [otpCooldownMessage].
-  static const otpBurstOrDailyLimitMessage = 'Too many attempts, please try again later.';
+  static const otpBurstOrDailyLimitMessage =
+      'Too many attempts, please try again later.';
 
   /// Matches `COOLDOWN_SECONDS` in `send-semaphore-otp/index.ts` — how long
   /// to disable a local resend/retry control after [otpCooldownMessage].
@@ -135,10 +160,17 @@ abstract final class AuthService {
   static Future<void> requestSemaphoreOtp(String e164Phone) async {
     debugPrint('AuthService: requesting Semaphore OTP for $e164Phone...');
     try {
-      final response = await _client.functions.invoke('send-semaphore-otp', body: {'phone': e164Phone});
-      debugPrint('AuthService: send-semaphore-otp responded status=${response.status} data=${response.data}');
+      final response = await _client.functions.invoke(
+        'send-semaphore-otp',
+        body: {'phone': e164Phone},
+      );
+      debugPrint(
+        'AuthService: send-semaphore-otp responded status=${response.status} data=${response.data}',
+      );
     } on FunctionException catch (e) {
-      debugPrint('AuthService: send-semaphore-otp failed — status=${e.status} details=${e.details}');
+      debugPrint(
+        'AuthService: send-semaphore-otp failed — status=${e.status} details=${e.details}',
+      );
       final details = e.details;
       final message = details is Map ? details['error'] as String? : null;
       throw AuthException(message ?? 'Failed to send verification code.');
@@ -149,17 +181,140 @@ abstract final class AuthService {
   /// via the `verify-semaphore-otp` Edge Function, which marks the
   /// account's phone verified on success.
   static Future<void> confirmSemaphoreOtp(String code) async {
-    debugPrint('AuthService: confirmSemaphoreOtp called (code length=${code.length})');
+    debugPrint(
+      'AuthService: confirmSemaphoreOtp called (code length=${code.length})',
+    );
     try {
-      final response = await _client.functions.invoke('verify-semaphore-otp', body: {'code': code});
-      debugPrint('AuthService: verify-semaphore-otp responded status=${response.status} data=${response.data}');
+      final response = await _client.functions.invoke(
+        'verify-semaphore-otp',
+        body: {'code': code},
+      );
+      debugPrint(
+        'AuthService: verify-semaphore-otp responded status=${response.status} data=${response.data}',
+      );
     } on FunctionException catch (e) {
-      debugPrint('AuthService: verify-semaphore-otp failed — status=${e.status} details=${e.details}');
+      debugPrint(
+        'AuthService: verify-semaphore-otp failed — status=${e.status} details=${e.details}',
+      );
       final details = e.details;
       final message = details is Map ? details['error'] as String? : null;
       throw AuthException(message ?? 'Phone verification failed.');
     }
   }
+
+  /// Records a phone that [confirmSemaphoreOtp] just verified on the
+  /// `profiles` row. (`auth.users.phone` is already updated by the Edge
+  /// Function.) A targeted update, for the same reason as [updateFullName].
+  static Future<void> updateVerifiedPhone(String e164Phone) async {
+    final uid = currentUser!.id;
+    await _client
+        .from('profiles')
+        .update({'phone': e164Phone, 'phone_verified': true})
+        .eq('id', uid);
+  }
+
+  /// Records an in-app notification about an account change (see
+  /// `notifications` + the `account_*` insert policy). Best effort: the change
+  /// itself already happened (or failed), so a failure here is only logged.
+  static Future<void> recordAccountEvent({
+    required String type,
+    required String title,
+    required String body,
+  }) async {
+    final uid = currentUser?.id;
+    if (uid == null) return;
+    try {
+      await _client.from('notifications').insert({
+        'user_id': uid,
+        'type': type,
+        'title': title,
+        'body': body,
+      });
+    } catch (e) {
+      debugPrint('AuthService: recordAccountEvent error $e');
+    }
+  }
+
+  /// Starts an email change. Supabase emails a confirmation link (to both
+  /// addresses when "secure email change" is on); `auth.users.email` only
+  /// changes once it's followed — see [syncProfileEmail].
+  static Future<void> requestEmailChange(String newEmail) async {
+    await _auth.updateUser(
+      UserAttributes(email: newEmail),
+      emailRedirectTo: _emailConfirmedUrl(),
+    );
+  }
+
+  /// Where the confirmation link lands: the static `web/email-confirmed.html`
+  /// page, which says the email is confirmed and then forwards to the site.
+  /// On web that's this app's own origin; on mobile there's no origin, so it
+  /// comes from an optional `SITE_URL` in `.env` (null → Supabase's default
+  /// Site URL). Must be in Supabase's Redirect URLs allow-list.
+  static String? _emailConfirmedUrl() {
+    final base = _siteBase();
+    return base == null ? null : '$base/email-confirmed.html';
+  }
+
+  /// The deployed site's origin without a trailing slash (see
+  /// [requestEmailChange] for where it comes from), or null if unknown.
+  static String? _siteBase() {
+    final base = kIsWeb ? Uri.base.origin : dotenv.env['SITE_URL'];
+    if (base == null || base.isEmpty) return null;
+    return base.replaceFirst(RegExp(r'/+$'), '');
+  }
+
+  /// True from the moment a password-reset email link is opened until the new
+  /// password is saved (or abandoned) — [AuthGate] shows the set-new-password
+  /// screen while it's set, instead of dropping the recovery session into the
+  /// app. Call [listenForPasswordRecovery] once at startup.
+  static final ValueNotifier<bool> recoveryPending = ValueNotifier(false);
+
+  static void listenForPasswordRecovery() {
+    onAuthStateChange.listen((state) {
+      if (state.event == AuthChangeEvent.passwordRecovery) {
+        recoveryPending.value = true;
+      }
+    });
+    // The recovery event can fire while Supabase initialises, before anything
+    // listens — on web the link's own URL still says what it was.
+    if (kIsWeb) {
+      final base = Uri.base;
+      if (base.fragment.contains('type=recovery') ||
+          base.queryParameters['type'] == 'recovery') {
+        recoveryPending.value = true;
+      }
+    }
+  }
+
+  /// Copies the confirmed auth email onto `profiles.email` once they differ
+  /// (i.e. after the user followed the confirmation link).
+  static Future<void> syncProfileEmail() async {
+    final user = currentUser;
+    final email = user?.email;
+    if (user == null || email == null || email.isEmpty) return;
+    await _client
+        .from('profiles')
+        .update({'email': email})
+        .eq('id', user.id)
+        .neq('email', email);
+  }
+
+  /// Sets a new password. Supabase can demand a recent login or a
+  /// reauthentication code for this; that surfaces as an [AuthException] with
+  /// [needsReauthentication] true — call [sendReauthenticationCode] and retry
+  /// with the emailed [nonce].
+  static Future<void> changePassword(
+    String newPassword, {
+    String? nonce,
+  }) async {
+    await _auth.updateUser(UserAttributes(password: newPassword, nonce: nonce));
+  }
+
+  static bool needsReauthentication(AuthException e) =>
+      e.code == 'reauthentication_needed' ||
+      e.message.toLowerCase().contains('reauthentication');
+
+  static Future<void> sendReauthenticationCode() => _auth.reauthenticate();
 
   /// Full Google sign-in (Login screen). Creates/reuses a Supabase session.
   ///
@@ -254,11 +409,13 @@ abstract final class AuthService {
     final uid = currentUser!.id;
     final extension = contentType.split('/').last;
     final path = '$uid/avatar.$extension';
-    await _client.storage.from('avatars').uploadBinary(
-      path,
-      bytes,
-      fileOptions: FileOptions(upsert: true, contentType: contentType),
-    );
+    await _client.storage
+        .from('avatars')
+        .uploadBinary(
+          path,
+          bytes,
+          fileOptions: FileOptions(upsert: true, contentType: contentType),
+        );
     return _client.storage.from('avatars').getPublicUrl(path);
   }
 
@@ -275,7 +432,10 @@ abstract final class AuthService {
   /// already completed verification.
   static Future<void> updateFullName(String fullName) async {
     final uid = currentUser!.id;
-    await _client.from('profiles').update({'full_name': fullName}).eq('id', uid);
+    await _client
+        .from('profiles')
+        .update({'full_name': fullName})
+        .eq('id', uid);
     await _auth.updateUser(UserAttributes(data: {'full_name': fullName}));
   }
 
@@ -303,7 +463,11 @@ abstract final class AuthService {
     final uid = currentUser?.id;
     if (uid == null) return false;
     try {
-      final row = await _client.from('profiles').select('phone_verified').eq('id', uid).maybeSingle();
+      final row = await _client
+          .from('profiles')
+          .select('phone_verified')
+          .eq('id', uid)
+          .maybeSingle();
       return row != null && row['phone_verified'] == true;
     } catch (e) {
       debugPrint('AuthService: hasVerifiedProfile error $e');
@@ -315,11 +479,16 @@ abstract final class AuthService {
   /// user's name/email/photo. Unlike [hasVerifiedProfile], failures surface
   /// as null rather than being swallowed, since the caller has a clear
   /// fallback (a placeholder avatar) either way.
-  static Future<({String fullName, String email, String? photoUrl})?> fetchCurrentProfile() async {
+  static Future<({String fullName, String email, String? photoUrl})?>
+  fetchCurrentProfile() async {
     final uid = currentUser?.id;
     if (uid == null) return null;
     try {
-      final row = await _client.from('profiles').select('full_name, email, photo_url').eq('id', uid).maybeSingle();
+      final row = await _client
+          .from('profiles')
+          .select('full_name, email, photo_url')
+          .eq('id', uid)
+          .maybeSingle();
       if (row == null) return null;
       return (
         fullName: (row['full_name'] as String?) ?? '',

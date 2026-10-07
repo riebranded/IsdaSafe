@@ -4,6 +4,7 @@ import '../models/metric_type.dart';
 import '../models/sensor_reading.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_theme.dart';
+import '../l10n/tr.dart';
 
 /// One row per individual reading (most-recent first), one column per
 /// metric — the raw values behind each metric's own trend chart, for when
@@ -24,7 +25,7 @@ class ReadingHistoryTable extends StatelessWidget {
       child: DataTable(
         headingRowColor: WidgetStateProperty.all(theme.colorScheme.surfaceContainerHighest),
         columns: [
-          const DataColumn(label: Text('Time')),
+          DataColumn(label: Text('Time'.tr)),
           for (final type in MetricType.values)
             DataColumn(
               label: Row(
@@ -53,9 +54,9 @@ class ReadingHistoryTable extends StatelessWidget {
 
   String _formatTimestamp(DateTime time) {
     final diff = DateTime.now().difference(time);
-    if (diff.inMinutes < 1) return 'Now';
-    if (diff.inHours < 1) return '${diff.inMinutes}m ago';
-    if (diff.inDays < 1) return '${diff.inHours}h ago';
-    return '${diff.inDays}d ago';
+    if (diff.inMinutes < 1) return 'Now'.tr;
+    if (diff.inHours < 1) return '{0}m ago'.trf([diff.inMinutes]);
+    if (diff.inDays < 1) return '{0}h ago'.trf([diff.inHours]);
+    return '{0}d ago'.trf([diff.inDays]);
   }
 }

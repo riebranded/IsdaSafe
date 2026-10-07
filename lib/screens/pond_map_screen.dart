@@ -11,6 +11,7 @@ import '../services/pond_snapshot_cache.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/location_picker_map.dart';
 import 'pond_dashboard_screen.dart';
+import '../l10n/tr.dart';
 
 /// All ponds pinned on one map (colored by overall status), tapping a
 /// marker shows that pond's full dashboard on the right on wide/web
@@ -123,7 +124,7 @@ class _PondMap extends StatelessWidget {
       position: LatLng(pond.latitude!, pond.longitude!),
       infoWindow: InfoWindow(
         title: pond.name,
-        snippet: 'Status: ${status.label} · Tap to view readings',
+        snippet: 'Status: {0} · Tap to view readings'.trf([status.label]),
         onTap: () => onSelect(pond),
       ),
       icon: BitmapDescriptor.defaultMarkerWithHue(_hueForStatus(status)),
@@ -164,7 +165,7 @@ class _PondCoordinateList extends StatelessWidget {
       padding: const EdgeInsets.all(AppSpacing.lg),
       children: [
         Text(
-          "Map view isn't available on this platform. Select a pond to see its readings.",
+          'Map view isn\'t available on this platform. Select a pond to see its readings.'.tr,
           style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
         ),
         const SizedBox(height: AppSpacing.md),
@@ -177,7 +178,7 @@ class _PondCoordinateList extends StatelessWidget {
               subtitle: Text(
                 pond.hasLocation
                     ? '${pond.latitude!.toStringAsFixed(4)}, ${pond.longitude!.toStringAsFixed(4)}'
-                    : 'No location set',
+                    : 'No location set'.tr,
               ),
               onTap: () => onSelect(pond),
             ),
@@ -202,7 +203,7 @@ class _NoPondSelected extends StatelessWidget {
             Icon(Icons.water_drop_outlined, size: 48, color: theme.colorScheme.outline),
             const SizedBox(height: AppSpacing.md),
             Text(
-              'Tap a pond marker to see its readings',
+              'Tap a pond marker to see its readings'.tr,
               style: theme.textTheme.bodyMedium,
               textAlign: TextAlign.center,
             ),

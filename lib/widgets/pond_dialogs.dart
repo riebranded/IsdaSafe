@@ -9,6 +9,7 @@ import '../services/location_search_service.dart';
 import '../services/pond_photo_picker.dart';
 import '../theme/app_spacing.dart';
 import 'location_picker_map.dart';
+import '../l10n/tr.dart';
 
 /// Shows a text-field dialog for renaming a pond.
 /// Returns the entered (trimmed, non-empty) name, or null if cancelled.
@@ -30,20 +31,20 @@ Future<String?> showPondNameDialog(
           void submit() {
             final trimmed = controller.text.trim();
             if (trimmed.isEmpty) {
-              setState(() => errorText = 'Enter a pond name');
+              setState(() => errorText = 'Enter a pond name'.tr);
               return;
             }
             Navigator.of(context).pop(trimmed);
           }
 
           return AlertDialog(
-            title: Text(title),
+            title: Text(title.tr),
             content: TextField(
               controller: controller,
               autofocus: true,
               textInputAction: TextInputAction.done,
               decoration: InputDecoration(
-                labelText: 'Pond name',
+                labelText: 'Pond name'.tr,
                 errorText: errorText,
               ),
               onChanged: (_) {
@@ -54,9 +55,9 @@ Future<String?> showPondNameDialog(
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Cancel'),
+                child: Text('Cancel'.tr),
               ),
-              FilledButton(onPressed: submit, child: Text(confirmLabel)),
+              FilledButton(onPressed: submit, child: Text(confirmLabel.tr)),
             ],
           );
         },
@@ -150,8 +151,8 @@ class _VerificationStartedDialog extends StatelessWidget {
     final checking =
         checkingLabel ??
         (method == VerificationMethod.photo
-            ? 'Checking your pond photos'
-            : 'Analyzing satellite imagery of your pin');
+            ? 'Checking your pond photos'.tr
+            : 'Analyzing satellite imagery of your pin'.tr);
 
     return Dialog(
       shape: RoundedRectangleBorder(
@@ -187,14 +188,13 @@ class _VerificationStartedDialog extends StatelessWidget {
                       ),
                       const SizedBox(height: AppSpacing.lg),
                       Text(
-                        'Verifying “$pondName”',
+                        '“{0}” is under review'.trf([pondName]),
                         textAlign: TextAlign.center,
                         style: theme.textTheme.titleLarge,
                       ),
                       const SizedBox(height: AppSpacing.sm),
                       Text(
-                        'This usually takes a minute or two. You can keep using the '
-                        'app while we work.',
+                        'Your pond has an ongoing review. This usually takes a minute or two, and you can keep using the app meanwhile.'.tr,
                         textAlign: TextAlign.center,
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: scheme.onSurfaceVariant,
@@ -220,15 +220,15 @@ class _VerificationStartedDialog extends StatelessWidget {
                                 text: checking,
                                 active: true,
                               ),
-                              const _VerificationStep(
+                              _VerificationStep(
                                 icon: Icons.notifications_outlined,
                                 text:
-                                    "We'll send you a notification in the app with the result",
+                                    "We'll notify you on your device and in the app when the review updates".tr,
                               ),
-                              const _VerificationStep(
+                              _VerificationStep(
                                 icon: Icons.dashboard_outlined,
                                 text:
-                                    'Once verified, it appears on your dashboard',
+                                    'Once verified, it appears on your dashboard'.tr,
                               ),
                             ],
                           ),
@@ -241,7 +241,7 @@ class _VerificationStartedDialog extends StatelessWidget {
               const SizedBox(height: AppSpacing.xl),
               FilledButton(
                 onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Got it'),
+                child: Text('Got it'.tr),
               ),
             ],
           ),
@@ -252,7 +252,7 @@ class _VerificationStartedDialog extends StatelessWidget {
 }
 
 class _VerificationStep extends StatelessWidget {
-  const _VerificationStep({
+  _VerificationStep({
     required this.icon,
     required this.text,
     this.active = false,
@@ -368,8 +368,8 @@ class _AddPondDialogState extends State<_AddPondDialog> {
 
     final messenger = ScaffoldMessenger.of(context);
     messenger.showSnackBar(
-      const SnackBar(
-        content: Text('Finding your location…'),
+      SnackBar(
+        content: Text('Finding your location…'.tr),
         duration: Duration(seconds: 2),
       ),
     );
@@ -386,10 +386,9 @@ class _AddPondDialogState extends State<_AddPondDialog> {
 
     if (location == null) {
       messenger.showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
-            "Couldn't get your location. Check that location access is "
-            'allowed for this site/app.',
+            'Couldn\'t get your location. Check that location access is allowed for this site/app.'.tr,
           ),
         ),
       );
@@ -398,8 +397,7 @@ class _AddPondDialogState extends State<_AddPondDialog> {
     messenger.showSnackBar(
       SnackBar(
         content: Text(
-          'Located: ${location.latitude.toStringAsFixed(4)}, '
-          '${location.longitude.toStringAsFixed(4)}',
+          'Located: {0}, {1}'.trf([location.latitude.toStringAsFixed(4), location.longitude.toStringAsFixed(4)]),
         ),
       ),
     );
@@ -500,11 +498,11 @@ class _AddPondDialogState extends State<_AddPondDialog> {
       child: Scaffold(
         appBar: AppBar(
           leading: IconButton(
-            tooltip: 'Close',
+            tooltip: 'Close'.tr,
             icon: const Icon(Icons.close),
             onPressed: () => Navigator.of(context).pop(),
           ),
-          title: const Text('Add a pond'),
+          title: Text('Add a pond'.tr),
         ),
         body: SafeArea(
           child: LayoutBuilder(
@@ -569,7 +567,7 @@ class _AddPondDialogState extends State<_AddPondDialog> {
               child: LocationPickerMap(
                 initialCenter: _center.value,
                 initialZoom: _mapZoom,
-                centerLabel: _isAtUserLocation ? "You're here" : _searchLabel,
+                centerLabel: _isAtUserLocation ? 'You\'re here'.tr : _searchLabel,
                 onUserInteraction: _handleUserInteraction,
                 onCenterChanged: _handleCenterChanged,
                 onLocateMe: _handleLocateMe,
@@ -609,16 +607,15 @@ class _AddPondDialogState extends State<_AddPondDialog> {
   /// What still blocks "Add pond", phrased as the next thing to do; null when
   /// the form is ready.
   String? _nextStep() {
-    if (!_hasName) return 'Enter a pond name to continue.';
+    if (!_hasName) return 'Enter a pond name to continue.'.tr;
     if (!_hasPickedLocation) {
       return _isLocating
-          ? 'Finding your location…'
-          : 'Pan the map to place the pin on your pond.';
+          ? 'Finding your location…'.tr
+          : 'Pan the map to place the pin on your pond.'.tr;
     }
     if (_isInHouse && _evidencePhotos.length < kMinEvidencePhotos) {
       final missing = kMinEvidencePhotos - _evidencePhotos.length;
-      return 'Add $missing more ${missing == 1 ? 'photo' : 'photos'} to '
-          'continue.';
+      return 'Add {0} more {1} to continue.'.trf([missing, missing == 1 ? 'photo'.tr : 'photos'.tr]);
     }
     return null;
   }
@@ -680,8 +677,7 @@ class _AddPondDialogState extends State<_AddPondDialog> {
               children: [
                 if (mapAbove != null) ...[mapAbove, gap],
                 Text(
-                  "Pin your pond on the map. We'll verify it before it "
-                  'appears on your dashboard.',
+                  'Pin your pond on the map. We\'ll verify it before it appears on your dashboard.'.tr,
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -694,8 +690,8 @@ class _AddPondDialogState extends State<_AddPondDialog> {
                   child: TextField(
                     controller: _nameController,
                     textCapitalization: TextCapitalization.words,
-                    decoration: const InputDecoration(
-                      labelText: 'Pond name',
+                    decoration: InputDecoration(
+                      labelText: 'Pond name'.tr,
                       prefixIcon: Icon(Icons.water_drop_outlined),
                     ),
                     onChanged: (value) {
@@ -721,7 +717,7 @@ class _AddPondDialogState extends State<_AddPondDialog> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Type of pond', style: theme.textTheme.titleSmall),
+                      Text('Type of pond'.tr, style: theme.textTheme.titleSmall),
                       const SizedBox(height: AppSpacing.sm),
                       // Material (not DecoratedBox) so the tile's tap ripple
                       // shows on top of the tinted background.
@@ -745,10 +741,9 @@ class _AddPondDialogState extends State<_AddPondDialog> {
                           controlAffinity: ListTileControlAffinity.leading,
                           value: _isInHouse,
                           onChanged: _handleInHouseChanged,
-                          title: const Text('In-house pond'),
-                          subtitle: const Text(
-                            "Covered, indoors, or a tank that satellite can't "
-                            "see. You'll verify with a photo instead.",
+                          title: Text('In-house pond'.tr),
+                          subtitle: Text(
+                            'Covered, indoors, or a tank that satellite can\'t see. You\'ll verify with a photo instead.'.tr,
                           ),
                         ),
                       ),
@@ -788,7 +783,7 @@ class _AddPondDialogState extends State<_AddPondDialog> {
                     const SizedBox(width: AppSpacing.sm),
                     Expanded(
                       child: Text(
-                        next ?? 'Ready to add your pond.',
+                        next ?? 'Ready to add your pond.'.tr,
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: next == null
                               ? scheme.primary
@@ -804,7 +799,7 @@ class _AddPondDialogState extends State<_AddPondDialog> {
                     Expanded(
                       child: OutlinedButton(
                         onPressed: () => Navigator.of(context).pop(),
-                        child: const Text('Cancel'),
+                        child: Text('Cancel'.tr),
                       ),
                     ),
                     const SizedBox(width: AppSpacing.md),
@@ -812,7 +807,7 @@ class _AddPondDialogState extends State<_AddPondDialog> {
                       flex: 2,
                       child: FilledButton(
                         onPressed: canSubmit ? _submit : null,
-                        child: const Text('Add pond'),
+                        child: Text('Add pond'.tr),
                       ),
                     ),
                   ],
@@ -843,7 +838,7 @@ class _AddPondDialogState extends State<_AddPondDialog> {
           children: [
             Expanded(
               child: Text(
-                'Photos of your pond',
+                'Photos of your pond'.tr,
                 style: theme.textTheme.titleSmall,
               ),
             ),
@@ -860,7 +855,7 @@ class _AddPondDialogState extends State<_AddPondDialog> {
                   vertical: 2,
                 ),
                 child: Text(
-                  required ? 'Required' : 'Optional',
+                  required ? 'Required'.tr : 'Optional'.tr,
                   style: theme.textTheme.labelSmall?.copyWith(
                     color: required
                         ? scheme.onPrimaryContainer
@@ -874,12 +869,8 @@ class _AddPondDialogState extends State<_AddPondDialog> {
         const SizedBox(height: AppSpacing.xs),
         Text(
           required
-              ? 'Add at least $kMinEvidencePhotos photos of the pond or tank, '
-                    'showing the water. The satellite check is skipped for '
-                    'in-house ponds, so these photos are the proof.'
-              : 'Add $kMinEvidencePhotos or more. If buildings hide the pond on '
-                    "the satellite map, we'll compare them with it right away, "
-                    "so you won't be asked for photos later.",
+              ? 'Add at least {0} photos of the pond or tank, showing the water. The satellite check is skipped for in-house ponds, so these photos are the proof.'.trf([kMinEvidencePhotos])
+              : "Add {0} or more. If buildings hide the pond on the satellite map, we'll compare them with it right away, so you won't be asked for photos later.".trf([kMinEvidencePhotos]),
           style: theme.textTheme.bodySmall?.copyWith(
             color: scheme.onSurfaceVariant,
           ),
@@ -915,12 +906,10 @@ class _AddPondDialogState extends State<_AddPondDialog> {
               Expanded(
                 child: Text(
                   enough
-                      ? '$count photos ready.'
+                      ? '{0} photos ready.'.trf([count])
                       : required
-                      ? '$count of $kMinEvidencePhotos photos added. Add '
-                            '${kMinEvidencePhotos - count} more to continue.'
-                      : 'Add ${kMinEvidencePhotos - count} more, or remove '
-                            "these. They're only used with $kMinEvidencePhotos or more.",
+                      ? '{0} of {1} photos added. Add {2} more to continue.'.trf([count, kMinEvidencePhotos, kMinEvidencePhotos - count])
+                      : "Add {0} more, or remove these. They're only used with {1} or more.".trf([kMinEvidencePhotos - count, kMinEvidencePhotos]),
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: enough ? scheme.primary : scheme.onSurfaceVariant,
                   ),
@@ -995,7 +984,7 @@ class _PlaceSearchState extends State<_PlaceSearch> {
       if (!mounted) return;
       setState(() {
         _isSearching = false;
-        _error = e.message;
+        _error = e.message.tr;
       });
     }
   }
@@ -1036,7 +1025,7 @@ class _PlaceSearchState extends State<_PlaceSearch> {
               }
             },
             decoration: InputDecoration(
-              hintText: 'Search for a place',
+              hintText: 'Search for a place'.tr,
               filled: false,
               border: InputBorder.none,
               enabledBorder: InputBorder.none,
@@ -1052,7 +1041,7 @@ class _PlaceSearchState extends State<_PlaceSearch> {
                       ),
                     )
                   : IconButton(
-                      tooltip: 'Search',
+                      tooltip: 'Search'.tr,
                       icon: const Icon(Icons.arrow_forward),
                       onPressed: _search,
                     ),
@@ -1064,7 +1053,7 @@ class _PlaceSearchState extends State<_PlaceSearch> {
             child: Padding(
               padding: const EdgeInsets.all(AppSpacing.md),
               child: Text(
-                _error ?? 'No places found. Try a nearby town or landmark.',
+                _error ?? 'No places found. Try a nearby town or landmark.'.tr,
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: _error != null
                       ? scheme.error
@@ -1166,7 +1155,7 @@ class _DialogHeader extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: theme.textTheme.titleLarge),
+              Text(title.tr, style: theme.textTheme.titleLarge),
               const SizedBox(height: 2),
               Text(
                 subtitle,
@@ -1183,7 +1172,7 @@ class _DialogHeader extends StatelessWidget {
 }
 
 class _PhotoTip extends StatelessWidget {
-  const _PhotoTip({required this.text});
+  _PhotoTip({required this.text});
 
   final String text;
 
@@ -1311,24 +1300,22 @@ class _EvidencePhotosDialogState extends State<_EvidencePhotosDialog> {
                     children: [
                       _DialogHeader(
                         icon: Icons.photo_library_outlined,
-                        title: 'Add photos of “${widget.pondName}”',
+                        title: 'Add photos of “{0}”'.trf([widget.pondName]),
                         subtitle:
-                            'Buildings cover this spot on the satellite map, so '
-                            'we compare your photos with it to confirm the pond '
-                            'is really there.',
+                            'Buildings cover this spot on the satellite map, so we compare your photos with it to confirm the pond is really there.'.tr,
                       ),
                       const SizedBox(height: AppSpacing.md),
-                      const _PhotoTip(
+                      _PhotoTip(
                         text:
-                            'Add at least $kMinEvidencePhotos photos from different angles',
+                            'Add at least {0} photos from different angles'.trf([kMinEvidencePhotos]),
                       ),
-                      const _PhotoTip(
+                      _PhotoTip(
                         text:
-                            'Show the water and what is around it: roof, walls, fence, trees',
+                            'Show the water and what is around it: roof, walls, fence, trees'.tr,
                       ),
-                      const _PhotoTip(
+                      _PhotoTip(
                         text:
-                            'Screenshots, internet images and photos of a screen are rejected',
+                            'Screenshots, internet images and photos of a screen are rejected'.tr,
                       ),
                       const SizedBox(height: AppSpacing.lg),
                       _PhotoGrid(
@@ -1356,10 +1343,8 @@ class _EvidencePhotosDialogState extends State<_EvidencePhotosDialog> {
                           Expanded(
                             child: Text(
                               _enough
-                                  ? '${_photos.length} photos added. You can send them now'
-                                        '${_full ? '' : ' or add up to ${kMaxEvidencePhotos - _photos.length} more'}.'
-                                  : '${_photos.length} of $kMinEvidencePhotos photos added. '
-                                        'Add ${kMinEvidencePhotos - _photos.length} more.',
+                                  ? '{0} photos added. You can send them now{1}.'.trf([_photos.length, _full ? '' : ' or add up to ${kMaxEvidencePhotos - _photos.length} more'])
+                                  : '{0} of {1} photos added. Add {2} more.'.trf([_photos.length, kMinEvidencePhotos, kMinEvidencePhotos - _photos.length]),
                               style: theme.textTheme.bodySmall?.copyWith(
                                 color: _enough
                                     ? scheme.primary
@@ -1385,7 +1370,7 @@ class _EvidencePhotosDialogState extends State<_EvidencePhotosDialog> {
                 children: [
                   TextButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Cancel'),
+                    child: Text('Cancel'.tr),
                   ),
                   FilledButton(
                     onPressed: _enough
@@ -1395,8 +1380,8 @@ class _EvidencePhotosDialogState extends State<_EvidencePhotosDialog> {
                         : null,
                     child: Text(
                       _enough
-                          ? 'Submit ${_photos.length} photos'
-                          : 'Submit photos',
+                          ? 'Submit {0} photos'.trf([_photos.length])
+                          : 'Submit photos'.tr,
                     ),
                   ),
                 ],
@@ -1436,7 +1421,7 @@ class _PhotoGrid extends StatelessWidget {
       final photo = await picker.pickPhoto();
       if (photo != null && context.mounted) onAdded([photo]);
     } on PondPhotoException catch (e) {
-      if (context.mounted) onError(e.message);
+      if (context.mounted) onError(e.message.tr);
     }
   }
 
@@ -1447,7 +1432,7 @@ class _PhotoGrid extends StatelessWidget {
       );
       if (picked.isNotEmpty && context.mounted) onAdded(picked);
     } on PondPhotoException catch (e) {
-      if (context.mounted) onError(e.message);
+      if (context.mounted) onError(e.message.tr);
     }
   }
 
@@ -1463,13 +1448,13 @@ class _PhotoGrid extends StatelessWidget {
           _PhotoThumb(photo: photo, onRemove: () => onRemoved(i)),
         if (!full && picker.usesCamera)
           _AddPhotoTile(
-            label: 'Take photo',
+            label: 'Take photo'.tr,
             icon: Icons.photo_camera_outlined,
             onTap: () => _take(context),
           ),
         if (!full)
           _AddPhotoTile(
-            label: picker.usesCamera ? 'Upload photos' : 'Add photos',
+            label: picker.usesCamera ? 'Upload photos'.tr : 'Add photos'.tr,
             icon: Icons.add_photo_alternate_outlined,
             onTap: () => _upload(context),
           ),
@@ -1508,13 +1493,13 @@ class _PhotoThumb extends StatelessWidget {
               child: InkWell(
                 customBorder: const CircleBorder(),
                 onTap: onRemove,
-                child: const Padding(
+                child: Padding(
                   padding: EdgeInsets.all(4),
                   child: Icon(
                     Icons.close,
                     size: 16,
                     color: Colors.white,
-                    semanticLabel: 'Remove photo',
+                    semanticLabel: 'Remove photo'.tr,
                   ),
                 ),
               ),
@@ -1594,7 +1579,7 @@ Future<List<String>?> showSelectSpeciesDialog(
       return StatefulBuilder(
         builder: (context, setState) {
           return AlertDialog(
-            title: Text(title),
+            title: Text(title.tr),
             content: SizedBox(
               width: 360,
               child: Column(
@@ -1602,8 +1587,7 @@ Future<List<String>?> showSelectSpeciesDialog(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Which fish or shrimp does this pond have? This is used to '
-                    'suggest feeding times.',
+                    'Which fish or shrimp does this pond have? This is used to suggest feeding times.'.tr,
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                   const SizedBox(height: AppSpacing.sm),
@@ -1630,11 +1614,11 @@ Future<List<String>?> showSelectSpeciesDialog(
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Skip'),
+                child: Text('Skip'.tr),
               ),
               FilledButton(
                 onPressed: () => Navigator.of(context).pop(selected.toList()),
-                child: const Text('Done'),
+                child: Text('Done'.tr),
               ),
             ],
           );
@@ -1767,13 +1751,13 @@ class _EditLocationDialogState extends State<_EditLocationDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('Edit location', style: theme.textTheme.titleLarge),
+              Text('Edit location'.tr, style: theme.textTheme.titleLarge),
               const SizedBox(height: AppSpacing.md),
               Expanded(
                 child: LocationPickerMap(
                   initialCenter: _center.value,
                   initialZoom: _mapZoom,
-                  centerLabel: _isAtUserLocation ? "You're here" : null,
+                  centerLabel: _isAtUserLocation ? 'You\'re here'.tr : null,
                   onUserInteraction: _handleUserInteraction,
                   onCenterChanged: (newCenter) => _center.value = newCenter,
                   onLocateMe: _handleLocateMe,
@@ -1797,7 +1781,7 @@ class _EditLocationDialogState extends State<_EditLocationDialog> {
                 children: [
                   TextButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Cancel'),
+                    child: Text('Cancel'.tr),
                   ),
                   const SizedBox(width: AppSpacing.sm),
                   FilledButton(
@@ -1808,7 +1792,7 @@ class _EditLocationDialogState extends State<_EditLocationDialog> {
                         longitude: value.longitude,
                       ));
                     },
-                    child: const Text('Save location'),
+                    child: Text('Save location'.tr),
                   ),
                 ],
               ),

@@ -6,6 +6,9 @@ import 'package:provider/provider.dart';
 import '../providers/theme_provider.dart';
 import '../services/auth_service.dart';
 import '../theme/app_spacing.dart';
+import '../widgets/account_dialogs.dart';
+import '../widgets/language_toggle.dart';
+import '../l10n/tr.dart';
 
 /// Account info + sign-out — ported from the old sidebar's account row
 /// (`AppShell`'s former `_AccountSection`) into its own destination.
@@ -17,8 +20,8 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  late Future<({String fullName, String email, String? photoUrl})?> _profileFuture =
-      AuthService.fetchCurrentProfile();
+  late Future<({String fullName, String email, String? photoUrl})?>
+  _profileFuture = AuthService.fetchCurrentProfile();
   StreamSubscription? _authSub;
 
   @override
@@ -28,6 +31,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // `userUpdated` event), so this doubles as this screen's own refresh —
     // no separate setState needed after a successful rename.
     _authSub = AuthService.onAuthStateChange.listen((_) {
+      // Picks up a just-confirmed email change (see requestEmailChange).
+      AuthService.syncProfileEmail().catchError((_) {});
       setState(() {
         _profileFuture = AuthService.fetchCurrentProfile();
       });
@@ -51,27 +56,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
             void submit() {
               final trimmed = controller.text.trim();
               if (trimmed.isEmpty) {
-                setState(() => errorText = 'Enter your name');
+                setState(() => errorText = 'Enter your name'.tr);
                 return;
               }
               Navigator.of(context).pop(trimmed);
             }
 
             return AlertDialog(
-              title: const Text('Edit name'),
+              title: Text('Edit name'.tr),
               content: TextField(
                 controller: controller,
                 autofocus: true,
                 textInputAction: TextInputAction.done,
-                decoration: InputDecoration(labelText: 'Full name', errorText: errorText),
+                decoration: InputDecoration(
+                  labelText: 'Full name'.tr,
+                  errorText: errorText,
+                ),
                 onChanged: (_) {
                   if (errorText != null) setState(() => errorText = null);
                 },
                 onSubmitted: (_) => submit(),
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
-                FilledButton(onPressed: submit, child: const Text('Save')),
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: Text('Cancel'.tr),
+                ),
+                FilledButton(onPressed: submit, child: Text('Save'.tr)),
               ],
             );
           },
@@ -86,14 +97,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       await AuthService.updateFullName(newName);
     } catch (e) {
-      messenger.showSnackBar(const SnackBar(content: Text("Couldn't update name. Try again.")));
+      messenger.showSnackBar(
+        SnackBar(content: Text('Couldn\'t update name. Try again.'.tr)),
+      );
     }
+  }
+
+  Future<void> _runAccountDialog(Future<String?> Function() open) async {
+    final message = await open();
+    if (message == null || !mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final currentUser = AuthService.currentUser;
+    final phone = currentUser?.phone;
 
     return FutureBuilder<({String fullName, String email, String? photoUrl})?>(
       future: _profileFuture,
@@ -102,13 +124,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
         // Falls back to the synchronously-available session data while the
         // `profiles` fetch (needed for photo_url) is still in flight, so the
         // page shows a name/email immediately instead of flashing empty.
-        final fallbackName = (currentUser?.userMetadata?['full_name'] as String?) ?? '';
+        final fallbackName =
+            (currentUser?.userMetadata?['full_name'] as String?) ?? '';
         final fallbackEmail = currentUser?.email ?? '';
-        final fullName = (profile?.fullName.isNotEmpty ?? false) ? profile!.fullName : fallbackName;
-        final email = (profile?.email.isNotEmpty ?? false) ? profile!.email : fallbackEmail;
+        final fullName = (profile?.fullName.isNotEmpty ?? false)
+            ? profile!.fullName
+            : fallbackName;
+        final email = (profile?.email.isNotEmpty ?? false)
+            ? profile!.email
+            : fallbackEmail;
         final photoUrl = profile?.photoUrl;
         final displayName = fullName.isNotEmpty ? fullName : email;
-        final initial = displayName.isNotEmpty ? displayName[0].toUpperCase() : '?';
+        final initial = displayName.isNotEmpty
+            ? displayName[0].toUpperCase()
+            : '?';
 
         return ListView(
           padding: const EdgeInsets.all(AppSpacing.lg),
@@ -121,9 +150,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     CircleAvatar(
                       radius: 28,
                       backgroundColor: theme.colorScheme.primary,
-                      backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
+                      backgroundImage: photoUrl != null
+                          ? NetworkImage(photoUrl)
+                          : null,
                       child: photoUrl == null
-                          ? Text(initial, style: TextStyle(color: theme.colorScheme.onPrimary, fontSize: 20))
+                          ? Text(
+                              initial,
+                              style: TextStyle(
+                                color: theme.colorScheme.onPrimary,
+                                fontSize: 20,
+                              ),
+                            )
                           : null,
                     ),
                     const SizedBox(width: AppSpacing.md),
@@ -134,21 +171,111 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         children: [
                           Text(
                             displayName,
-                            style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                           if (email.isNotEmpty && email != displayName)
                             Text(
                               email,
-                              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
                             ),
                         ],
                       ),
                     ),
                     IconButton(
                       icon: const Icon(Icons.edit_outlined),
-                      tooltip: 'Edit name',
+                      tooltip: 'Edit name'.tr,
                       onPressed: () => _editName(fullName),
                     ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Padding(
+              padding: const EdgeInsets.only(
+                left: AppSpacing.xs,
+                bottom: AppSpacing.sm,
+              ),
+              child: Text(
+                'Credentials'.tr,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            Card(
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.phone_outlined),
+                    title: Text('Phone number'.tr),
+                    subtitle: Text(
+                      phone == null || phone.isEmpty
+                          ? 'Not set'.tr
+                          : (phone.startsWith('+') ? phone : '+$phone'),
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () =>
+                        _runAccountDialog(() => showChangePhoneDialog(context)),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.email_outlined),
+                    title: Text('Email'.tr),
+                    subtitle: Text(email.isEmpty ? 'Not set'.tr : email),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => _runAccountDialog(
+                      () => showChangeEmailDialog(context, currentEmail: email),
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.lock_outline),
+                    title: Text('Password'.tr),
+                    subtitle: Text('Change your password'.tr),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => _runAccountDialog(
+                      () => showChangePasswordDialog(context),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.translate),
+                        const SizedBox(width: AppSpacing.md),
+                        Expanded(
+                          child: Text(
+                            'Language'.tr,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      'Choose the app language. The AI assistant replies in it too.'
+                          .tr,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    const LanguageToggle(),
                   ],
                 ),
               ),
@@ -159,7 +286,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Card(
               child: ListTile(
                 leading: const Icon(Icons.logout),
-                title: const Text('Sign out'),
+                title: Text('Sign out'.tr),
                 onTap: AuthService.signOut,
               ),
             ),
@@ -169,8 +296,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 }
-
-
 
 /// Light / Dark / System theme picker. Reads and writes the app-wide
 /// [ThemeProvider]; selecting an option updates `MaterialApp.themeMode`
@@ -190,16 +315,24 @@ class _AppearanceCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xs),
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg,
+                AppSpacing.md,
+                AppSpacing.lg,
+                AppSpacing.xs,
+              ),
               child: Text(
-                'Appearance',
-                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                'Appearance'.tr,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
             RadioGroup<ThemeMode>(
               groupValue: themeProvider.themeMode,
               onChanged: (mode) {
-                if (mode != null) context.read<ThemeProvider>().setThemeMode(mode);
+                if (mode != null)
+                  context.read<ThemeProvider>().setThemeMode(mode);
               },
               child: Column(
                 children: [
@@ -226,7 +359,7 @@ enum _ThemeOption {
   system(
     mode: ThemeMode.system,
     label: 'System default',
-    description: "Match your device's theme",
+    description: 'Match your device\'s theme',
     icon: Icons.brightness_auto_outlined,
   ),
   light(
@@ -244,13 +377,17 @@ enum _ThemeOption {
 
   const _ThemeOption({
     required this.mode,
-    required this.label,
-    required this.description,
+    required String label,
+    required String description,
     required this.icon,
-  });
+  }) : _label = label,
+       _description = description;
 
   final ThemeMode mode;
-  final String label;
-  final String description;
+  final String _label;
+  final String _description;
   final IconData icon;
+
+  String get label => _label.tr;
+  String get description => _description.tr;
 }

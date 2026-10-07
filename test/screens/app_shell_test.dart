@@ -8,6 +8,7 @@ import 'package:isdasafev2/models/pond.dart';
 import 'package:isdasafev2/models/pond_verification.dart';
 import 'package:isdasafev2/providers/notification_provider.dart';
 import 'package:isdasafev2/providers/pond_provider.dart';
+import 'package:isdasafev2/l10n/language_provider.dart';
 import 'package:isdasafev2/providers/theme_provider.dart';
 import 'package:isdasafev2/screens/app_shell.dart';
 import 'package:isdasafev2/theme/app_theme.dart';
@@ -57,6 +58,7 @@ void main() {
           ),
         ),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ChangeNotifierProvider(create: (_) => LanguageProvider()),
       ],
       child: MaterialApp(theme: AppTheme.light, home: const AppShell()),
     );
@@ -103,6 +105,23 @@ void main() {
       expect(find.text('AI Recommended Species'), findsNothing);
     },
   );
+
+  testWidgets('the Ask AI button asks which pond, then opens the chat', (
+    tester,
+  ) async {
+    await setWideSurface(tester);
+    await tester.pumpWidget(buildApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Ask AI'));
+    await tester.pumpAndSettle();
+    expect(find.text('Which pond?'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('chat-pond-pond-a')));
+    await tester.pumpAndSettle();
+    expect(find.text('Pond assistant'), findsOneWidget);
+    expect(find.text('Is my pond healthy right now?'), findsOneWidget);
+  });
 
   testWidgets('switching away from Dashboard hides its pond sub-buttons', (
     tester,

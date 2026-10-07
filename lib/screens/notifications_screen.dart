@@ -11,6 +11,7 @@ import '../services/pond_snapshot_cache.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/add_pond_flow.dart';
 import '../widgets/status_badge.dart';
+import '../l10n/tr.dart';
 
 class _Alert {
   const _Alert({
@@ -81,7 +82,7 @@ class NotificationsScreen extends StatelessWidget {
               ),
               const SizedBox(height: AppSpacing.md),
               Text(
-                'No alerts — all ponds are within healthy ranges.',
+                'No alerts — all ponds are within healthy ranges.'.tr,
                 style: theme.textTheme.bodyMedium,
                 textAlign: TextAlign.center,
               ),
@@ -101,7 +102,7 @@ class NotificationsScreen extends StatelessWidget {
             alignment: Alignment.centerRight,
             child: TextButton(
               onPressed: notificationProvider.markAllRead,
-              child: const Text('Mark all read'),
+              child: Text('Mark all read'.tr),
             ),
           ),
         for (final alert in alerts)
@@ -199,6 +200,14 @@ class _AlertCard extends StatelessWidget {
     'pond_verified' => (Icons.verified, scheme.primary),
     'pond_rejected' => (Icons.cancel_outlined, scheme.error),
     'pond_needs_photos' => (Icons.photo_camera_outlined, scheme.secondary),
+    final t when t.startsWith('account_') && t.endsWith('_failed') => (
+      Icons.error_outline,
+      scheme.error,
+    ),
+    final t when t.startsWith('account_') => (
+      Icons.check_circle_outline,
+      scheme.primary,
+    ),
     _ => (Icons.error_outline, scheme.tertiary),
   };
 }
@@ -206,10 +215,10 @@ class _AlertCard extends StatelessWidget {
 /// "Just now", "5 min ago", "2 h ago", "3 d ago".
 String relativeTime(DateTime time) {
   final diff = DateTime.now().difference(time);
-  if (diff.inMinutes < 1) return 'Just now';
-  if (diff.inMinutes < 60) return '${diff.inMinutes} min ago';
-  if (diff.inHours < 24) return '${diff.inHours} h ago';
-  return '${diff.inDays} d ago';
+  if (diff.inMinutes < 1) return 'Just now'.tr;
+  if (diff.inMinutes < 60) return '{0} min ago'.trf([diff.inMinutes]);
+  if (diff.inHours < 24) return '{0} h ago'.trf([diff.inHours]);
+  return '{0} d ago'.trf([diff.inDays]);
 }
 
 /// One server-sent notification (currently pond verification results): a
@@ -264,7 +273,7 @@ class _NotificationCard extends StatelessWidget {
                       children: [
                         Expanded(
                           child: Text(
-                            notification.title,
+                            notification.title.tr,
                             style: theme.textTheme.titleSmall?.copyWith(
                               fontWeight: unread
                                   ? FontWeight.w700
@@ -297,7 +306,7 @@ class _NotificationCard extends StatelessWidget {
                       FilledButton.tonalIcon(
                         onPressed: onTap,
                         icon: const Icon(Icons.add_a_photo_outlined, size: 18),
-                        label: const Text('Add photos'),
+                        label: Text('Add photos'.tr),
                       ),
                     ],
                   ],

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_spacing.dart';
 import '../theme/app_theme.dart';
+import '../l10n/tr.dart';
 
 /// A single password requirement and the predicate that checks it.
 class PasswordRule {
@@ -52,7 +53,7 @@ class PasswordStrengthChecklist extends StatelessWidget {
                   color: rule.test(password) ? context.statusColors.good : theme.colorScheme.onSurfaceVariant,
                 ),
                 const SizedBox(width: AppSpacing.sm),
-                Text(rule.label, style: theme.textTheme.bodySmall),
+                Text(rule.label.tr, style: theme.textTheme.bodySmall),
               ],
             ),
           ),

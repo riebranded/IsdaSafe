@@ -18,15 +18,16 @@ import '../widgets/reading_grid.dart';
 import '../widgets/staggered_entrance.dart';
 import '../widgets/status_badge.dart';
 import 'pond_dashboard_screen.dart';
+import '../l10n/tr.dart';
 
 /// Shown whenever a Supabase write (rename/move/remove/species/create) fails
 /// — the in-memory list has already rolled back to match, so this is purely
 /// informational.
 void _showSaveError(BuildContext context) {
   ScaffoldMessenger.of(context).showSnackBar(
-    const SnackBar(
+    SnackBar(
       content: Text(
-        "Couldn't save changes. Check your connection and try again.",
+        'Couldn\'t save changes. Check your connection and try again.'.tr,
       ),
     ),
   );
@@ -102,16 +103,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Remove pond'),
-        content: Text('Remove "${pond.name}"? This cannot be undone.'),
+        title: Text('Remove pond'.tr),
+        content: Text('Remove "{0}"? This cannot be undone.'.trf([pond.name])),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: Text('Cancel'.tr),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Remove'),
+            child: Text('Remove'.tr),
           ),
         ],
       ),
@@ -176,8 +177,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       SnackBar(
         content: Text(
           allSent
-              ? "Verification restarted. We'll notify you when it's done."
-              : "Couldn't restart verification. Check your connection and try again.",
+              ? 'Verification restarted. We\'ll notify you when it\'s done.'.tr
+              : 'Couldn\'t restart verification. Check your connection and try again.'.tr,
         ),
       ),
     );
@@ -308,7 +309,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const SizedBox(height: AppSpacing.lg),
           ],
           _StatusSummary(normal: normal, warning: warning, critical: critical),
-          const SizedBox(height: AppSpacing.lg),
+          const SizedBox(height: AppSpacing.xl),
+          PondsHeader(count: ponds.length),
+          const SizedBox(height: AppSpacing.md),
           for (final (index, pond) in ponds.indexed) ...[
             if (index > 0) const SizedBox(height: AppSpacing.md),
             StaggeredEntrance(
@@ -394,7 +397,7 @@ class _PondDetailView extends StatelessWidget {
           child: TextButton.icon(
             onPressed: onBack,
             icon: const Icon(Icons.arrow_back),
-            label: const Text('All ponds'),
+            label: Text('All ponds'.tr),
           ),
         ),
         Expanded(
@@ -407,6 +410,43 @@ class _PondDetailView extends StatelessWidget {
                 create: (_) => DashboardProvider(pond: pond),
                 child: PondDashboardBody(pond: pond, showHeader: true),
               ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// "Ponds" title with a count, heading the list of pond cards.
+class PondsHeader extends StatelessWidget {
+  const PondsHeader({super.key, required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      children: [
+        Text(
+          'Ponds'.tr,
+          style: theme.textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.primary.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(AppRadius.pill),
+          ),
+          child: Text(
+            '$count',
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: theme.colorScheme.primary,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ),
@@ -434,7 +474,7 @@ class _StatusSummary extends StatelessWidget {
         Expanded(
           child: _SummaryTile(
             count: normal,
-            label: 'Normal',
+            label: 'Normal'.tr,
             status: ReadingStatus.normal,
           ),
         ),
@@ -442,7 +482,7 @@ class _StatusSummary extends StatelessWidget {
         Expanded(
           child: _SummaryTile(
             count: warning,
-            label: 'Warning',
+            label: 'Warning'.tr,
             status: ReadingStatus.warning,
           ),
         ),
@@ -450,7 +490,7 @@ class _StatusSummary extends StatelessWidget {
         Expanded(
           child: _SummaryTile(
             count: critical,
-            label: 'Critical',
+            label: 'Critical'.tr,
             status: ReadingStatus.critical,
           ),
         ),
@@ -568,7 +608,7 @@ class _MobilePondCard extends StatelessWidget {
                   const SizedBox(width: AppSpacing.sm),
                   StatusBadge(status: status),
                   PopupMenuButton<String>(
-                    tooltip: 'Pond options',
+                    tooltip: 'Pond options'.tr,
                     padding: EdgeInsets.zero,
                     icon: const Icon(Icons.more_vert),
                     onSelected: (value) {
@@ -577,17 +617,17 @@ class _MobilePondCard extends StatelessWidget {
                       if (value == 'remove') onRemove();
                     },
                     itemBuilder: (context) => [
-                      const PopupMenuItem(
+                      PopupMenuItem(
                         value: 'rename',
-                        child: Text('Rename'),
+                        child: Text('Rename'.tr),
                       ),
-                      const PopupMenuItem(
+                      PopupMenuItem(
                         value: 'location',
-                        child: Text('Edit location'),
+                        child: Text('Edit location'.tr),
                       ),
-                      const PopupMenuItem(
+                      PopupMenuItem(
                         value: 'remove',
-                        child: Text('Remove'),
+                        child: Text('Remove'.tr),
                       ),
                     ],
                   ),
@@ -656,7 +696,7 @@ class _PondLocationLine extends StatelessWidget {
     final theme = Theme.of(context);
     final text = pond.hasLocation
         ? '${pond.latitude!.toStringAsFixed(4)}, ${pond.longitude!.toStringAsFixed(4)}'
-        : 'No location set';
+        : 'No location set'.tr;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -729,24 +769,24 @@ class _PondSummaryCard extends StatelessWidget {
                   const SizedBox(width: AppSpacing.sm),
                   StatusBadge(status: status),
                   PopupMenuButton<String>(
-                    tooltip: 'Pond options',
+                    tooltip: 'Pond options'.tr,
                     onSelected: (value) {
                       if (value == 'rename') onRename();
                       if (value == 'location') onEditLocation();
                       if (value == 'remove') onRemove();
                     },
                     itemBuilder: (context) => [
-                      const PopupMenuItem(
+                      PopupMenuItem(
                         value: 'rename',
-                        child: Text('Rename'),
+                        child: Text('Rename'.tr),
                       ),
-                      const PopupMenuItem(
+                      PopupMenuItem(
                         value: 'location',
-                        child: Text('Edit location'),
+                        child: Text('Edit location'.tr),
                       ),
-                      const PopupMenuItem(
+                      PopupMenuItem(
                         value: 'remove',
-                        child: Text('Remove'),
+                        child: Text('Remove'.tr),
                       ),
                     ],
                   ),
@@ -800,14 +840,14 @@ class _SpeciesPromptBanner extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '“${pond.name}” is verified',
+                        '“{0}” is verified'.trf([pond.name]),
                         style: theme.textTheme.titleSmall?.copyWith(
                           color: scheme.onPrimaryContainer,
                         ),
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'Tell us which fish or shrimp it holds to get feeding-time suggestions.',
+                        'Tell us which fish or shrimp it holds to get feeding-time suggestions.'.tr,
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: scheme.onPrimaryContainer,
                         ),
@@ -823,10 +863,10 @@ class _SpeciesPromptBanner extends StatelessWidget {
               child: Wrap(
                 spacing: AppSpacing.sm,
                 children: [
-                  TextButton(onPressed: onLater, child: const Text('Later')),
+                  TextButton(onPressed: onLater, child: Text('Later'.tr)),
                   FilledButton(
                     onPressed: onAdd,
-                    child: const Text('Add species'),
+                    child: Text('Add species'.tr),
                   ),
                 ],
               ),
@@ -853,7 +893,7 @@ class _VerificationBanner extends StatelessWidget {
   final VoidCallback onRetry;
 
   String _names(List<Pond> ponds) =>
-      ponds.length == 1 ? '“${ponds.first.name}”' : '${ponds.length} ponds';
+      ponds.length == 1 ? '“${ponds.first.name}”' : '{0} ponds'.trf([ponds.length]);
 
   @override
   Widget build(BuildContext context) {
@@ -862,12 +902,11 @@ class _VerificationBanner extends StatelessWidget {
     final hasFailed = failed.isNotEmpty;
 
     final title = hasFailed
-        ? "We couldn't finish verifying ${_names(failed)}"
-        : 'Verifying ${_names(pending)}…';
+        ? 'We couldn\'t finish verifying {0}'.trf([_names(failed)])
+        : 'Verifying {0}…'.trf([_names(pending)]);
     final body = hasFailed
-        ? 'A technical problem stopped the check. Retry to try again.'
-        : "It will appear here once it's verified. We'll send you a "
-              'notification when it is.';
+        ? 'A technical problem stopped the check. Retry to try again.'.tr
+        : 'It will appear here once it\'s verified. We\'ll send you a notification when it is.'.tr;
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -920,7 +959,7 @@ class _VerificationBanner extends StatelessWidget {
                         minimumSize: const Size(0, 32),
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
-                      child: Text(hasFailed ? 'Retry' : 'Taking long? Retry'),
+                      child: Text(hasFailed ? 'Retry'.tr : 'Taking long? Retry'.tr),
                     ),
                   ),
                 ],
@@ -981,15 +1020,15 @@ class _EmptyDashboard extends StatelessWidget {
             const SizedBox(height: AppSpacing.lg),
             Text(
               waitingForVerification
-                  ? 'Your pond is on its way'
-                  : 'No ponds yet',
+                  ? 'Your pond is on its way'.tr
+                  : 'No ponds yet'.tr,
               style: theme.textTheme.titleMedium,
             ),
             const SizedBox(height: AppSpacing.xs),
             Text(
               waitingForVerification
-                  ? 'Verified ponds show up here with their live water quality.'
-                  : 'Add a pond to start tracking its water quality and\nsee which fish species it can support.',
+                  ? 'Verified ponds show up here with their live water quality.'.tr
+                  : 'Add a pond to start tracking its water quality and\nsee which fish species it can support.'.tr,
               textAlign: TextAlign.center,
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
@@ -1001,8 +1040,8 @@ class _EmptyDashboard extends StatelessWidget {
               icon: const Icon(Icons.add),
               label: Text(
                 waitingForVerification
-                    ? 'Add another pond'
-                    : 'Add your first pond',
+                    ? 'Add another pond'.tr
+                    : 'Add your first pond'.tr,
               ),
             ),
           ],

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/tr.dart';
 import '../theme/app_spacing.dart';
 
 /// "Retry in 512s" is unreadable — only sub-minute cooldowns read fine as
@@ -37,7 +38,7 @@ class RateLimitBanner extends StatelessWidget {
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Text(
-              message,
+              message.tr,
               style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onErrorContainer),
             ),
           ),

@@ -10,13 +10,55 @@ import '../app_shell.dart';
 import 'login_screen.dart';
 import 'otp_verification_screen.dart';
 import 'register_screen.dart';
+import 'reset_password_screen.dart';
+import '../../l10n/tr.dart';
 
 /// Swaps between the auth flow and [AppShell] based on Supabase's current
 /// session, and recovers a user who was killed mid-signup (session exists
 /// but their `profiles` row is missing or not phone-verified yet) by
 /// routing them back into OTP verification instead of the app.
-class AuthGate extends StatelessWidget {
+class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
+
+  @override
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<AuthGate> {
+  /// The user whose verified profile has already been confirmed. While the
+  /// session stays on this user, auth events (a password/email/phone change
+  /// fires `userUpdated`) must not re-run the check — that would swap
+  /// [AppShell] for a spinner and rebuild it, bouncing the user from Settings
+  /// back to the dashboard.
+  String? _verifiedUserId;
+  Future<bool>? _verifyFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    AuthService.recoveryPending.addListener(_onRecoveryChanged);
+  }
+
+  @override
+  void dispose() {
+    AuthService.recoveryPending.removeListener(_onRecoveryChanged);
+    super.dispose();
+  }
+
+  void _onRecoveryChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Future<bool> _verify(String userId) async {
+    final verified = await AuthService.hasVerifiedProfile();
+    if (verified) {
+      _verifiedUserId = userId;
+    } else {
+      // Not done yet (mid-signup): let the next auth event re-check.
+      _verifyFuture = null;
+    }
+    return verified;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -24,13 +66,27 @@ class AuthGate extends StatelessWidget {
       stream: AuthService.onAuthStateChange,
       builder: (context, snapshot) {
         final session = snapshot.data?.session ?? AuthService.currentSession;
-        if (session == null) return const LoginScreen();
+        if (session == null) {
+          _verifiedUserId = null;
+          _verifyFuture = null;
+          return const LoginScreen();
+        }
+        final userId = session.user.id;
+        // Opened from a password-reset email: choose the new password before
+        // anything else (the recovery link has already signed them in).
+        if (AuthService.recoveryPending.value) {
+          return const ResetPasswordScreen();
+        }
+        if (_verifiedUserId == userId) return const AppShell();
+        if (_verifiedUserId != null) _verifyFuture = null; // different user
 
         return FutureBuilder<bool>(
-          future: AuthService.hasVerifiedProfile(),
+          future: _verifyFuture ??= _verify(userId),
           builder: (context, verifiedSnapshot) {
             if (verifiedSnapshot.connectionState != ConnectionState.done) {
-              return const Scaffold(body: Center(child: CircularProgressIndicator()));
+              return const Scaffold(
+                body: Center(child: CircularProgressIndicator()),
+              );
             }
             if (verifiedSnapshot.data == true) return const AppShell();
 
@@ -48,7 +104,10 @@ class AuthGate extends StatelessWidget {
             // `auth.users.phone` isn't set until verification succeeds — the
             // pending number lives in user_metadata until then (see
             // AuthService.signUpWithEmail).
-            final pendingPhone = (user.userMetadata?['pending_phone'] as String?) ?? user.phone ?? '';
+            final pendingPhone =
+                (user.userMetadata?['pending_phone'] as String?) ??
+                user.phone ??
+                '';
 
             if (pendingPhone.isEmpty) {
               // A full "Continue with Google" from Login/Register (not the
@@ -63,7 +122,8 @@ class AuthGate extends StatelessWidget {
             // brand-new user here — Google's OIDC claims populate one of
             // these two keys in user_metadata.
             final photoUrl =
-                (user.userMetadata?['avatar_url'] as String?) ?? (user.userMetadata?['picture'] as String?);
+                (user.userMetadata?['avatar_url'] as String?) ??
+                (user.userMetadata?['picture'] as String?);
             return _PendingPhoneVerification(
               fullName: (user.userMetadata?['full_name'] as String?) ?? '',
               email: user.email ?? '',
@@ -94,7 +154,8 @@ class _PendingPhoneVerification extends StatefulWidget {
   final String? photoUrl;
 
   @override
-  State<_PendingPhoneVerification> createState() => _PendingPhoneVerificationState();
+  State<_PendingPhoneVerification> createState() =>
+      _PendingPhoneVerificationState();
 }
 
 class _PendingPhoneVerificationState extends State<_PendingPhoneVerification> {
@@ -145,7 +206,9 @@ class _PendingPhoneVerificationState extends State<_PendingPhoneVerification> {
       // before it ever reached user_metadata, so recovering here can go
       // straight to marking the profile verified — same as RegisterScreen's
       // own bypass branch.
-      debugPrint('AuthGate: OTP bypass enabled — marking recovered profile verified without SMS.');
+      debugPrint(
+        'AuthGate: OTP bypass enabled — marking recovered profile verified without SMS.',
+      );
       await AuthService.upsertProfile(
         fullName: widget.fullName,
         email: widget.email,
@@ -156,7 +219,9 @@ class _PendingPhoneVerificationState extends State<_PendingPhoneVerification> {
       await AuthService.refreshAuthState();
       return;
     }
-    debugPrint('AuthGate: recovering mid-signup user, requesting fresh Semaphore OTP for ${widget.phone}...');
+    debugPrint(
+      'AuthGate: recovering mid-signup user, requesting fresh Semaphore OTP for ${widget.phone}...',
+    );
     await AuthService.requestSemaphoreOtp(widget.phone);
     debugPrint('AuthGate: recovery OTP send succeeded');
   }
@@ -167,12 +232,16 @@ class _PendingPhoneVerificationState extends State<_PendingPhoneVerification> {
       future: _future,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
         }
 
         if (snapshot.hasError) {
           final error = snapshot.error;
-          final message = error is AuthException ? error.message : 'Failed to send verification code.';
+          final message = error is AuthException
+              ? error.message
+              : 'Failed to send verification code.'.tr;
 
           // A user recovered here (session restored, but phone still
           // unverified) can easily have already burned through
@@ -183,11 +252,16 @@ class _PendingPhoneVerificationState extends State<_PendingPhoneVerification> {
           // repeats the same rate-limit failure instantly, with no
           // indication of why or how long to actually wait.
           final isCooldown = message == AuthService.otpCooldownMessage;
-          final isBurstOrDaily = message == AuthService.otpBurstOrDailyLimitMessage;
+          final isBurstOrDaily =
+              message == AuthService.otpBurstOrDailyLimitMessage;
           if ((isCooldown || isBurstOrDaily) && _countdownArmedFor != _future) {
             _countdownArmedFor = _future;
-            final duration = isBurstOrDaily ? AuthService.otpBurstCooldownDuration : AuthService.otpCooldownDuration;
-            WidgetsBinding.instance.addPostFrameCallback((_) => _startRetryCountdown(duration));
+            final duration = isBurstOrDaily
+                ? AuthService.otpBurstCooldownDuration
+                : AuthService.otpCooldownDuration;
+            WidgetsBinding.instance.addPostFrameCallback(
+              (_) => _startRetryCountdown(duration),
+            );
           }
           final isRateLimited = isCooldown || isBurstOrDaily;
           final canRetry = !isRateLimited || _secondsRemaining == 0;
@@ -206,11 +280,15 @@ class _PendingPhoneVerificationState extends State<_PendingPhoneVerification> {
                     const SizedBox(height: AppSpacing.md),
                     FilledButton(
                       onPressed: canRetry ? _retry : null,
-                      child: Text(canRetry ? 'Retry' : 'Retry in ${formatCountdown(_secondsRemaining)}'),
+                      child: Text(
+                        canRetry
+                            ? 'Retry'.tr
+                            : 'Retry in {0}'.trf([formatCountdown(_secondsRemaining)]),
+                      ),
                     ),
                     TextButton(
                       onPressed: AuthService.signOut,
-                      child: const Text('Sign out'),
+                      child: Text('Sign out'.tr),
                     ),
                   ],
                 ),
@@ -223,7 +301,9 @@ class _PendingPhoneVerificationState extends State<_PendingPhoneVerification> {
           // refreshAuthState() above already fired an auth-state event;
           // AuthGate's StreamBuilder will rebuild into AppShell shortly —
           // nothing to show here in the meantime.
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
         }
 
         return OtpVerificationScreen(

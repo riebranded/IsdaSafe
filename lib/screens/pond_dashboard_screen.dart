@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../models/chat_message.dart';
 import '../models/feeding_recommendation.dart';
 import '../models/metric_type.dart';
 import '../models/pond.dart';
@@ -11,12 +12,16 @@ import '../providers/pond_provider.dart';
 import '../services/fish_species_catalog.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_theme.dart';
+import '../services/pond_snapshot_cache.dart';
 import '../widgets/individual_trend_chart.dart';
+import '../widgets/metric_detail_view.dart';
+import '../widgets/pond_chat_sheet.dart';
 import '../widgets/pond_dialogs.dart';
 import '../widgets/reading_grid.dart';
 import '../widgets/species_recommendation_card.dart';
 import '../widgets/staggered_entrance.dart';
 import '../widgets/status_badge.dart';
+import '../l10n/tr.dart';
 
 /// Full-screen mobile route: pushed from `DashboardScreen` or `PondMapScreen`,
 /// owns its own [AppBar] with the pond name + refresh action.
@@ -48,11 +53,12 @@ class _MobileDashboardScaffold extends StatelessWidget {
           IconButton(
             onPressed: () => context.read<DashboardProvider>().refresh(),
             icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh readings',
+            tooltip: 'Refresh readings'.tr,
           ),
         ],
       ),
       body: PondDashboardBody(pond: pond, showHeader: false),
+      floatingActionButton: PondChatFab(pond: pond),
     );
   }
 }
@@ -90,7 +96,12 @@ class PondDashboardBody extends StatelessWidget {
       onRefresh: () async => context.read<DashboardProvider>().refresh(),
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(AppSpacing.lg),
+        padding: EdgeInsets.fromLTRB(
+          AppSpacing.lg,
+          AppSpacing.lg,
+          AppSpacing.lg,
+          showHeader ? AppSpacing.lg : 88,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -109,7 +120,7 @@ class PondDashboardBody extends StatelessWidget {
                     onPressed: () =>
                         context.read<DashboardProvider>().refresh(),
                     icon: const Icon(Icons.refresh),
-                    tooltip: 'Refresh readings',
+                    tooltip: 'Refresh readings'.tr,
                   ),
                 ],
               ),
@@ -126,7 +137,7 @@ class PondDashboardBody extends StatelessWidget {
             const SizedBox(height: AppSpacing.lg),
             _SectionHeader(
               icon: Icons.sensors,
-              title: 'Latest readings',
+              title: 'Latest readings'.tr,
               trailing: _LastUpdated(
                 timestamp: snapshot
                     .reading(snapshot.readings.keys.first)
@@ -138,14 +149,20 @@ class PondDashboardBody extends StatelessWidget {
             const SizedBox(height: AppSpacing.xl),
             _SectionHeader(
               icon: Icons.set_meal_outlined,
-              title: 'Feeding schedule',
-              trailing: IconButton(
-                onPressed: () => _editPondSpecies(context, pond),
-                icon: const Icon(Icons.edit_outlined),
-                tooltip: pond.speciesNames.isEmpty
-                    ? 'Add species'
-                    : 'Edit species',
-                visualDensity: VisualDensity.compact,
+              title: 'Feeding schedule'.tr,
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  AskAiButton(pond: pond, topic: ChatTopic.feeding),
+                  IconButton(
+                    onPressed: () => _editPondSpecies(context, pond),
+                    icon: const Icon(Icons.edit_outlined),
+                    tooltip: pond.speciesNames.isEmpty
+                        ? 'Add species'.tr
+                        : 'Edit species'.tr,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: AppSpacing.md),
@@ -153,12 +170,19 @@ class PondDashboardBody extends StatelessWidget {
             const SizedBox(height: AppSpacing.xl),
             _SectionHeader(
               icon: Icons.tips_and_updates_outlined,
-              title: 'Water quality recommendations',
-              trailing: _CountPill(
-                count: _advisories(
-                  dashboard,
-                  (r) => r.waterQualityRecommendations,
-                ).length,
+              title: 'Water quality recommendations'.tr,
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _CountPill(
+                    count: _advisories(
+                      dashboard,
+                      (r) => r.waterQualityRecommendations,
+                    ).length,
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  AskAiButton(pond: pond, topic: ChatTopic.waterQuality),
+                ],
               ),
             ),
             const SizedBox(height: AppSpacing.md),
@@ -173,15 +197,25 @@ class PondDashboardBody extends StatelessWidget {
               loading: dashboard.feedingLoading,
               error: dashboard.feedingError,
               emptyMessage:
-                  'No specific recommendations right now — readings look healthy.',
+                  'No specific recommendations right now — readings look healthy.'.tr,
             ),
             const SizedBox(height: AppSpacing.xl),
             _SectionHeader(
               icon: Icons.warning_amber_outlined,
-              title: 'Possible risks',
-              trailing: _CountPill(
-                count: _advisories(dashboard, (r) => r.possibleRisks).length,
-                color: context.statusColors.warning,
+              title: 'Possible risks'.tr,
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _CountPill(
+                    count: _advisories(
+                      dashboard,
+                      (r) => r.possibleRisks,
+                    ).length,
+                    color: context.statusColors.warning,
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  AskAiButton(pond: pond, topic: ChatTopic.risks),
+                ],
               ),
             ),
             const SizedBox(height: AppSpacing.md),
@@ -192,22 +226,31 @@ class PondDashboardBody extends StatelessWidget {
               hasSpecies: pond.speciesNames.isNotEmpty,
               loading: dashboard.feedingLoading,
               error: dashboard.feedingError,
-              emptyMessage: 'No notable risks identified right now.',
+              emptyMessage: 'No notable risks identified right now.'.tr,
             ),
             const SizedBox(height: AppSpacing.xl),
-            _SectionHeader(icon: Icons.show_chart, title: 'Individual trends'),
+            _SectionHeader(icon: Icons.show_chart, title: 'Individual trends'.tr),
             const SizedBox(height: AppSpacing.md),
             for (final type in MetricType.values) ...[
               IndividualTrendChart(
                 type: type,
                 history: snapshot.history[type]!,
                 range: TrendRange.hourly,
+                onTap: () => showMetricDetail(
+                  context,
+                  pond: pond,
+                  type: type,
+                  // History is seeded per pond, so a standalone cache yields
+                  // the same series the dashboard card shows.
+                  cache: PondSnapshotCache(),
+                  initialRange: TrendRange.hourly,
+                ),
               ),
               const SizedBox(height: AppSpacing.lg),
             ],
             _SectionHeader(
               icon: Icons.auto_awesome_outlined,
-              title: 'AI Recommended Species',
+              title: 'AI Recommended Species'.tr,
             ),
             const SizedBox(height: AppSpacing.md),
             SpeciesRecommendationCard(
@@ -240,9 +283,9 @@ Future<void> _editPondSpecies(BuildContext context, Pond pond) async {
     context.read<DashboardProvider>().retryFeedingRecommendations();
   } else {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
+      SnackBar(
         content: Text(
-          "Couldn't save changes. Check your connection and try again.",
+          'Couldn\'t save changes. Check your connection and try again.'.tr,
         ),
       ),
     );
@@ -273,13 +316,13 @@ class _FeedingScheduleSection extends StatelessWidget {
             foregroundColor: theme.colorScheme.onPrimaryContainer,
             child: const Icon(Icons.set_meal_outlined, size: 18),
           ),
-          title: const Text('No fish species added yet'),
-          subtitle: const Text(
-            'Add species to see an AI-generated feeding plan.',
+          title: Text('No fish species added yet'.tr),
+          subtitle: Text(
+            'Add species to see an AI-generated feeding plan.'.tr,
           ),
           trailing: TextButton(
             onPressed: () => _editPondSpecies(context, pond),
-            child: const Text('Add'),
+            child: Text('Add'.tr),
           ),
         ),
       );
@@ -363,19 +406,19 @@ class _FeedingSpeciesCard extends StatelessWidget {
             if (recommendation != null) ...[
               _FeedingDetailTile(
                 icon: Icons.schedule,
-                label: 'Feeding time',
+                label: 'Feeding time'.tr,
                 value: recommendation!.feedingTime,
               ),
               const SizedBox(height: AppSpacing.sm),
               _FeedingDetailTile(
                 icon: Icons.repeat,
-                label: 'Frequency',
+                label: 'Frequency'.tr,
                 value: recommendation!.feedingFrequency,
               ),
               const SizedBox(height: AppSpacing.sm),
               _FeedingDetailTile(
                 icon: Icons.scale_outlined,
-                label: 'Amount',
+                label: 'Amount'.tr,
                 value: recommendation!.feedingAmount,
               ),
             ] else if (loading) ...[
@@ -389,7 +432,7 @@ class _FeedingSpeciesCard extends StatelessWidget {
                   const SizedBox(width: AppSpacing.sm),
                   Expanded(
                     child: Text(
-                      'Asking the model for a feeding plan…',
+                      'Asking the model for a feeding plan…'.tr,
                       style: theme.textTheme.bodySmall,
                     ),
                   ),
@@ -586,9 +629,9 @@ class _AdvisoryListState extends State<_AdvisoryList> {
             foregroundColor: theme.colorScheme.onSurfaceVariant,
             child: const Icon(Icons.set_meal_outlined, size: 18),
           ),
-          title: const Text('No fish species added yet'),
-          subtitle: const Text(
-            'Add a species in "Feeding schedule" above to see this.',
+          title: Text('No fish species added yet'.tr),
+          subtitle: Text(
+            'Add a species in "Feeding schedule" above to see this.'.tr,
           ),
         ),
       );
@@ -606,7 +649,7 @@ class _AdvisoryListState extends State<_AdvisoryList> {
                 child: CircularProgressIndicator(strokeWidth: 2.5),
               ),
               const SizedBox(width: AppSpacing.md),
-              const Expanded(child: Text('Asking the model for guidance…')),
+              Expanded(child: Text('Asking the model for guidance…'.tr)),
             ],
           ),
         ),
@@ -634,7 +677,7 @@ class _AdvisoryListState extends State<_AdvisoryList> {
                         onPressed: () => context
                             .read<DashboardProvider>()
                             .retryFeedingRecommendations(),
-                        child: const Text('Retry'),
+                        child: Text('Retry'.tr),
                       ),
                     ),
                   ],
@@ -767,8 +810,8 @@ class _AdvisoryListState extends State<_AdvisoryList> {
               ),
               label: Text(
                 _expanded
-                    ? 'Show less'
-                    : 'Show ${items.length - _advisoryPreviewCount} more',
+                    ? 'Show less'.tr
+                    : 'Show {0} more'.trf([items.length - _advisoryPreviewCount]),
               ),
             ),
           ),
@@ -862,10 +905,10 @@ class _PondStatusBanner extends StatelessWidget {
     final theme = Theme.of(context);
     final color = status.colorOf(context);
     final message = switch (status) {
-      ReadingStatus.normal => 'All readings are within a healthy range.',
+      ReadingStatus.normal => 'All readings are within a healthy range.'.tr,
       ReadingStatus.warning =>
-        'One or more readings are drifting outside the healthy range.',
-      ReadingStatus.critical => 'One or more readings need attention now.',
+        'One or more readings are drifting outside the healthy range.'.tr,
+      ReadingStatus.critical => 'One or more readings need attention now.'.tr,
     };
 
     return Container(
@@ -892,7 +935,7 @@ class _PondStatusBanner extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Pond status: ${status.label}',
+                  'Pond status: {0}'.trf([status.label]),
                   style: theme.textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.w600,
                     color: color,
@@ -918,7 +961,7 @@ class _LastUpdated extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Text(
-      'Updated ${_relativeTime(timestamp)}',
+      'Updated {0}'.trf([_relativeTime(timestamp)]),
       style: theme.textTheme.bodySmall?.copyWith(
         color: theme.colorScheme.onSurfaceVariant,
       ),
@@ -927,9 +970,9 @@ class _LastUpdated extends StatelessWidget {
 
   String _relativeTime(DateTime time) {
     final diff = DateTime.now().difference(time);
-    if (diff.inSeconds < 45) return 'just now';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
-    return '${diff.inDays}d ago';
+    if (diff.inSeconds < 45) return 'just now'.tr;
+    if (diff.inMinutes < 60) return '{0}m ago'.trf([diff.inMinutes]);
+    if (diff.inHours < 24) return '{0}h ago'.trf([diff.inHours]);
+    return '{0}d ago'.trf([diff.inDays]);
   }
 }
