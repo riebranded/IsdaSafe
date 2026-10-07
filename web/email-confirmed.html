@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Email confirmed · IsdaSafe</title>
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <!-- Supabase sends the user here after they tap the confirmation link in
+       their email (the change itself is already complete by then). Show a
+       short confirmation, then continue to the app. -->
+  <meta http-equiv="refresh" content="4;url=/">
+  <style>
+    :root { color-scheme: light dark; --bg:#f4f8fb; --card:#fff; --text:#0f2a3a; --muted:#5b7280; --accent:#0b7a75; }
+    @media (prefers-color-scheme: dark) { :root { --bg:#0d1a22; --card:#14262f; --text:#e6f1f5; --muted:#93a9b4; --accent:#3cc4bd; } }
+    body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+           background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+    main { background:var(--card); border-radius:16px; padding:40px 32px; max-width:380px; margin:16px;
+           text-align:center; box-shadow:0 4px 24px rgba(0,0,0,.08); }
+    .check { width:64px; height:64px; border-radius:50%; background:var(--accent); color:#fff; font-size:34px;
+             line-height:64px; margin:0 auto 20px; }
+    h1 { font-size:22px; margin:0 0 8px; }
+    p { color:var(--muted); margin:0 0 20px; line-height:1.5; }
+    a { color:var(--accent); font-weight:600; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="check" aria-hidden="true">&#10003;</div>
+    <h1>Email confirmed</h1>
+    <p>Your email address has been updated. Taking you back to IsdaSafe&hellip;</p>
+    <a href="/">Continue now</a>
+  </main>
+  <script>setTimeout(function () { location.replace('/'); }, 3000);</script>
+</body>
+</html>
