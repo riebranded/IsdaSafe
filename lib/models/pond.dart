@@ -7,10 +7,12 @@ class Pond {
     this.latitude,
     this.longitude,
     List<String>? speciesNames,
+    Map<String, double>? speciesBiomassKg,
     this.verificationMethod,
     this.verificationStatus = VerificationStatus.verified,
     this.verificationMessage,
   }) : speciesNames = speciesNames ?? [],
+       speciesBiomassKg = speciesBiomassKg ?? {},
        seed = id.hashCode;
 
   final String id;
@@ -28,6 +30,12 @@ class Pond {
   /// shown on the pond's dashboard; unrelated to the AI species
   /// recommendation, which is driven by live readings instead.
   List<String> speciesNames;
+
+  /// Total weight in kg of each species in [speciesNames], as the owner
+  /// estimated it when picking the species. Used to work out how much feed
+  /// the feeding schedule recommends. Missing for species picked before it
+  /// was asked.
+  Map<String, double> speciesBiomassKg;
 
   /// How the pond was verified when added (null for ponds created before
   /// verification existed).

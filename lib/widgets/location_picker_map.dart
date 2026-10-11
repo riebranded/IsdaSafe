@@ -21,8 +21,7 @@ const double kFocusedMapZoom = 14;
 
 /// google_maps_flutter has no official Windows/Linux/macOS support, so those
 /// platforms fall back to manual coordinate entry instead of a map view.
-bool get isMapViewSupported =>
-    kIsWeb || Platform.isAndroid || Platform.isIOS;
+bool get isMapViewSupported => kIsWeb || Platform.isAndroid || Platform.isIOS;
 
 /// A map with a pin fixed at the center of the viewport. The user pans and
 /// zooms the map underneath it to position the pin precisely.
@@ -317,7 +316,9 @@ class _ManualLocationEntryState extends State<_ManualLocationEntry> {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: theme.colorScheme.outlineVariant),
       ),
-      child: Padding(
+      // Scrolls inside the map's fixed-height slot when the message and both
+      // fields don't fit (small phones, large text).
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -334,7 +335,8 @@ class _ManualLocationEntryState extends State<_ManualLocationEntry> {
               const SizedBox(height: 8),
             ],
             Text(
-              'Map view isn\'t available on this platform. Enter coordinates manually.'.tr,
+              'Map view isn\'t available on this platform. Enter coordinates manually.'
+                  .tr,
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),

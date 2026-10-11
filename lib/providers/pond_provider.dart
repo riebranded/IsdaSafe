@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import '../models/pond.dart';
 import '../models/pond_verification.dart';
@@ -32,7 +33,28 @@ class PondProvider extends ChangeNotifier {
   /// side panel, alerts) shows. Ponds still being checked, rejected, or whose
   /// check failed are kept out until they're verified; see [pendingPonds] and
   /// [failedPonds] for the ones the dashboard banner reports on.
-  List<Pond> get ponds => List.unmodifiable(_ponds.where((p) => p.isVerified));
+  ///
+  /// Testing aid: in debug builds, `SKIP_POND_VERIFICATION=true` in `.env`
+  /// also lists ponds still being checked (anything not rejected), so
+  /// species/biomass and pairing can be tried without waiting on
+  /// `verify-pond`. Only the display changes; the stored status doesn't.
+  List<Pond> get ponds => List.unmodifiable(
+    _ponds.where(
+      (p) =>
+          p.isVerified ||
+          (_skipVerification &&
+              p.verificationStatus != VerificationStatus.rejected),
+    ),
+  );
+
+  static bool get _skipVerification =>
+      kDebugMode &&
+      dotenv.isInitialized &&
+      dotenv.maybeGet('SKIP_POND_VERIFICATION') == 'true';
+
+  /// Any of the user's ponds by id, whatever its verification status (e.g. to
+  /// show a review's result). Null if there's no such pond.
+  Pond? pondById(String id) => _ponds.where((p) => p.id == id).firstOrNull;
 
   /// Ponds whose background verification hasn't finished yet.
   List<Pond> get pendingPonds => List.unmodifiable(
@@ -113,7 +135,9 @@ class PondProvider extends ChangeNotifier {
       notifyListeners();
       // Verification runs on the server after this returns; if the request
       // can't be sent the pond just stays pending and can be retried.
-      unawaited(_startVerification(pond, verification?.evidencePhotos ?? const []));
+      unawaited(
+        _startVerification(pond, verification?.evidencePhotos ?? const []),
+      );
       return pond;
     } catch (e) {
       debugPrint('PondProvider: addPond error $e');
@@ -129,11 +153,17 @@ class PondProvider extends ChangeNotifier {
     final uid = _repository.currentUserId;
     if (uid != null && evidence.length >= kMinEvidencePhotos) {
       try {
-        final paths = await _repository.uploadEvidencePhotos(uid: uid, pondId: pond.id, photos: evidence);
+        final paths = await _repository.uploadEvidencePhotos(
+          uid: uid,
+          pondId: pond.id,
+          photos: evidence,
+        );
         await _repository.requestVerification(pond.id, photoPaths: paths);
         return;
       } catch (e) {
-        debugPrint('PondProvider: sending up-front photos failed, verifying without them: $e');
+        debugPrint(
+          'PondProvider: sending up-front photos failed, verifying without them: $e',
+        );
       }
     }
     await _requestVerification(pond);
@@ -210,18 +240,33 @@ class PondProvider extends ChangeNotifier {
 
   /// Sets which fish/shrimp species [id] holds — see [Pond.speciesNames].
   /// Returns whether the write succeeded.
-  Future<bool> setSpecies(String id, List<String> speciesNames) async {
+  /// Sets the pond's species and, per species, its biomass in kg (only
+  /// entries for [speciesNames] are kept).
+  Future<bool> setSpecies(
+    String id,
+    List<String> speciesNames, {
+    Map<String, double> biomassKg = const {},
+  }) async {
     final index = _ponds.indexWhere((p) => p.id == id);
     if (index == -1) return false;
 
+    final biomass = {for (final name in speciesNames) name: ?biomassKg[name]};
     final previous = _ponds[index].speciesNames;
-    _ponds[index].speciesNames = List.of(speciesNames);
+    final previousBiomass = _ponds[index].speciesBiomassKg;
+    _ponds[index]
+      ..speciesNames = List.of(speciesNames)
+      ..speciesBiomassKg = biomass;
     notifyListeners();
     try {
-      await _repository.updatePond(id, {'species_names': speciesNames});
+      await _repository.updatePond(id, {
+        'species_names': speciesNames,
+        'species_biomass_kg': biomass,
+      });
       return true;
     } catch (e) {
-      _ponds[index].speciesNames = previous;
+      _ponds[index]
+        ..speciesNames = previous
+        ..speciesBiomassKg = previousBiomass;
       notifyListeners();
       debugPrint('PondProvider: setSpecies error $e');
       return false;
@@ -250,6 +295,12 @@ class PondProvider extends ChangeNotifier {
   }
 
   /// Returns whether the write succeeded.
+  /// Moves the pond to a new location, which sends it back through
+  /// verification: the database resets its verification when the
+  /// coordinates change (see the ponds_protect_verification trigger), and
+  /// verify-pond checks the new spot. The pond leaves [ponds] for
+  /// [pendingPonds] until it's verified again. Returns whether the new
+  /// location was saved.
   Future<bool> setLocation(
     String id, {
     required double latitude,
@@ -257,25 +308,29 @@ class PondProvider extends ChangeNotifier {
   }) async {
     final index = _ponds.indexWhere((p) => p.id == id);
     if (index == -1) return false;
+    final pond = _ponds[index];
+    if (pond.latitude == latitude && pond.longitude == longitude) return true;
 
-    final previousLat = _ponds[index].latitude;
-    final previousLng = _ponds[index].longitude;
-    _ponds[index].latitude = latitude;
-    _ponds[index].longitude = longitude;
-    notifyListeners();
     try {
       await _repository.updatePond(id, {
         'latitude': latitude,
         'longitude': longitude,
       });
-      return true;
     } catch (e) {
-      _ponds[index].latitude = previousLat;
-      _ponds[index].longitude = previousLng;
-      notifyListeners();
+      // e.g. the pond is still being verified at its old location.
       debugPrint('PondProvider: setLocation error $e');
       return false;
     }
+    pond
+      ..latitude = latitude
+      ..longitude = longitude
+      ..verificationStatus = VerificationStatus.pending
+      ..verificationMessage = null;
+    notifyListeners();
+    // If this can't be sent the pond stays pending and the dashboard banner
+    // offers a retry, as for a new pond.
+    unawaited(_requestVerification(pond));
+    return true;
   }
 
   /// Returns whether the delete succeeded.

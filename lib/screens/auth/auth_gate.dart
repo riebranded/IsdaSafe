@@ -283,7 +283,9 @@ class _PendingPhoneVerificationState extends State<_PendingPhoneVerification> {
                       child: Text(
                         canRetry
                             ? 'Retry'.tr
-                            : 'Retry in {0}'.trf([formatCountdown(_secondsRemaining)]),
+                            : 'Retry in {0}'.trf([
+                                formatCountdown(_secondsRemaining),
+                              ]),
                       ),
                     ),
                     TextButton(

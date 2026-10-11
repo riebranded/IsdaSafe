@@ -1,6 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Release builds only get what's declared here (debug/profile add their
+         own INTERNET permission): Supabase, Google sign-in and maps need it. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <!-- Scanning a device's QR label to pair it. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
     <application
         android:label="isdasafev2"
         android:name="${applicationName}"

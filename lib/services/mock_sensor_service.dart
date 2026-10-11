@@ -45,7 +45,7 @@ class MockSensorService {
 
     final readings = <MetricType, SensorReading>{};
     final history = <MetricType, List<SensorReading>>{};
-    for (final type in MetricType.values) {
+    for (final type in MetricType.primary) {
       final band = _bands[type]!;
       final baseline =
           band.min + baselineRandom.nextDouble() * (band.max - band.min);

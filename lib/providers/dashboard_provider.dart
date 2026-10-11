@@ -6,13 +6,17 @@ import '../l10n/tr.dart';
 
 import '../l10n/language_provider.dart';
 import '../models/feeding_recommendation.dart';
+import '../models/metric_type.dart';
 import '../models/pond.dart';
 import '../models/sensor_reading.dart';
 import '../models/species_recommendation.dart';
 import '../services/feeding_recommendation_service.dart';
-import '../services/mock_sensor_service.dart';
+import '../services/feeding_schedule_store.dart';
 import '../services/recommendation_cache.dart';
 import '../services/species_recommendation_service.dart';
+import '../services/pond_snapshot_cache.dart';
+import '../services/usb_sensor/pond_readings_store.dart';
+import '../services/usb_sensor/usb_sensor_hub.dart';
 
 /// Holds the latest snapshot, AI species recommendation, and per-species
 /// feeding/water-quality advisories for one pond.
@@ -22,15 +26,15 @@ import '../services/species_recommendation_service.dart';
 class DashboardProvider extends ChangeNotifier {
   DashboardProvider({
     required this._pond,
-    MockSensorService? sensorService,
     SpeciesRecommendationService? recommendationService,
     FeedingRecommendationService? feedingService,
+    FeedingScheduleStore? scheduleStore,
     RecommendationCache? cache,
-  }) : _sensorService = sensorService ?? MockSensorService(),
-       _recommendationService =
+  }) : _recommendationService =
            recommendationService ?? HttpSpeciesRecommendationService(),
        _feedingService =
            feedingService ?? SupabaseFeedingRecommendationService(),
+       _scheduleStore = scheduleStore ?? SupabaseFeedingScheduleStore(),
        _cache = cache ?? RecommendationCache.instance {
     // Show whatever's still fresh from a previous visit to this pond's
     // dashboard immediately, before refresh() decides whether it needs to
@@ -41,13 +45,15 @@ class DashboardProvider extends ChangeNotifier {
       if (cached != null) _feedingRecommendations[name] = cached;
     }
     LanguageProvider.revision.addListener(_onLanguageChanged);
+    UsbSensorHub.instance.addListener(_onReadingsChanged);
+    PondReadingsStore.instance.addListener(_onReadingsChanged);
     refresh();
   }
 
   final Pond _pond;
-  final MockSensorService _sensorService;
   final SpeciesRecommendationService _recommendationService;
   final FeedingRecommendationService _feedingService;
+  final FeedingScheduleStore _scheduleStore;
   final RecommendationCache _cache;
 
   PondSnapshot? _snapshot;
@@ -59,7 +65,19 @@ class DashboardProvider extends ChangeNotifier {
   bool _feedingLoading = false;
   String? _feedingError;
 
+  /// Null until the pond has readings: see [dataState] for why.
   PondSnapshot? get snapshot => _snapshot;
+
+  /// Whether this pond has a paired device and readings yet.
+  PondDataState get dataState {
+    final state = PondReadingsStore.instance.stateFor(_pond.id);
+    // Live USB readings count even before the first upload lands.
+    if (state == PondDataState.waiting && _snapshot != null) {
+      return PondDataState.ready;
+    }
+    return state;
+  }
+
   SpeciesRecommendation? get recommendation => _recommendation;
   bool get recommendationLoading => _recommendationLoading;
   String? get recommendationError => _recommendationError;
@@ -96,38 +114,86 @@ class DashboardProvider extends ChangeNotifier {
     retryFeedingRecommendations();
   }
 
+  /// New readings (a USB reading, an upload, or the device being paired or
+  /// removed): show them straight away. The AI advice is only re-requested
+  /// once the pond first has every reading it needs, not every ~25 s.
+  void _onReadingsChanged() {
+    final hadAdviceReadings = _canAdvise(_snapshot);
+    _snapshot = PondSnapshotCache.compose(_pond);
+    notifyListeners();
+    final snapshot = _snapshot;
+    if (!hadAdviceReadings && snapshot != null) _fetchAdvice(snapshot);
+  }
+
+  static bool _canAdvise(PondSnapshot? snapshot) =>
+      snapshot != null && snapshot.missingForAdvice.isEmpty;
+
   @override
   void dispose() {
     LanguageProvider.revision.removeListener(_onLanguageChanged);
+    UsbSensorHub.instance.removeListener(_onReadingsChanged);
+    PondReadingsStore.instance.removeListener(_onReadingsChanged);
     super.dispose();
   }
 
   void refresh() {
-    final snapshot = _sensorService.generateSnapshot(_pond);
-    _snapshot = snapshot;
+    final snapshot = _snapshot = PondSnapshotCache.compose(_pond);
     notifyListeners();
+    unawaited(PondReadingsStore.instance.refresh());
+    // No readings, no advice: there's nothing to base it on yet.
+    if (snapshot != null) _fetchAdvice(snapshot);
+  }
 
+  void _fetchAdvice(PondSnapshot snapshot) {
+    if (!_waitForAdviceReadings(snapshot)) return;
     unawaited(_fetchRecommendation(snapshot));
     unawaited(_fetchFeedingRecommendations(snapshot));
   }
 
-  /// Re-requests a species recommendation for the current snapshot without
-  /// re-rolling the mock sensor readings — used by the recommendation
-  /// card's own retry action so a failed/slow prediction call can be
-  /// retried on its own.
+  /// The AI needs every one of [PondSnapshot.adviceMetrics]; with some still
+  /// missing (e.g. the pH/ammonia probe isn't sending), says which instead of
+  /// asking it with made-up values. Returns whether advice can be fetched.
+  bool _waitForAdviceReadings(PondSnapshot snapshot) {
+    final missing = snapshot.missingForAdvice;
+    if (missing.isEmpty) return true;
+    final message = 'Waiting for these readings from the device: {0}'.trf([
+      missing.map((t) => t.label).join(', '),
+    ]);
+    _recommendation = null;
+    _recommendationLoading = false;
+    _recommendationError = message;
+    _feedingRecommendations.clear();
+    _feedingLoading = false;
+    _feedingError = message;
+    notifyListeners();
+    return false;
+  }
+
+  /// Re-requests a species recommendation for the current snapshot — used
+  /// by the recommendation card's own retry action so a failed/slow
+  /// prediction call can be retried on its own.
   void retryRecommendation() {
     final snapshot = _snapshot;
-    if (snapshot == null) return;
+    if (snapshot == null || !_waitForAdviceReadings(snapshot)) return;
     unawaited(_fetchRecommendation(snapshot));
   }
 
-  /// Re-requests feeding/water-quality advisories for the current snapshot
-  /// without re-rolling the mock sensor readings — used both by the
+  /// The pond's species or their biomass just changed: the cached advice was
+  /// made for the old ones, so drop it and ask again.
+  void onSpeciesChanged() {
+    _cache.clearFeeding(_pond.id);
+    _feedingRecommendations.clear();
+    notifyListeners();
+    retryFeedingRecommendations();
+  }
+
+  /// Re-requests feeding/water-quality advisories for the current snapshot —
+  /// used both by the
   /// feeding/advisory sections' own retry actions and after the pond's
   /// species selection changes.
   void retryFeedingRecommendations() {
     final snapshot = _snapshot;
-    if (snapshot == null) return;
+    if (snapshot == null || !_waitForAdviceReadings(snapshot)) return;
     unawaited(_fetchFeedingRecommendations(snapshot));
   }
 
@@ -192,18 +258,61 @@ class DashboardProvider extends ChangeNotifier {
     notifyListeners();
 
     String? error;
+    // The feeding schedule is saved on the pond and regenerated once a day;
+    // the water-quality advice and risks every 15 minutes. Reuse whichever is
+    // still valid and only ask the model (with the current sensor readings)
+    // when something has expired.
+    final saved = await _scheduleStore.load(_pond.id);
+    var changed = false;
     for (final name in namesToFetch) {
       try {
-        final recommendation = await _feedingService.recommend(
-          species: name,
-          readings: snapshot.readings,
-        );
+        final biomassKg = _pond.speciesBiomassKg[name];
+        final schedule = saved.scheduleFor(name, biomassKg: biomassKg);
+        final advice = saved.adviceFor(name);
+        FeedingRecommendation recommendation;
+        if (schedule != null && advice != null) {
+          recommendation = FeedingRecommendation(
+            species: name,
+            feedingTime: schedule.time,
+            feedingFrequency: schedule.frequency,
+            feedingAmount: schedule.amount,
+            waterQualityRecommendations: advice.recommendations,
+            possibleRisks: advice.risks,
+          );
+        } else {
+          final fresh = await _feedingService.recommend(
+            species: name,
+            readings: snapshot.readings,
+            biomassKg: biomassKg,
+          );
+          // Keep today's schedule if there is one: only the advice expired.
+          recommendation = schedule == null
+              ? fresh
+              : FeedingRecommendation(
+                  species: name,
+                  feedingTime: schedule.time,
+                  feedingFrequency: schedule.frequency,
+                  feedingAmount: schedule.amount,
+                  waterQualityRecommendations:
+                      fresh.waterQualityRecommendations,
+                  possibleRisks: fresh.possibleRisks,
+                );
+          saved.put(
+            name,
+            fresh,
+            snapshot.readings,
+            replaceSchedule: schedule == null,
+            biomassKg: biomassKg,
+          );
+          changed = true;
+        }
         _feedingRecommendations[name] = recommendation;
         _cache.putFeeding(_pond.id, name, recommendation);
       } catch (e) {
         error = e.toString().replaceFirst('Exception: ', '').tr;
       }
     }
+    if (changed) unawaited(_scheduleStore.save(_pond.id, saved));
 
     // Only surface the error banner if nothing came back at all — a partial
     // result (some species failed, others didn't, or came from cache) still

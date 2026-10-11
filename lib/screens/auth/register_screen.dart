@@ -118,8 +118,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Future<void> _continueWithGoogle() async {
     setState(() => _isGoogleSubmitting = true);
     try {
-      await AuthService.signInWithGoogle();
-      if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
+      final signedIn = await AuthService.signInWithGoogle();
+      if (signedIn && mounted) {
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      }
     } on AuthException catch (e) {
       if (mounted) _showError(e.message);
     } catch (e) {
@@ -204,7 +206,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
               _phoneTakenError =
                   'The number is already in use by other account'.tr;
             if (emailTaken)
-              _emailTakenError = 'An account with this email already exists.'.tr;
+              _emailTakenError =
+                  'An account with this email already exists.'.tr;
           });
           // Setting the state above doesn't itself re-run the fields'
           // validators (that only happens on user interaction or an
@@ -290,8 +293,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
       if (mounted) {
         if (isDuplicateEmail) {
           setState(
-            () =>
-                _emailTakenError = 'An account with this email already exists.'.tr,
+            () => _emailTakenError =
+                'An account with this email already exists.'.tr,
           );
           _formKey.currentState?.validate();
         } else if (isRateLimit) {
@@ -320,7 +323,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_hasGoogleSession ? 'Finish setting up'.tr : 'Create account'.tr),
+        title: Text(
+          _hasGoogleSession ? 'Finish setting up'.tr : 'Create account'.tr,
+        ),
       ),
       body: SafeArea(
         child: Center(
@@ -338,13 +343,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     const SizedBox(height: AppSpacing.lg),
                     if (_hasGoogleSession) ...[
                       Text(
-                        'Signed in as {0} via Google'.trf([_emailController.text]),
+                        'Signed in as {0} via Google'.trf([
+                          _emailController.text,
+                        ]),
                         style: theme.textTheme.bodyMedium,
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: AppSpacing.xs),
                       Text(
-                        'Just need your mobile number to finish setting up your account.'.tr,
+                        'Just need your mobile number to finish setting up your account.'
+                            .tr,
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
@@ -367,7 +375,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ),
                       const SizedBox(height: AppSpacing.xs),
                       Text(
-                        'Already have an account with this Google login? You’ll be signed straight in instead.'.tr,
+                        'Already have an account with this Google login? You’ll be signed straight in instead.'
+                            .tr,
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
@@ -525,7 +534,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : Text(
-                              _hasGoogleSession ? 'Continue'.tr : 'Create account'.tr,
+                              _hasGoogleSession
+                                  ? 'Continue'.tr
+                                  : 'Create account'.tr,
                             ),
                     ),
                     if (_rateLimitError != null) ...[
@@ -541,8 +552,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         ),
                       )
                     else
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                      Wrap(
+                        alignment: WrapAlignment.center,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           Text(
                             'Already have an account?'.tr,

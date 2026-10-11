@@ -169,6 +169,11 @@ class SupabasePondRepository implements PondRepository {
     latitude: (row['latitude'] as num?)?.toDouble(),
     longitude: (row['longitude'] as num?)?.toDouble(),
     speciesNames: ((row['species_names'] as List?) ?? const []).cast<String>(),
+    speciesBiomassKg: {
+      for (final entry
+          in ((row['species_biomass_kg'] as Map?) ?? const {}).entries)
+        if (entry.value case final num kg) entry.key as String: kg.toDouble(),
+    },
     verificationMethod: VerificationMethod.fromWire(row['verification_method']),
     verificationStatus: VerificationStatus.fromWire(row['verification_status']),
     verificationMessage: row['verification_message'] as String?,

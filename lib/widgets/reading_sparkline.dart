@@ -11,7 +11,11 @@ import 'status_badge.dart';
 /// badge/range-bar marker elsewhere on the same card. Deliberately bare: no
 /// axes, gridlines, or labels — this is a stat-tile sparkline, not a chart.
 class ReadingSparkline extends StatelessWidget {
-  const ReadingSparkline({super.key, required this.type, required this.history});
+  const ReadingSparkline({
+    super.key,
+    required this.type,
+    required this.history,
+  });
 
   final MetricType type;
   final List<SensorReading> history;
@@ -21,7 +25,9 @@ class ReadingSparkline extends StatelessWidget {
     final bands = metricBands[type]!;
     final status = bands.statusFor(history.last.value);
     final color = status.colorOf(context);
-    final positions = [for (final point in history) bands.positionOf(point.value)];
+    final positions = [
+      for (final point in history) bands.positionOf(point.value),
+    ];
 
     return SizedBox(
       height: 28,

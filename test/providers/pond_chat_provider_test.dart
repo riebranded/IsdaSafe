@@ -31,7 +31,11 @@ void main() {
     final service = _FakeChatService();
     final chat = PondChatProvider(service: service);
 
-    await chat.send('  How much to feed? ', topic: ChatTopic.feeding, context: ctx);
+    await chat.send(
+      '  How much to feed? ',
+      topic: ChatTopic.feeding,
+      context: ctx,
+    );
 
     expect(chat.messages.map((m) => m.text), ['How much to feed?', 'Reply 1']);
     expect(chat.messages.last.isUser, isFalse);
@@ -49,18 +53,21 @@ void main() {
     expect(chat.messages, isEmpty);
   });
 
-  test('failure keeps the question; retry re-asks without duplicating it', () async {
-    final service = _FakeChatService(failures: 1);
-    final chat = PondChatProvider(service: service);
+  test(
+    'failure keeps the question; retry re-asks without duplicating it',
+    () async {
+      final service = _FakeChatService(failures: 1);
+      final chat = PondChatProvider(service: service);
 
-    await chat.send('Is it safe?', topic: ChatTopic.risks, context: ctx);
-    expect(chat.error, 'Busy');
-    expect(chat.messages.length, 1);
+      await chat.send('Is it safe?', topic: ChatTopic.risks, context: ctx);
+      expect(chat.error, 'Busy');
+      expect(chat.messages.length, 1);
 
-    await chat.retry(topic: ChatTopic.risks, context: ctx);
-    expect(chat.error, isNull);
-    expect(chat.messages.map((m) => m.text), ['Is it safe?', 'Reply 2']);
-  });
+      await chat.retry(topic: ChatTopic.risks, context: ctx);
+      expect(chat.error, isNull);
+      expect(chat.messages.map((m) => m.text), ['Is it safe?', 'Reply 2']);
+    },
+  );
 
   test('clear empties the conversation', () async {
     final chat = PondChatProvider(service: _FakeChatService());
@@ -74,6 +81,9 @@ void main() {
   test('forPond returns the same session per pond', () {
     PondChatProvider.resetSessions();
     expect(PondChatProvider.forPond('a'), same(PondChatProvider.forPond('a')));
-    expect(PondChatProvider.forPond('a'), isNot(same(PondChatProvider.forPond('b'))));
+    expect(
+      PondChatProvider.forPond('a'),
+      isNot(same(PondChatProvider.forPond('b'))),
+    );
   });
 }

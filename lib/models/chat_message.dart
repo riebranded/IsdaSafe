@@ -43,9 +43,11 @@ extension ChatTopicInfo on ChatTopic {
 
   String get greeting => switch (this) {
     ChatTopic.general =>
-      "Hi! I'm your pond assistant. Ask me about feeding, water quality or risks for this pond.".tr,
+      "Hi! I'm your pond assistant. Ask me about feeding, water quality or risks for this pond."
+          .tr,
     ChatTopic.feeding =>
-      'Ask me anything about when, how often and how much to feed your fish.'.tr,
+      'Ask me anything about when, how often and how much to feed your fish.'
+          .tr,
     ChatTopic.waterQuality =>
       "Ask me how to read and improve your pond's water quality.".tr,
     ChatTopic.risks =>

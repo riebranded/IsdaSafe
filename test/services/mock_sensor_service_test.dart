@@ -6,11 +6,11 @@ import 'package:isdasafev2/services/mock_sensor_service.dart';
 void main() {
   final service = MockSensorService();
 
-  test('generates a reading for every metric type', () {
+  test('generates a reading for every main metric', () {
     final pond = Pond(id: 'p1', name: 'Pond 1');
     final snapshot = service.generateSnapshot(pond);
 
-    for (final type in MetricType.values) {
+    for (final type in MetricType.primary) {
       expect(snapshot.readings.containsKey(type), isTrue);
     }
   });
@@ -38,7 +38,8 @@ void main() {
     final snapshotB = service.generateSnapshot(pondB);
 
     final allSame = MetricType.values.every(
-      (type) => snapshotA.readings[type]!.value == snapshotB.readings[type]!.value,
+      (type) =>
+          snapshotA.readings[type]!.value == snapshotB.readings[type]!.value,
     );
     expect(allSame, isFalse);
   });
@@ -48,10 +49,15 @@ void main() {
 
     final values = List.generate(
       10,
-      (_) => service.generateSnapshot(pond).readings[MetricType.temperature]!.value,
+      (_) => service
+          .generateSnapshot(pond)
+          .readings[MetricType.temperature]!
+          .value,
     );
 
-    final spread = values.reduce((a, b) => a > b ? a : b) - values.reduce((a, b) => a < b ? a : b);
+    final spread =
+        values.reduce((a, b) => a > b ? a : b) -
+        values.reduce((a, b) => a < b ? a : b);
     // Jitter is +/-0.6, so repeated samples for one pond should stay tightly clustered.
     expect(spread, lessThan(3));
   });

@@ -9,6 +9,7 @@ import '../models/pond.dart';
 import '../models/reading_bands.dart';
 import '../models/reading_status.dart';
 import '../models/sensor_reading.dart';
+import '../models/weather_context.dart';
 import '../services/pond_chat_service.dart';
 import 'dashboard_provider.dart';
 
@@ -102,6 +103,11 @@ Map<String, Object?> buildPondChatContext(
     'species': pond.speciesNames,
     if (readings != null) ...{
       'overall_status': overallStatus(readings).label,
+      // Humidity/air temperature only matter through these.
+      'weather_risks': [
+        for (final insight in weatherInsights(readings))
+          '${insight.title}: ${insight.message}',
+      ],
       'readings': {
         for (final entry in readings.entries)
           entry.key.label: entry.key.format(entry.value.value),

@@ -21,7 +21,9 @@ class ThemeProvider extends ChangeNotifier {
     final stored = prefs.getString(_prefsKey);
     if (stored == null) return;
 
-    final restored = ThemeMode.values.where((m) => m.name == stored).firstOrNull;
+    final restored = ThemeMode.values
+        .where((m) => m.name == stored)
+        .firstOrNull;
     if (restored != null && restored != _themeMode) {
       _themeMode = restored;
       notifyListeners();

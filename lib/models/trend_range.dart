@@ -1,4 +1,5 @@
 import '../l10n/tr.dart';
+
 /// How far back — and at what granularity — an [IndividualTrendChart] plots.
 /// Point count is kept modest (vs. e.g. 60 minute-by-minute points for
 /// `fifteenMinutes`) so every point's x-axis label stays legible instead of

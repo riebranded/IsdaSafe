@@ -12,7 +12,11 @@ import '../theme/app_spacing.dart';
 /// Skips the animation (shows immediately) when the platform requests
 /// reduced motion.
 class StaggeredEntrance extends StatefulWidget {
-  const StaggeredEntrance({super.key, required this.index, required this.child});
+  const StaggeredEntrance({
+    super.key,
+    required this.index,
+    required this.child,
+  });
 
   final int index;
   final Widget child;
@@ -21,7 +25,8 @@ class StaggeredEntrance extends StatefulWidget {
   State<StaggeredEntrance> createState() => _StaggeredEntranceState();
 }
 
-class _StaggeredEntranceState extends State<StaggeredEntrance> with SingleTickerProviderStateMixin {
+class _StaggeredEntranceState extends State<StaggeredEntrance>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
   late final Animation<double> _opacity;
   late final Animation<Offset> _offset;
@@ -37,12 +42,23 @@ class _StaggeredEntranceState extends State<StaggeredEntrance> with SingleTicker
     final startFraction = delay.inMicroseconds / total.inMicroseconds;
     final curved = CurvedAnimation(
       parent: _controller,
-      curve: Interval(startFraction.clamp(0.0, 1.0), 1.0, curve: Curves.easeOut),
+      curve: Interval(
+        startFraction.clamp(0.0, 1.0),
+        1.0,
+        curve: Curves.easeOut,
+      ),
     );
     _opacity = curved;
-    _offset = Tween<Offset>(begin: const Offset(0, 0.06), end: Offset.zero).animate(curved);
+    _offset = Tween<Offset>(
+      begin: const Offset(0, 0.06),
+      end: Offset.zero,
+    ).animate(curved);
 
-    final reduceMotion = WidgetsBinding.instance.platformDispatcher.accessibilityFeatures.disableAnimations;
+    final reduceMotion = WidgetsBinding
+        .instance
+        .platformDispatcher
+        .accessibilityFeatures
+        .disableAnimations;
     if (reduceMotion) {
       _controller.value = 1;
     } else {

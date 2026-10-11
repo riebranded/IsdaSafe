@@ -14,11 +14,19 @@ import '../support/fake_notification_repository.dart';
 import '../support/fake_pond_repository.dart';
 
 void main() {
-  Widget build({required List<Pond> ponds, required FakeNotificationRepository notifications}) {
+  Widget build({
+    required List<Pond> ponds,
+    required FakeNotificationRepository notifications,
+  }) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => PondProvider(repository: FakePondRepository(seed: ponds))),
-        ChangeNotifierProvider(create: (_) => NotificationProvider(repository: notifications)),
+        ChangeNotifierProvider(
+          create: (_) =>
+              PondProvider(repository: FakePondRepository(seed: ponds)),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => NotificationProvider(repository: notifications),
+        ),
       ],
       child: MaterialApp(
         theme: AppTheme.light,
@@ -27,7 +35,11 @@ void main() {
     );
   }
 
-  final waitingPond = Pond(id: 'bld', name: 'Roof Pond', verificationStatus: VerificationStatus.needsPhotos);
+  final waitingPond = Pond(
+    id: 'bld',
+    name: 'Roof Pond',
+    verificationStatus: VerificationStatus.needsPhotos,
+  );
 
   FakeNotificationRepository photosNeeded() => FakeNotificationRepository(
     seed: [
@@ -40,48 +52,70 @@ void main() {
     ],
   );
 
-  testWidgets('tapping a "photos needed" notification opens the photo modal and marks it read', (tester) async {
-    final notifications = photosNeeded();
-    await tester.pumpWidget(build(ponds: [waitingPond], notifications: notifications));
-    await tester.pumpAndSettle();
+  testWidgets(
+    'tapping a "photos needed" notification opens the photo modal and marks it read',
+    (tester) async {
+      final notifications = photosNeeded();
+      await tester.pumpWidget(
+        build(ponds: [waitingPond], notifications: notifications),
+      );
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Photos needed'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('Photos needed'));
+      await tester.pumpAndSettle();
 
-    expect(find.text('Add photos of “Roof Pond”'), findsOneWidget);
-    expect(notifications.markedRead, ['n1']);
-  });
+      expect(find.text('Add photos of “Roof Pond”'), findsOneWidget);
+      expect(notifications.markedRead, ['n1']);
+    },
+  );
 
-  testWidgets('the card has an explicit Add photos button that opens the same modal', (tester) async {
-    await tester.pumpWidget(build(ponds: [waitingPond], notifications: photosNeeded()));
-    await tester.pumpAndSettle();
+  testWidgets(
+    'the card has an explicit Add photos button that opens the same modal',
+    (tester) async {
+      await tester.pumpWidget(
+        build(ponds: [waitingPond], notifications: photosNeeded()),
+      );
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Add photos'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Add photos'));
+      await tester.pumpAndSettle();
 
-    expect(find.text('Add photos of “Roof Pond”'), findsOneWidget);
-  });
+      expect(find.text('Add photos of “Roof Pond”'), findsOneWidget);
+    },
+  );
 
-  testWidgets('once the pond is no longer waiting there is no button, and tapping says so', (tester) async {
-    await tester.pumpWidget(
-      build(ponds: [Pond(id: 'bld', name: 'Roof Pond')], notifications: photosNeeded()),
-    );
-    await tester.pumpAndSettle();
+  testWidgets(
+    'once the pond is no longer waiting there is no button, and tapping says so',
+    (tester) async {
+      await tester.pumpWidget(
+        build(
+          ponds: [Pond(id: 'bld', name: 'Roof Pond')],
+          notifications: photosNeeded(),
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    expect(find.widgetWithText(FilledButton, 'Add photos'), findsNothing);
+      expect(find.widgetWithText(FilledButton, 'Add photos'), findsNothing);
 
-    await tester.tap(find.text('Photos needed'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('Photos needed'));
+      await tester.pumpAndSettle();
 
-    expect(find.textContaining('Add photos of'), findsNothing);
-    expect(find.textContaining("isn't waiting for photos"), findsOneWidget);
-  });
+      expect(find.textContaining('Add photos of'), findsNothing);
+      expect(find.textContaining("isn't waiting for photos"), findsOneWidget);
+    },
+  );
 
-  testWidgets('other notifications just mark read and open nothing', (tester) async {
+  testWidgets('other notifications just mark read and open nothing', (
+    tester,
+  ) async {
     final notifications = FakeNotificationRepository(
-      seed: [fakeNotification('n2', title: 'Pond verified').copyWithPond('bld')],
+      seed: [
+        fakeNotification('n2', title: 'Pond verified').copyWithPond('bld'),
+      ],
     );
-    await tester.pumpWidget(build(ponds: [waitingPond], notifications: notifications));
+    await tester.pumpWidget(
+      build(ponds: [waitingPond], notifications: notifications),
+    );
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Pond verified'));

@@ -47,7 +47,10 @@ Future<bool?> showForgotPasswordDialog(BuildContext context) {
 
             setState(() => isSubmitting = true);
             try {
-              await AuthService.resetPasswordForEmail(address, captchaToken: token);
+              await AuthService.resetPasswordForEmail(
+                address,
+                captchaToken: token,
+              );
               setState(() {
                 isSubmitting = false;
                 codeSent = true;
@@ -107,7 +110,7 @@ Future<bool?> showForgotPasswordDialog(BuildContext context) {
                             enabled: !isSubmitting,
                             keyboardType: TextInputType.number,
                             textAlign: TextAlign.center,
-                            maxLength: 8,
+                            maxLength: 6,
                             inputFormatters: [
                               FilteringTextInputFormatter.digitsOnly,
                             ],
@@ -151,7 +154,9 @@ Future<bool?> showForgotPasswordDialog(BuildContext context) {
             actionsAlignment: MainAxisAlignment.center,
             actions: [
               TextButton(
-                onPressed: isSubmitting ? null : () => Navigator.of(context).pop(),
+                onPressed: isSubmitting
+                    ? null
+                    : () => Navigator.of(context).pop(),
                 child: Text('Cancel'.tr),
               ),
               FilledButton(

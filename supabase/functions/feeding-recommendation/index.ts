@@ -1,14 +1,18 @@
 // Feeding plan + water quality advice + risks for one species under a pond's
 // current readings. Replaces the Render-hosted POST /feeding-recommendation.
 //
-// Request:  { species, temperature, ph, dissolved_oxygen, ammonia, language? }
-//           language "tl" = write all text in Tagalog (default English).
+// Request:  { species, temperature, ph, dissolved_oxygen, ammonia, biomass_kg?,
+//             language? }
+//           biomass_kg = total weight of that species in the pond, which the
+//           feeding amount is calculated from. language "tl" = write all text
+//           in Tagalog (default English).
 // Response: { feeding_time, feeding_frequency, feeding_amount,
 //             water_quality_recommendations: string[], possible_risks: string[] }
 //
 // Models are tried in order; a rate-limited (429) or unavailable model moves on
 // to the next one, and a 429 model is skipped for a minute. Responses are cached
-// for 15 minutes per species + rounded readings (per function instance).
+// for 15 minutes per species + biomass + rounded readings (per function
+// instance).
 //
 // Secrets: GEMINI_API_KEY (shared). Optional GEMINI_MODELS (comma-separated chain)
 // or GEMINI_MODEL / GEMINI_FALLBACK_MODEL. Calls need a valid Supabase session.
@@ -53,6 +57,8 @@ type Input = {
   ph: number;
   dissolved_oxygen: number;
   ammonia: number;
+  /// Total weight of the species in the pond, kg; null if not given.
+  biomass_kg: number | null;
   language: "en" | "tl";
 };
 
@@ -61,7 +67,11 @@ const RESPONSE_SCHEMA = {
   properties: {
     feeding_time: { type: "STRING", description: "Recommended time(s) of day to feed" },
     feeding_frequency: { type: "STRING", description: "How often to feed (times per day/week)" },
-    feeding_amount: { type: "STRING", description: "Recommended feed amount/portion guidance" },
+    feeding_amount: {
+      type: "STRING",
+      description:
+        "How much feed: per day and per feeding, in kg or g, with the feeding rate (% of biomass) when the biomass is given",
+    },
     water_quality_recommendations: {
       type: "ARRAY",
       items: { type: "STRING" },
@@ -105,12 +115,26 @@ function parseInput(body: Record<string, unknown>): Input | null {
   if (!species || !nums.every((n) => typeof n === "number" && Number.isFinite(n))) return null;
   const [temperature, ph, dissolved_oxygen, ammonia] = nums as number[];
   const language = body.language === "tl" ? "tl" : "en";
-  return { species, temperature, ph, dissolved_oxygen, ammonia, language };
+  // Optional; ignored unless a positive, plausible weight (max 100 t, as in the app).
+  const biomass = body.biomass_kg;
+  const biomass_kg = typeof biomass === "number" && Number.isFinite(biomass) && biomass > 0 &&
+      biomass <= 100_000
+    ? biomass
+    : null;
+  return { species, temperature, ph, dissolved_oxygen, ammonia, biomass_kg, language };
 }
 
 const round = (n: number, digits: number) => n.toFixed(digits);
 const cacheKey = (d: Input) =>
-  [d.species, round(d.temperature, 1), round(d.ph, 2), round(d.dissolved_oxygen, 2), round(d.ammonia, 3), d.language].join("|");
+  [
+    d.species,
+    d.biomass_kg === null ? "-" : round(d.biomass_kg, 1),
+    round(d.temperature, 1),
+    round(d.ph, 2),
+    round(d.dissolved_oxygen, 2),
+    round(d.ammonia, 3),
+    d.language,
+  ].join("|");
 
 function buildPrompt(d: Input): string {
   return (
@@ -118,10 +142,19 @@ function buildPrompt(d: Input): string {
     "Given the species and current water sensor readings below, provide practical, " +
     "specific feeding and water-quality guidance.\n\n" +
     `Species: ${d.species}\n` +
+    (d.biomass_kg === null
+      ? "Biomass: not given\n"
+      : `Biomass of this species in the pond: ${d.biomass_kg} kg (total weight of the fish)\n`) +
     `Water temperature: ${d.temperature} C\n` +
     `pH: ${d.ph}\n` +
     `Dissolved oxygen: ${d.dissolved_oxygen} mg/L\n` +
     `Ammonia: ${d.ammonia} mg/L\n` +
+    (d.biomass_kg === null
+      ? "\nNo biomass was given, so give the feeding amount as a feeding rate (% of body weight per day) and how to apply it.\n"
+      : "\nWork out feeding_amount from the biomass: choose a daily feeding rate (% of body weight) " +
+        "suited to this species, then lower it when the water temperature, dissolved oxygen or ammonia " +
+        "stress the fish (stop feeding if conditions are dangerous). State the rate, the total feed per " +
+        "day in kg or g, and the amount per feeding (daily amount divided by the feeding frequency you give).\n") +
     (d.language === "tl"
       ? "\nWrite ALL text values in natural Tagalog (Filipino). Keep technical terms (pH, ammonia, dissolved oxygen), numbers and units as they are.\n"
       : "")

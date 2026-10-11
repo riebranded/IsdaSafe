@@ -12,6 +12,9 @@ import '../providers/pond_chat_provider.dart';
 import '../providers/pond_provider.dart';
 import '../services/auth_service.dart';
 import '../services/pond_snapshot_cache.dart';
+import '../services/usb_sensor/device_claim.dart';
+import '../services/usb_sensor/usb_sensor_hub.dart';
+import '../services/usb_sensor/pond_readings_store.dart';
 import '../services/recommendation_cache.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/add_pond_flow.dart';
@@ -92,10 +95,32 @@ class _AppShellState extends State<AppShell> {
     _incomingSub = context.read<NotificationProvider>().incoming.listen(
       _showIncoming,
     );
+    // Pond cards and status chips read the USB device's latest values
+    // through [_cache]; redraw when a new reading arrives.
+    UsbSensorHub.instance.addListener(_onLiveReading);
+    PondReadingsStore.instance
+      ..addListener(_onLiveReading)
+      ..start();
+    // A device's QR label scanned with the phone's camera opened the site:
+    // offer to pair it now that the user is signed in.
+    final claim = PendingClaimLink.take();
+    if (claim != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) openClaimLink(context, claim);
+      });
+    }
+  }
+
+  void _onLiveReading() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
+    UsbSensorHub.instance.removeListener(_onLiveReading);
+    PondReadingsStore.instance
+      ..removeListener(_onLiveReading)
+      ..stop();
     _incomingSub?.cancel();
     super.dispose();
   }
@@ -106,16 +131,29 @@ class _AppShellState extends State<AppShell> {
     messenger.hideCurrentSnackBar();
     final (icon, color) = notificationVisual(context, notification);
     final pondId = notification.pondId;
-    // "Photos needed" goes straight to the photo modal; everything else opens
-    // the Notifications list.
+    // "Photos needed" goes straight to the photo modal, "pond verified" to
+    // pairing a device; everything else opens the Notifications list.
     final wantsPhotos =
         notification.type == 'pond_needs_photos' && pondId != null;
+    final wantsDevice = notification.type == 'pond_verified' && pondId != null;
+    // Someone asked for one of our devices; or one was transferred to us.
+    final wantsTransferAnswer = notification.type == 'device_transfer_request';
+    final wantsPondForDevice = notification.isDeviceTransferredToUs;
 
     void open() {
       messenger.hideCurrentSnackBar();
       if (!mounted) return;
       if (wantsPhotos) {
         openAddPhotosForPond(context, pondId);
+      } else if (wantsDevice) {
+        context.read<NotificationProvider>().markRead(notification.id);
+        openPairDeviceForPond(context, pondId);
+      } else if (wantsTransferAnswer) {
+        context.read<NotificationProvider>().markRead(notification.id);
+        openTransferRequest(context, notification.body);
+      } else if (wantsPondForDevice) {
+        context.read<NotificationProvider>().markRead(notification.id);
+        openAssignTransferredDevice(context, notification.body);
       } else if (MediaQuery.sizeOf(context).width >= kWideLayoutBreakpoint) {
         // The wide layout has a Notifications destination; mobile pushes it
         // from the bell.
@@ -139,7 +177,15 @@ class _AppShellState extends State<AppShell> {
           color: color,
           title: notification.title.tr,
           message: notification.body,
-          actionLabel: wantsPhotos ? 'Add photos'.tr : 'View'.tr,
+          actionLabel: wantsPhotos
+              ? 'Add photos'.tr
+              : wantsDevice
+              ? 'Pair a device'.tr
+              : wantsTransferAnswer
+              ? 'Answer'.tr
+              : wantsPondForDevice
+              ? 'Choose a pond'.tr
+              : 'View'.tr,
           onAction: open,
           onClose: messenger.hideCurrentSnackBar,
         ),
@@ -192,7 +238,7 @@ class _AppShellState extends State<AppShell> {
       pond: target,
       contextBuilder: () => buildPondChatContext(
         target,
-        readings: _cache.snapshotFor(target).readings,
+        readings: _cache.snapshotFor(target)?.readings,
         feeding: {
           for (final name in target.speciesNames)
             if (RecommendationCache.instance.feeding(target.id, name)
@@ -321,8 +367,10 @@ class _AppShellState extends State<AppShell> {
                       ponds: ponds,
                       selectedIndex: _selectedIndex,
                       selectedPondId: selectedPondId,
-                      statusFor: (pond) =>
-                          overallStatus(_cache.snapshotFor(pond).readings),
+                      statusFor: (pond) => switch (_cache.snapshotFor(pond)) {
+                        final snapshot? => overallStatus(snapshot.readings),
+                        null => null,
+                      },
                       onSelectDestination: (index) => setState(() {
                         _selectedIndex = index;
                         // Tapping the Dashboard button itself returns to the
@@ -548,7 +596,9 @@ class _SidePanel extends StatelessWidget {
   final List<Pond> ponds;
   final int selectedIndex;
   final String? selectedPondId;
-  final ReadingStatus Function(Pond) statusFor;
+
+  /// Null for ponds without readings (no device paired yet).
+  final ReadingStatus? Function(Pond) statusFor;
   final ValueChanged<int> onSelectDestination;
   final ValueChanged<Pond> onSelectPond;
 
@@ -585,7 +635,14 @@ class _SidePanel extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: AppSpacing.sm),
-                  Text('IsdaSafe'.tr, style: theme.textTheme.headlineSmall),
+                  Flexible(
+                    child: Text(
+                      'IsdaSafe'.tr,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.headlineSmall,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -688,12 +745,18 @@ class _NavItem extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: AppSpacing.md),
-                Text(
-                  label,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    color: selected
-                        ? theme.colorScheme.onSecondaryContainer
-                        : theme.colorScheme.onSurface,
+                // Tagalog labels ("Mga Notification") and large system fonts don't
+                // fit the fixed-width rail on one line.
+                Expanded(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      color: selected
+                          ? theme.colorScheme.onSecondaryContainer
+                          : theme.colorScheme.onSurface,
+                    ),
                   ),
                 ),
               ],
@@ -716,7 +779,9 @@ class _PondSubButton extends StatelessWidget {
   });
 
   final Pond pond;
-  final ReadingStatus status;
+
+  /// Null for a pond without readings (no device paired): grey dot.
+  final ReadingStatus? status;
   final bool selected;
   final VoidCallback onTap;
 
@@ -742,7 +807,13 @@ class _PondSubButton extends StatelessWidget {
             ),
             child: Row(
               children: [
-                Icon(Icons.circle, size: 10, color: status.colorOf(context)),
+                Icon(
+                  Icons.circle,
+                  size: 10,
+                  color:
+                      status?.colorOf(context) ??
+                      Theme.of(context).colorScheme.outline,
+                ),
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Text(

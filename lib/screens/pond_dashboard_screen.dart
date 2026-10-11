@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -13,14 +15,19 @@ import '../services/fish_species_catalog.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_theme.dart';
 import '../services/pond_snapshot_cache.dart';
+import '../services/usb_sensor/pond_readings_store.dart';
+import '../widgets/device_connection_banner.dart';
 import '../widgets/individual_trend_chart.dart';
 import '../widgets/metric_detail_view.dart';
+import '../widgets/pair_device_prompt.dart';
 import '../widgets/pond_chat_sheet.dart';
 import '../widgets/pond_dialogs.dart';
+import '../widgets/pond_settings_panel.dart';
 import '../widgets/reading_grid.dart';
 import '../widgets/species_recommendation_card.dart';
 import '../widgets/staggered_entrance.dart';
 import '../widgets/status_badge.dart';
+import '../widgets/weather_context_card.dart';
 import '../l10n/tr.dart';
 
 /// Full-screen mobile route: pushed from `DashboardScreen` or `PondMapScreen`,
@@ -50,6 +57,16 @@ class _MobileDashboardScaffold extends StatelessWidget {
       appBar: AppBar(
         title: Text(pond.name),
         actions: [
+          IconButton(
+            onPressed: () => showPondSettingsSheet(
+              context,
+              pond: pond,
+              // The pond is being verified again: back to the list.
+              onLocationChanged: () => Navigator.of(context).maybePop(),
+            ),
+            icon: const Icon(Icons.tune),
+            tooltip: 'Pond & device'.tr,
+          ),
           IconButton(
             onPressed: () => context.read<DashboardProvider>().refresh(),
             icon: const Icon(Icons.refresh),
@@ -89,7 +106,22 @@ class PondDashboardBody extends StatelessWidget {
     context.watch<PondProvider>();
 
     if (snapshot == null) {
-      return const Center(child: CircularProgressIndicator());
+      if (dashboard.dataState == PondDataState.loading) {
+        return const Center(child: CircularProgressIndicator());
+      }
+      // Verified but no device paired (or no reading yet): no data to show.
+      return ListView(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        children: [
+          if (showHeader) ...[
+            Text(pond.name, style: Theme.of(context).textTheme.headlineSmall),
+            const SizedBox(height: AppSpacing.lg),
+          ],
+          PairDevicePrompt(pond: pond),
+          const SizedBox(height: AppSpacing.xl),
+          ..._settingsSection(context),
+        ],
+      );
     }
 
     return RefreshIndicator(
@@ -117,6 +149,11 @@ class PondDashboardBody extends StatelessWidget {
                     ),
                   ),
                   IconButton(
+                    onPressed: () => showPondSettingsSheet(context, pond: pond),
+                    icon: const Icon(Icons.tune),
+                    tooltip: 'Pond & device'.tr,
+                  ),
+                  IconButton(
                     onPressed: () =>
                         context.read<DashboardProvider>().refresh(),
                     icon: const Icon(Icons.refresh),
@@ -133,19 +170,34 @@ class PondDashboardBody extends StatelessWidget {
               ),
               const SizedBox(height: AppSpacing.md),
             ],
+            DeviceConnectionBanner(pond: pond),
+            const SizedBox(height: AppSpacing.md),
             _PondStatusBanner(status: overallStatus(snapshot.readings)),
             const SizedBox(height: AppSpacing.lg),
             _SectionHeader(
               icon: Icons.sensors,
               title: 'Latest readings'.tr,
-              trailing: _LastUpdated(
-                timestamp: snapshot
-                    .reading(snapshot.readings.keys.first)
-                    .timestamp,
+              trailing: switch (snapshot.latestAt) {
+                final latestAt? => _LastUpdated(timestamp: latestAt),
+                null => null,
+              },
+            ),
+            const SizedBox(height: AppSpacing.md),
+            // Tapping a reading opens what it means and its trend, with a
+            // custom timeframe (and humidity/ammonia's companion readings).
+            ReadingGrid(
+              readings: snapshot.readings,
+              history: snapshot.history,
+              onTapMetric: (type) => showMetricDetail(
+                context,
+                pond: pond,
+                type: type,
+                cache: PondSnapshotCache(),
+                initialRange: TrendRange.hourly,
               ),
             ),
             const SizedBox(height: AppSpacing.md),
-            ReadingGrid(readings: snapshot.readings, history: snapshot.history),
+            WeatherContextCard(snapshot: snapshot),
             const SizedBox(height: AppSpacing.xl),
             _SectionHeader(
               icon: Icons.set_meal_outlined,
@@ -197,7 +249,8 @@ class PondDashboardBody extends StatelessWidget {
               loading: dashboard.feedingLoading,
               error: dashboard.feedingError,
               emptyMessage:
-                  'No specific recommendations right now — readings look healthy.'.tr,
+                  'No specific recommendations right now — readings look healthy.'
+                      .tr,
             ),
             const SizedBox(height: AppSpacing.xl),
             _SectionHeader(
@@ -229,12 +282,15 @@ class PondDashboardBody extends StatelessWidget {
               emptyMessage: 'No notable risks identified right now.'.tr,
             ),
             const SizedBox(height: AppSpacing.xl),
-            _SectionHeader(icon: Icons.show_chart, title: 'Individual trends'.tr),
+            _SectionHeader(
+              icon: Icons.show_chart,
+              title: 'Individual trends'.tr,
+            ),
             const SizedBox(height: AppSpacing.md),
-            for (final type in MetricType.values) ...[
+            for (final type in MetricType.primary) ...[
               IndividualTrendChart(
                 type: type,
-                history: snapshot.history[type]!,
+                history: snapshot.historyFor(type),
                 range: TrendRange.hourly,
                 onTap: () => showMetricDetail(
                   context,
@@ -259,28 +315,50 @@ class PondDashboardBody extends StatelessWidget {
               loading: dashboard.recommendationLoading,
               error: dashboard.recommendationError,
             ),
+            const SizedBox(height: AppSpacing.xl),
+            ..._settingsSection(context),
           ],
         ),
       ),
     );
   }
+
+  /// The pond's location and device, with their actions, as the page's last
+  /// section — out of the way of the readings.
+  List<Widget> _settingsSection(BuildContext context) => [
+    _SectionHeader(icon: Icons.tune, title: 'Pond & device'.tr),
+    const SizedBox(height: AppSpacing.md),
+    PondSettingsPanel(
+      pond: pond,
+      onLocationChanged: showHeader
+          ? null
+          // Mobile route: the pond is being verified again, back to the list.
+          : () => Navigator.of(context).maybePop(),
+    ),
+  ];
 }
 
 /// Opens the species picker and saves the result, shared by the "Feeding
 /// schedule" heading's edit action and its empty-state "Add" button.
-/// Re-fetches feeding/water-quality advisories on success, since they're
-/// keyed by [Pond.speciesNames].
+/// Re-fetches feeding/water-quality advisories on success, since they depend
+/// on [Pond.speciesNames] and each species' biomass.
 Future<void> _editPondSpecies(BuildContext context, Pond pond) async {
   final species = await showSelectSpeciesDialog(
     context,
     initialSelection: pond.speciesNames,
+    initialBiomassKg: pond.speciesBiomassKg,
+    title: 'Edit species',
   );
   if (species == null || !context.mounted) return;
 
-  final ok = await context.read<PondProvider>().setSpecies(pond.id, species);
+  final ok = await context.read<PondProvider>().setSpecies(
+    pond.id,
+    species.names,
+    biomassKg: species.biomassKg,
+  );
   if (!context.mounted) return;
   if (ok) {
-    context.read<DashboardProvider>().retryFeedingRecommendations();
+    context.read<DashboardProvider>().onSpeciesChanged();
   } else {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -317,9 +395,7 @@ class _FeedingScheduleSection extends StatelessWidget {
             child: const Icon(Icons.set_meal_outlined, size: 18),
           ),
           title: Text('No fish species added yet'.tr),
-          subtitle: Text(
-            'Add species to see an AI-generated feeding plan.'.tr,
-          ),
+          subtitle: Text('Add species to see an AI-generated feeding plan.'.tr),
           trailing: TextButton(
             onPressed: () => _editPondSpecies(context, pond),
             child: Text('Add'.tr),
@@ -811,7 +887,9 @@ class _AdvisoryListState extends State<_AdvisoryList> {
               label: Text(
                 _expanded
                     ? 'Show less'.tr
-                    : 'Show {0} more'.trf([items.length - _advisoryPreviewCount]),
+                    : 'Show {0} more'.trf([
+                        items.length - _advisoryPreviewCount,
+                      ]),
               ),
             ),
           ),

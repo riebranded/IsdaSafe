@@ -43,7 +43,11 @@ class MetricRangeBar extends StatelessWidget {
                       for (final segment in segments)
                         Expanded(
                           flex: (segment.$2 * 1000).round().clamp(1, 1000),
-                          child: ColoredBox(color: segment.$1.colorOf(context).withValues(alpha: 0.35)),
+                          child: ColoredBox(
+                            color: segment.$1
+                                .colorOf(context)
+                                .withValues(alpha: 0.35),
+                          ),
                         ),
                     ],
                   ),
@@ -57,7 +61,10 @@ class MetricRangeBar extends StatelessWidget {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: markerColor,
-                    border: Border.all(color: Theme.of(context).colorScheme.surface, width: 1.5),
+                    border: Border.all(
+                      color: Theme.of(context).colorScheme.surface,
+                      width: 1.5,
+                    ),
                   ),
                 ),
               ),

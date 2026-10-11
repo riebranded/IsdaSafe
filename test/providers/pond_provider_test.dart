@@ -128,6 +128,19 @@ void main() {
     },
   );
 
+  test('setSpecies keeps biomass only for the chosen species', () async {
+    final provider = PondProvider(repository: FakePondRepository());
+    await flush();
+    final id = provider.ponds.first.id;
+
+    await provider.setSpecies(
+      id,
+      ['Tilapia'],
+      biomassKg: {'Tilapia': 120, 'Milkfish': 45.5},
+    );
+    expect(provider.ponds.first.speciesBiomassKg, {'Tilapia': 120.0});
+  });
+
   test('removePond removes the matching pond and notifies listeners', () async {
     final provider = PondProvider(repository: FakePondRepository());
     await flush();
@@ -287,6 +300,51 @@ void main() {
     expect(provider.ponds.first.isVerified, isTrue);
   });
 
+  test(
+    'changing a verified pond\'s location sends it back through verification',
+    () async {
+      final repository = FakePondRepository();
+      final provider = PondProvider(repository: repository);
+      await flush();
+      final pond = provider.ponds.first;
+
+      final ok = await provider.setLocation(
+        pond.id,
+        latitude: 10.5,
+        longitude: 122.5,
+      );
+      await flush();
+
+      expect(ok, isTrue);
+      expect(pond.latitude, 10.5);
+      expect(pond.verificationStatus, VerificationStatus.pending);
+      // Off the dashboard until verified again, and the check was started.
+      expect(provider.ponds.map((p) => p.id), isNot(contains(pond.id)));
+      expect(provider.pendingPonds.map((p) => p.id), contains(pond.id));
+      expect(repository.verificationRequests, contains(pond.id));
+    },
+  );
+
+  test('a location that fails to save keeps the pond as it was', () async {
+    final repository = FakePondRepository();
+    final provider = PondProvider(repository: repository);
+    await flush();
+    final pond = provider.ponds.first;
+    final before = (pond.latitude, pond.longitude);
+
+    repository.failNextWrite = true;
+    final ok = await provider.setLocation(
+      pond.id,
+      latitude: 10.5,
+      longitude: 122.5,
+    );
+
+    expect(ok, isFalse);
+    expect((pond.latitude, pond.longitude), before);
+    expect(pond.verificationStatus, VerificationStatus.verified);
+    expect(repository.verificationRequests, isEmpty);
+  });
+
   group('photos for ponds hidden by buildings', () {
     PondPhoto photo() => PondPhoto(
       bytes: Uint8List.fromList(const [1, 2, 3]),
@@ -348,29 +406,23 @@ void main() {
       },
     );
 
-    test(
-      'fewer than the required photos are refused without uploading',
-      () async {
-        final repository = FakePondRepository(
-          seed: [
-            Pond(
-              id: 'bld',
-              name: 'Under a roof',
-              verificationStatus: VerificationStatus.needsPhotos,
-            ),
-          ],
-        );
-        final provider = PondProvider(repository: repository);
-        await flush();
+    test('no photos are refused without uploading', () async {
+      final repository = FakePondRepository(
+        seed: [
+          Pond(
+            id: 'bld',
+            name: 'Under a roof',
+            verificationStatus: VerificationStatus.needsPhotos,
+          ),
+        ],
+      );
+      final provider = PondProvider(repository: repository);
+      await flush();
 
-        expect(
-          await provider.submitEvidencePhotos('bld', [photo(), photo()]),
-          isFalse,
-        );
-        expect(repository.evidenceRequests, isEmpty);
-        expect(provider.needsPhotosPonds.single.id, 'bld');
-      },
-    );
+      expect(await provider.submitEvidencePhotos('bld', const []), isFalse);
+      expect(repository.evidenceRequests, isEmpty);
+      expect(provider.needsPhotosPonds.single.id, 'bld');
+    });
 
     test('a failed upload leaves the pond waiting for photos', () async {
       final repository = FakePondRepository(
@@ -407,9 +459,40 @@ void main() {
   );
 
   group('photos sent up front with a new pond', () {
-    PondPhoto photo() => PondPhoto(bytes: Uint8List.fromList(const [1, 2, 3]), mediaType: 'image/jpeg');
+    PondPhoto photo() => PondPhoto(
+      bytes: Uint8List.fromList(const [1, 2, 3]),
+      mediaType: 'image/jpeg',
+    );
 
-    test('3+ photos are uploaded and sent with the first verification request', () async {
+    test(
+      '3+ photos are uploaded and sent with the first verification request',
+      () async {
+        final repository = FakePondRepository();
+        final provider = PondProvider(repository: repository);
+        await flush();
+
+        final pond = await provider.addPond(
+          'Roof pond',
+          latitude: 14.35,
+          longitude: 121.25,
+          verification: PondVerification(
+            method: VerificationMethod.satellite,
+            evidencePhotos: [photo(), photo(), photo()],
+          ),
+        );
+        await flush();
+
+        expect(repository.evidenceRequests[pond!.id], hasLength(3));
+        expect(
+          repository.evidenceRequests[pond.id]!.first,
+          startsWith('test-user/${pond.id}/'),
+        );
+        // One request carrying the photos, not a second plain one.
+        expect(repository.verificationRequests, isEmpty);
+      },
+    );
+
+    test('no photos: a plain verification request is sent', () async {
       final repository = FakePondRepository();
       final provider = PondProvider(repository: repository);
       await flush();
@@ -420,29 +503,7 @@ void main() {
         longitude: 121.25,
         verification: PondVerification(
           method: VerificationMethod.satellite,
-          evidencePhotos: [photo(), photo(), photo()],
-        ),
-      );
-      await flush();
-
-      expect(repository.evidenceRequests[pond!.id], hasLength(3));
-      expect(repository.evidenceRequests[pond.id]!.first, startsWith('test-user/${pond.id}/'));
-      // One request carrying the photos, not a second plain one.
-      expect(repository.verificationRequests, isEmpty);
-    });
-
-    test('fewer than 3 photos are ignored: a plain verification request is sent', () async {
-      final repository = FakePondRepository();
-      final provider = PondProvider(repository: repository);
-      await flush();
-
-      final pond = await provider.addPond(
-        'Roof pond',
-        latitude: 14.35,
-        longitude: 121.25,
-        verification: PondVerification(
-          method: VerificationMethod.satellite,
-          evidencePhotos: [photo(), photo()],
+          evidencePhotos: const [],
         ),
       );
       await flush();
@@ -451,25 +512,28 @@ void main() {
       expect(repository.verificationRequests, [pond!.id]);
     });
 
-    test('if the photos cannot be uploaded, verification still starts without them', () async {
-      final repository = FakePondRepository()..failNextEvidenceUpload = true;
-      final provider = PondProvider(repository: repository);
-      await flush();
+    test(
+      'if the photos cannot be uploaded, verification still starts without them',
+      () async {
+        final repository = FakePondRepository()..failNextEvidenceUpload = true;
+        final provider = PondProvider(repository: repository);
+        await flush();
 
-      final pond = await provider.addPond(
-        'Roof pond',
-        latitude: 14.35,
-        longitude: 121.25,
-        verification: PondVerification(
-          method: VerificationMethod.satellite,
-          evidencePhotos: [photo(), photo(), photo()],
-        ),
-      );
-      await flush();
+        final pond = await provider.addPond(
+          'Roof pond',
+          latitude: 14.35,
+          longitude: 121.25,
+          verification: PondVerification(
+            method: VerificationMethod.satellite,
+            evidencePhotos: [photo(), photo(), photo()],
+          ),
+        );
+        await flush();
 
-      expect(pond, isNotNull);
-      expect(repository.evidenceRequests, isEmpty);
-      expect(repository.verificationRequests, [pond!.id]);
-    });
+        expect(pond, isNotNull);
+        expect(repository.evidenceRequests, isEmpty);
+        expect(repository.verificationRequests, [pond!.id]);
+      },
+    );
   });
 }

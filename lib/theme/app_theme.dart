@@ -85,6 +85,10 @@ class MetricPalette extends ThemeExtension<MetricPalette> {
       MetricType.ammonia: Color(0xFF1BAF7A), // aqua
       MetricType.dissolvedOxygen: Color(0xFFEDA100), // yellow
       MetricType.ph: Color(0xFFE87BA4), // magenta
+      // Companions only appear next to their parent metric (humidity /
+      // ammonia), so they just need to differ from it.
+      MetricType.airTemperature: Color(0xFF7B61C8), // violet
+      MetricType.freeAmmonia: Color(0xFF8A5A2B), // brown
     },
   );
 
@@ -95,6 +99,8 @@ class MetricPalette extends ThemeExtension<MetricPalette> {
       MetricType.ammonia: Color(0xFF199E70),
       MetricType.dissolvedOxygen: Color(0xFFC98500),
       MetricType.ph: Color(0xFFD55181),
+      MetricType.airTemperature: Color(0xFF9C86E0),
+      MetricType.freeAmmonia: Color(0xFFB98552),
     },
   );
 
@@ -162,12 +168,19 @@ class AppTheme {
         clipBehavior: Clip.antiAlias,
       ),
       listTileTheme: ListTileThemeData(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.lg)),
-        contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.xs),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+        ),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg,
+          vertical: AppSpacing.xs,
+        ),
         minVerticalPadding: AppSpacing.md,
       ),
       dialogTheme: DialogThemeData(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.lg)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+        ),
         backgroundColor: colorScheme.surfaceContainerHigh,
       ),
       // Floating card-style snackbars: a raised surface (not the default dark
@@ -176,29 +189,46 @@ class AppTheme {
         behavior: SnackBarBehavior.floating,
         elevation: 6,
         backgroundColor: colorScheme.surfaceContainerHigh,
-        contentTextStyle: textTheme.bodyMedium?.copyWith(color: colorScheme.onSurface),
+        contentTextStyle: textTheme.bodyMedium?.copyWith(
+          color: colorScheme.onSurface,
+        ),
         actionTextColor: colorScheme.primary,
         showCloseIcon: true,
         closeIconColor: colorScheme.onSurfaceVariant,
-        insetPadding: const EdgeInsets.fromLTRB(AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.lg),
+        insetPadding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg,
+          0,
+          AppSpacing.lg,
+          AppSpacing.lg,
+        ),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.lg),
           side: BorderSide(color: colorScheme.outlineVariant),
         ),
       ),
       popupMenuTheme: PopupMenuThemeData(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.md),
+        ),
         elevation: 3,
       ),
       chipTheme: ChipThemeData(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.pill)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.pill),
+        ),
         side: BorderSide.none,
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.sm,
+          vertical: AppSpacing.xs,
+        ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: colorScheme.surfaceContainerHighest,
-        contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg,
+          vertical: AppSpacing.md,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppRadius.md),
           borderSide: BorderSide.none,
@@ -224,29 +254,43 @@ class AppTheme {
         style: FilledButton.styleFrom(
           minimumSize: const Size(64, 48),
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.md),
+          ),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           minimumSize: const Size(64, 48),
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.md),
+          ),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           minimumSize: const Size(64, 48),
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.md),
+          ),
         ),
       ),
       floatingActionButtonTheme: FloatingActionButtonThemeData(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.xl)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.xl),
+        ),
         extendedTextStyle: textTheme.labelLarge,
       ),
-      dividerTheme: DividerThemeData(color: colorScheme.outlineVariant, space: 1, thickness: 1),
-      progressIndicatorTheme: ProgressIndicatorThemeData(color: colorScheme.primary),
+      dividerTheme: DividerThemeData(
+        color: colorScheme.outlineVariant,
+        space: 1,
+        thickness: 1,
+      ),
+      progressIndicatorTheme: ProgressIndicatorThemeData(
+        color: colorScheme.primary,
+      ),
       visualDensity: VisualDensity.standard,
     );
   }
@@ -261,11 +305,19 @@ class AppTheme {
 
     return body.copyWith(
       displayLarge: heading.displayLarge?.copyWith(fontWeight: FontWeight.w600),
-      displayMedium: heading.displayMedium?.copyWith(fontWeight: FontWeight.w600),
+      displayMedium: heading.displayMedium?.copyWith(
+        fontWeight: FontWeight.w600,
+      ),
       displaySmall: heading.displaySmall?.copyWith(fontWeight: FontWeight.w600),
-      headlineLarge: heading.headlineLarge?.copyWith(fontWeight: FontWeight.w600),
-      headlineMedium: heading.headlineMedium?.copyWith(fontWeight: FontWeight.w600),
-      headlineSmall: heading.headlineSmall?.copyWith(fontWeight: FontWeight.w600),
+      headlineLarge: heading.headlineLarge?.copyWith(
+        fontWeight: FontWeight.w600,
+      ),
+      headlineMedium: heading.headlineMedium?.copyWith(
+        fontWeight: FontWeight.w600,
+      ),
+      headlineSmall: heading.headlineSmall?.copyWith(
+        fontWeight: FontWeight.w600,
+      ),
       titleLarge: heading.titleLarge?.copyWith(fontWeight: FontWeight.w600),
       titleMedium: heading.titleMedium?.copyWith(fontWeight: FontWeight.w600),
       titleSmall: heading.titleSmall?.copyWith(fontWeight: FontWeight.w600),

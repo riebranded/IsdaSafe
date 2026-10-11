@@ -50,6 +50,10 @@ class RecommendationCache {
     (_feeding[pondId] ??= {})[_key(species)] = _Entry(value, DateTime.now());
   }
 
+  /// Drops all of [pondId]'s cached feeding entries (e.g. after its species
+  /// or their biomass changed).
+  void clearFeeding(String pondId) => _feeding.remove(pondId);
+
   /// Drops cached feeding entries for species no longer assigned to the pond.
   void pruneFeeding(String pondId, Iterable<String> keepSpecies) {
     final keep = keepSpecies.map(_key).toSet();
@@ -66,7 +70,8 @@ class RecommendationCache {
   /// the other language's.
   String _key(String species) => '$species|${LanguageProvider.current.code}';
 
-  bool _isStale(DateTime fetchedAt) => DateTime.now().difference(fetchedAt) >= ttl;
+  bool _isStale(DateTime fetchedAt) =>
+      DateTime.now().difference(fetchedAt) >= ttl;
 }
 
 class _Entry<T> {

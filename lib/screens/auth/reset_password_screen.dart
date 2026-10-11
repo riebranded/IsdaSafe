@@ -5,6 +5,7 @@ import '../../services/auth_service.dart';
 import '../../theme/app_spacing.dart';
 import '../../widgets/password_strength_checklist.dart';
 import '../../l10n/tr.dart';
+import '../../widgets/confirm_dialog.dart';
 
 /// Shown after the user opens the link in a password-reset email: the link
 /// has signed them into a recovery session, and this is where they choose the
@@ -63,26 +64,15 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   }
 
   Future<void> _cancel() async {
-    final sure = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Cancel password reset?'.tr),
-        content: Text(
-          'You\'ll be signed out and your password won\'t be changed.'.tr,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text('Keep resetting'.tr),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text('Yes, cancel'.tr),
-          ),
-        ],
-      ),
+    final sure = await showConfirmDialog(
+      context,
+      icon: Icons.lock_reset,
+      title: 'Cancel password reset?'.tr,
+      message: 'You\'ll be signed out and your password won\'t be changed.'.tr,
+      cancelLabel: 'Keep resetting'.tr,
+      confirmLabel: 'Yes, cancel'.tr,
     );
-    if (sure != true) return;
+    if (!sure) return;
     AuthService.recoveryPending.value = false;
     await AuthService.signOut();
   }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -11,13 +13,21 @@ import 'providers/notification_provider.dart';
 import 'providers/pond_provider.dart';
 import 'providers/theme_provider.dart';
 import 'services/auth_service.dart';
+import 'services/push_service.dart';
 import 'services/system_notification_service.dart';
+import 'services/usb_sensor/device_claim.dart';
+import 'services/usb_sensor/pond_readings_store.dart';
+import 'services/usb_sensor/usb_sensor_hub.dart';
 
 //Test
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: '.env');
+  debugPrint(
+    'BUILD MARKER: place-search logging v1, '
+    'GOOGLE_PLACES_KEY ${(dotenv.env['GOOGLE_PLACES_KEY'] ?? '').isEmpty ? 'EMPTY' : 'set'}',
+  );
 
   await Supabase.initialize(
     url: dotenv.env['SUPABASE_URL']!,
@@ -26,10 +36,26 @@ Future<void> main() async {
 
   AuthService.listenForPasswordRecovery();
   await SystemNotificationService.instance.init();
+  // Push (Android): registered while signed in with notifications on.
+  await PushService.instance.init();
+  void syncPush() => PushService.instance.sync(
+    wanted:
+        AuthService.currentUser != null &&
+        SystemNotificationService.instance.isEnabled,
+  );
+  AuthService.onAuthStateChange.listen((_) => syncPush());
+  SystemNotificationService.instance.addListener(syncPush);
+  // Reopen the IsdaSafe device's USB port if it was connected on an earlier
+  // visit and is plugged in (web only; never prompts).
+  unawaited(UsbSensorHub.instance.reconnect());
 
   if (!kIsWeb) {
     final googleIosClientId = dotenv.env['GOOGLE_IOS_CLIENT_ID'];
     final googleWebClientId = dotenv.env['GOOGLE_WEB_CLIENT_ID'];
+    debugPrint(
+      'GoogleSignIn init: serverClientId=$googleWebClientId '
+      'clientId=$googleIosClientId',
+    );
     await GoogleSignIn.instance.initialize(
       clientId: (googleIosClientId?.isNotEmpty ?? false)
           ? googleIosClientId
@@ -39,6 +65,10 @@ Future<void> main() async {
           : null,
     );
   }
+
+  // A device's QR label opens the site with ?claim=...; pairing is offered
+  // once signed in (see AppShell).
+  PendingClaimLink.captureFrom(Uri.base);
 
   final pondProvider = PondProvider();
 
@@ -53,6 +83,14 @@ Future<void> main() async {
             onNewNotification: (n) {
               if (n.isPondVerification) {
                 pondProvider.refresh();
+                SystemNotificationService.instance.showPondUpdate(n);
+              } else if (n.isDeviceTransfer) {
+                // A device left or joined this account.
+                PondReadingsStore.instance.refresh();
+                SystemNotificationService.instance.showPondUpdate(n);
+              } else if (n.isWaterAlert) {
+                // The reading behind it: show it without waiting a minute.
+                PondReadingsStore.instance.refresh();
                 SystemNotificationService.instance.showPondUpdate(n);
               }
             },

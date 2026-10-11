@@ -22,7 +22,7 @@ enum VerificationMethod {
 
 /// Photos required when buildings hide a pond from the satellite check. The
 /// `verify-pond` function enforces the same limits.
-const kMinEvidencePhotos = 3;
+const kMinEvidencePhotos = 1;
 const kMaxEvidencePhotos = 6;
 
 /// Where a pond is in the (background) verification process. Only the

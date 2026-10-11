@@ -5,6 +5,8 @@ import 'package:provider/provider.dart';
 
 import '../providers/theme_provider.dart';
 import '../services/auth_service.dart';
+import '../services/push_service.dart';
+import '../services/system_notification_service.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/account_dialogs.dart';
 import '../widgets/language_toggle.dart';
@@ -283,6 +285,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: AppSpacing.lg),
             const _AppearanceCard(),
             const SizedBox(height: AppSpacing.lg),
+            const _NotificationsCard(),
+            const SizedBox(height: AppSpacing.lg),
+            const _TextAlertsCard(),
+            const SizedBox(height: AppSpacing.lg),
             Card(
               child: ListTile(
                 leading: const Icon(Icons.logout),
@@ -293,6 +299,258 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ],
         );
       },
+    );
+  }
+}
+
+/// Push notifications on/off: pond updates shown by the phone's or browser's
+/// own notifications, not just inside the app.
+class _NotificationsCard extends StatelessWidget {
+  const _NotificationsCard();
+
+  Future<void> _toggle(BuildContext context, bool enabled) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final service = SystemNotificationService.instance;
+    final on = await service.setEnabled(enabled);
+    if (enabled && !on) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'Notifications are blocked. Allow them for IsdaSafe in your browser or phone settings, then try again.'
+                .tr,
+          ),
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final service = SystemNotificationService.instance;
+
+    return ListenableBuilder(
+      listenable: service,
+      builder: (context, _) {
+        final String subtitle;
+        if (!service.isSupported) {
+          subtitle = 'Not available on this device or browser.'.tr;
+        } else if (service.isBlocked) {
+          subtitle =
+              'Blocked. Allow notifications for IsdaSafe in your browser or phone settings.'
+                  .tr;
+        } else {
+          subtitle =
+              "Get notified when a pond reading needs attention, or a pond is verified or needs photos, even when IsdaSafe isn't on screen."
+                  .tr;
+        }
+
+        return Card(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.lg,
+                    AppSpacing.md,
+                    AppSpacing.lg,
+                    AppSpacing.xs,
+                  ),
+                  child: Text(
+                    'Notifications'.tr,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                SwitchListTile(
+                  secondary: const Icon(Icons.notifications_active_outlined),
+                  title: Text('Push notifications'.tr),
+                  subtitle: Text(subtitle),
+                  value: service.isEnabled,
+                  onChanged: service.isSupported
+                      ? (value) => _toggle(context, value)
+                      : null,
+                ),
+                // To check that push works on this phone (Android).
+                if (PushService.instance.isSupported && service.isEnabled)
+                  const _TestPushTile(),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Sends a test push through Firebase to this account's phones, after a few
+/// seconds so there's time to leave the app and see it arrive as a real one.
+class _TestPushTile extends StatefulWidget {
+  const _TestPushTile();
+
+  @override
+  State<_TestPushTile> createState() => _TestPushTileState();
+}
+
+class _TestPushTileState extends State<_TestPushTile> {
+  bool _sending = false;
+
+  Future<void> _send() async {
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _sending = true);
+    final result = await PushService.instance.sendTest();
+    if (!mounted) return;
+    setState(() => _sending = false);
+    final seconds = PushService.testDelay.inSeconds;
+    messenger.showSnackBar(
+      SnackBar(
+        duration: const Duration(seconds: 6),
+        content: Text(switch (result) {
+          TestPushResult.scheduled =>
+            'Test notification sent. It arrives in about {0} seconds: leave the app now to see it like a real alert.'
+                .trf([seconds]),
+          TestPushResult.notConfigured =>
+            "Push isn't set up on the server yet: add the Firebase key (FCM_SERVICE_ACCOUNT) in Supabase."
+                .tr,
+          TestPushResult.notRegistered =>
+            "This phone couldn't register for push. Check that notifications are allowed for IsdaSafe, then try again."
+                .tr,
+          TestPushResult.unsupported =>
+            'Push notifications are only available in the Android app.'.tr,
+          TestPushResult.failed =>
+            "Couldn't send the test notification. Check your connection and try again."
+                .tr,
+        }),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: const Icon(Icons.send_to_mobile_outlined),
+      title: Text('Send a test notification'.tr),
+      subtitle: Text('Checks that push notifications reach this phone.'.tr),
+      trailing: _sending
+          ? const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(Icons.chevron_right),
+      onTap: _sending ? null : _send,
+    );
+  }
+}
+
+/// Which pond water alerts are texted to the account's verified phone
+/// (`profiles.alert_sms`). The alerts themselves always appear in the
+/// Notifications list (and as push notifications when those are on).
+class _TextAlertsCard extends StatefulWidget {
+  const _TextAlertsCard();
+
+  @override
+  State<_TextAlertsCard> createState() => _TextAlertsCardState();
+}
+
+class _TextAlertsCardState extends State<_TextAlertsCard> {
+  late final Future<({AlertSms level, String? phone})?> _loaded =
+      AuthService.fetchAlertSms().then((value) {
+        if (value != null && mounted) setState(() => _level = value.level);
+        return value;
+      });
+  AlertSms? _level;
+  bool _saving = false;
+
+  Future<void> _choose(AlertSms level) async {
+    final previous = _level;
+    setState(() {
+      _level = level;
+      _saving = true;
+    });
+    final ok = await AuthService.updateAlertSms(level);
+    if (!mounted) return;
+    setState(() {
+      _saving = false;
+      if (!ok) _level = previous;
+    });
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            "Couldn't save. Check your connection and try again.".tr,
+          ),
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+        child: FutureBuilder(
+          future: _loaded,
+          builder: (context, snapshot) {
+            final phone = snapshot.data?.phone;
+            final level = _level;
+            final String subtitle;
+            if (snapshot.connectionState != ConnectionState.done) {
+              subtitle = 'Loading…'.tr;
+            } else if (snapshot.data == null) {
+              subtitle = "Couldn't load your text alert setting.".tr;
+            } else if (phone == null) {
+              subtitle = 'Verify a phone number to get text alerts.'.tr;
+            } else {
+              subtitle =
+                  'Texts to {0} when a pond reading needs attention. Alerts always appear in Notifications too.'
+                      .trf([phone]);
+            }
+            final enabled = phone != null && level != null && !_saving;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.sms_outlined),
+                  title: Text(
+                    'Text alerts'.tr,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  subtitle: Text(subtitle),
+                ),
+                RadioGroup<AlertSms>(
+                  groupValue: level,
+                  onChanged: (value) {
+                    if (enabled && value != null) _choose(value);
+                  },
+                  child: Column(
+                    children: [
+                      for (final (value, label) in [
+                        (AlertSms.warning, 'Warning and danger'.tr),
+                        (AlertSms.critical, 'Danger only'.tr),
+                        (AlertSms.off, 'Off'.tr),
+                      ])
+                        RadioListTile<AlertSms>(
+                          value: value,
+                          enabled: enabled,
+                          dense: true,
+                          title: Text(label),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
     );
   }
 }

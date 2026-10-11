@@ -1,6 +1,7 @@
 import 'metric_type.dart';
 import 'reading_status.dart';
 import 'sensor_reading.dart';
+import 'weather_context.dart';
 
 /// Per-metric pond-health bands — independent from, and wider than, any
 /// single fish species' optimal range. These answer "is this pond healthy
@@ -33,7 +34,8 @@ class MetricBands {
       return ReadingStatus.critical;
     }
     final warnLo = warningLow, warnHi = warningHigh;
-    if ((warnLo != null && value < warnLo) || (warnHi != null && value > warnHi)) {
+    if ((warnLo != null && value < warnLo) ||
+        (warnHi != null && value > warnHi)) {
       return ReadingStatus.warning;
     }
     return ReadingStatus.normal;
@@ -77,14 +79,10 @@ const Map<MetricType, MetricBands> metricBands = {
     displayMin: 18,
     displayMax: 36,
   ),
-  MetricType.humidity: MetricBands(
-    criticalLow: 55,
-    warningLow: 65,
-    warningHigh: 80,
-    criticalHigh: 90,
-    displayMin: 45,
-    displayMax: 100,
-  ),
+  // Weather, not water: no limits of its own (tropical air is often 85%+).
+  // It matters through `weatherInsights`, which judge it together with the
+  // water readings.
+  MetricType.humidity: MetricBands(displayMin: 30, displayMax: 100),
   MetricType.ammonia: MetricBands(
     warningHigh: 0.05,
     criticalHigh: 0.15,
@@ -105,13 +103,34 @@ const Map<MetricType, MetricBands> metricBands = {
     displayMin: 4.5,
     displayMax: 10.5,
   ),
+  // Air around the device; comfortable for tropical ponds in between.
+  MetricType.airTemperature: MetricBands(
+    criticalLow: 18,
+    warningLow: 22,
+    warningHigh: 33,
+    criticalHigh: 37,
+    displayMin: 15,
+    displayMax: 42,
+  ),
+  // Un-ionised NH3: harmful to most farmed fish above ~0.05 mg/L.
+  MetricType.freeAmmonia: MetricBands(
+    warningHigh: 0.02,
+    criticalHigh: 0.05,
+    displayMin: 0,
+    displayMax: 0.1,
+  ),
 };
 
-/// Worst status across every metric in [readings] — used for pond-level
-/// at-a-glance health (list screen chip, dashboard summary banner).
+/// Worst status across the pond's [MetricType.water] readings in
+/// [readings], and the weather risks to them (see [weatherInsights], e.g.
+/// borderline oxygen on a muggy evening) — used for pond-level at-a-glance
+/// health (list screen chip, dashboard summary banner). Humidity and the
+/// companion readings (air temperature, free ammonia) only count through
+/// those weather risks.
 ReadingStatus overallStatus(Map<MetricType, SensorReading> readings) {
-  var worst = ReadingStatus.normal;
+  var worst = worstSeverity(weatherInsights(readings));
   for (final entry in readings.entries) {
+    if (!MetricType.water.contains(entry.key)) continue;
     final status = metricBands[entry.key]!.statusFor(entry.value.value);
     if (status.index > worst.index) worst = status;
   }

@@ -13,9 +13,12 @@ import 'prediction_api_config.dart';
 /// plus a species into a feeding plan and water-quality advisory, factored
 /// out so it can be unit tested against a fake instead of a real network call.
 abstract class FeedingRecommendationService {
+  /// [biomassKg] is the total weight of [species] in the pond, which the
+  /// feeding amount is worked out from (null if the owner hasn't given it).
   Future<FeedingRecommendation> recommend({
     required String species,
     required Map<MetricType, SensorReading> readings,
+    double? biomassKg,
   });
 }
 
@@ -32,13 +35,14 @@ class SupabaseFeedingRecommendationService
   Future<FeedingRecommendation> recommend({
     required String species,
     required Map<MetricType, SensorReading> readings,
+    double? biomassKg,
   }) async {
     final Object? data;
     try {
       final response = await (_client ?? Supabase.instance.client).functions
           .invoke(
             'feeding-recommendation',
-            body: _requestBody(species, readings),
+            body: _requestBody(species, readings, biomassKg),
           );
       data = response.data;
     } on FunctionException catch (e) {
@@ -55,12 +59,14 @@ class SupabaseFeedingRecommendationService
 Map<String, Object> _requestBody(
   String species,
   Map<MetricType, SensorReading> readings,
+  double? biomassKg,
 ) => {
   'ammonia': readings[MetricType.ammonia]!.value,
   'dissolved_oxygen': readings[MetricType.dissolvedOxygen]!.value,
   'ph': readings[MetricType.ph]!.value,
   'temperature': readings[MetricType.temperature]!.value,
   'species': species,
+  'biomass_kg': ?biomassKg,
   'language': LanguageProvider.current.code,
 };
 
@@ -100,8 +106,9 @@ class HttpFeedingRecommendationService implements FeedingRecommendationService {
   Future<FeedingRecommendation> recommend({
     required String species,
     required Map<MetricType, SensorReading> readings,
+    double? biomassKg,
   }) async {
-    final body = jsonEncode(_requestBody(species, readings));
+    final body = jsonEncode(_requestBody(species, readings, biomassKg));
 
     final http.Response response;
     try {

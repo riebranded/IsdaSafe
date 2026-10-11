@@ -32,7 +32,9 @@ class StatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = status.colorOf(context);
-    final labelStyle = Theme.of(context).textTheme.labelMedium ?? const TextStyle(fontSize: 12);
+    final labelStyle =
+        Theme.of(context).textTheme.labelMedium ??
+        const TextStyle(fontSize: 12);
 
     return Semantics(
       label: '{0} status'.trf([status.label]),
@@ -49,7 +51,11 @@ class StatusBadge extends StatelessWidget {
             const SizedBox(width: 4),
             Text(
               status.label,
-              style: labelStyle.copyWith(color: color, fontWeight: FontWeight.w600, fontSize: 12),
+              style: labelStyle.copyWith(
+                color: color,
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+              ),
             ),
           ],
         ),

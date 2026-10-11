@@ -44,3 +44,7 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Device provisioning: labels hold claim codes, tools/.env the service-role key.
+labels/
+tools/.env

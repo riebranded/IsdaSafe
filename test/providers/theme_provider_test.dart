@@ -33,7 +33,9 @@ void main() {
     expect(provider.themeMode, ThemeMode.dark);
   });
 
-  testWidgets('the app renders with the theme matching the selected mode', (tester) async {
+  testWidgets('the app renders with the theme matching the selected mode', (
+    tester,
+  ) async {
     final provider = ThemeProvider();
     late BuildContext captured;
 

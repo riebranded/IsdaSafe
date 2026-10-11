@@ -55,7 +55,8 @@ class SpeciesRecommendationCard extends StatelessWidget {
                     Text('Asking the model for a recommendation…'.tr),
                     const SizedBox(height: 2),
                     Text(
-                      'This can take up to a minute if the server has been idle.'.tr,
+                      'This can take up to a minute if the server has been idle.'
+                          .tr,
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
@@ -224,7 +225,9 @@ class _SpeciesRow extends StatelessWidget {
                         child: Text(
                           confidence == null
                               ? 'AI pick'.tr
-                              : 'AI pick · {0}%'.trf([(confidence! * 100).toStringAsFixed(0)]),
+                              : 'AI pick · {0}%'.trf([
+                                  (confidence! * 100).toStringAsFixed(0),
+                                ]),
                           style: theme.textTheme.labelSmall?.copyWith(
                             color: scheme.primary,
                             fontWeight: FontWeight.w600,

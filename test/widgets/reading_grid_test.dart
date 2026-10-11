@@ -8,7 +8,9 @@ import 'package:isdasafev2/widgets/reading_card.dart';
 import 'package:isdasafev2/widgets/reading_grid.dart';
 
 void main() {
-  final snapshot = MockSensorService().generateSnapshot(Pond(id: 'p1', name: 'Pond A'));
+  final snapshot = MockSensorService().generateSnapshot(
+    Pond(id: 'p1', name: 'Pond A'),
+  );
 
   Widget wrap({required double boxWidth}) {
     return MaterialApp(
@@ -19,7 +21,10 @@ void main() {
           child: SizedBox(
             width: boxWidth,
             child: SingleChildScrollView(
-              child: ReadingGrid(readings: snapshot.readings, history: snapshot.history),
+              child: ReadingGrid(
+                readings: snapshot.readings,
+                history: snapshot.history,
+              ),
             ),
           ),
         ),
@@ -50,18 +55,27 @@ void main() {
       expect(find.byType(ReadingCard), findsNWidgets(5));
       // A fixed 5-column row can't fit 360px, so it must fall back to the
       // width-driven responsive delegate.
-      expect(delegateOf(tester), isA<SliverGridDelegateWithMaxCrossAxisExtent>());
+      expect(
+        delegateOf(tester),
+        isA<SliverGridDelegateWithMaxCrossAxisExtent>(),
+      );
     },
   );
 
-  testWidgets('a genuinely wide container on a wide window keeps the single fixed 5-column row', (tester) async {
-    await setWideWindow(tester);
-    await tester.pumpWidget(wrap(boxWidth: 1000));
-    await tester.pumpAndSettle();
+  testWidgets(
+    'a genuinely wide container on a wide window keeps the single fixed 5-column row',
+    (tester) async {
+      await setWideWindow(tester);
+      await tester.pumpWidget(wrap(boxWidth: 1000));
+      await tester.pumpAndSettle();
 
-    expect(tester.takeException(), isNull);
-    final delegate = delegateOf(tester);
-    expect(delegate, isA<SliverGridDelegateWithFixedCrossAxisCount>());
-    expect((delegate as SliverGridDelegateWithFixedCrossAxisCount).crossAxisCount, 5);
-  });
+      expect(tester.takeException(), isNull);
+      final delegate = delegateOf(tester);
+      expect(delegate, isA<SliverGridDelegateWithFixedCrossAxisCount>());
+      expect(
+        (delegate as SliverGridDelegateWithFixedCrossAxisCount).crossAxisCount,
+        5,
+      );
+    },
+  );
 }

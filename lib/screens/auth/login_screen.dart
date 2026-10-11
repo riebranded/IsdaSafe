@@ -302,8 +302,9 @@ class _LoginScreenState extends State<LoginScreen> {
                 label: Text('Continue with Google'.tr),
               ),
               const SizedBox(height: AppSpacing.sm),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+              Wrap(
+                alignment: WrapAlignment.center,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   Text(
                     'Don\'t have an account?'.tr,

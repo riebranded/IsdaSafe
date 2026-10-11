@@ -29,10 +29,19 @@ const Map<String, String> tagalogStrings = {
   'Add a verified phone number first — we send the code there.':
       'Magdagdag muna ng na-verify na numero ng telepono - doon namin ipapadala ang code.',
   'Add another pond': 'Magdagdag pa ng pond',
-  'Add at least {0} photos from different angles':
-      'Magdagdag ng hindi bababa sa {0} litrato mula sa iba\'t ibang anggulo',
-  'Add at least {0} photos of the pond or tank, showing the water. The satellite check is skipped for in-house ponds, so these photos are the proof.':
-      'Magdagdag ng hindi bababa sa {0} litrato ng pond o tangke na kita ang tubig. Hindi isinasagawa ang satellite check para sa mga in-house na pond, kaya ang mga litratong ito ang magiging patunay.',
+  'Add at least {0} photo (more from different angles helps)':
+      'Magdagdag ng hindi bababa sa {0} litrato (makakatulong ang dagdag na litrato mula sa iba\'t ibang anggulo)',
+  'Add at least {0} photo of the pond or tank, showing the water. The satellite check is skipped for in-house ponds, so your photos are the proof.':
+      'Magdagdag ng hindi bababa sa {0} litrato ng pond o tangke na kita ang tubig. Hindi isinasagawa ang satellite check para sa mga in-house na pond, kaya ang mga litrato mo ang magiging patunay.',
+  'Optional: add a photo. If buildings hide the pond on the satellite map, we\'ll compare it with the satellite view right away, so you won\'t be asked for photos later.':
+      'Opsyonal: magdagdag ng litrato. Kung natatakpan ng mga gusali ang pond sa satellite map, agad namin itong ihahambing sa satellite view, kaya hindi ka na hihingan ng litrato sa susunod.',
+  '{0} of {1} added. Add {2} more to continue.':
+      '{0} sa {1} ang naidagdag. Magdagdag pa ng {2} para magpatuloy.',
+  '{0} of {1} added. Add {2} more.':
+      '{0} sa {1} ang naidagdag. Magdagdag pa ng {2}.',
+  '{0} added. You can send now{1}.':
+      '{0} ang naidagdag. Maaari mo na itong ipadala{1}.',
+  'Photos ready: {0}.': 'Handa na ang mga litrato: {0}.',
   'Add photos': 'Magdagdag ng litrato',
   'Add photos of “{0}”': 'Magdagdag ng litrato ng "{0}"',
   'Add pond': 'Magdagdag ng pond',
@@ -43,8 +52,6 @@ const Map<String, String> tagalogStrings = {
   'Add {0} more {1} to continue.': 'Magdagdag pa ng {0} {1} para magpatuloy.',
   'Add {0} more, or remove these. They\'re only used with {1} or more.':
       'Magdagdag pa ng {0}, o alisin ang mga ito. Magagamit lang ang mga ito kapag {1} o higit pa.',
-  'Add {0} or more. If buildings hide the pond on the satellite map, we\'ll compare them with it right away, so you won\'t be asked for photos later.':
-      'Magdagdag ng {0} o higit pa. Kung natatakpan ng mga gusali ang pond sa satellite map, agad namin itong ihahambing sa mga litrato, kaya hindi ka na hihingan ng litrato sa susunod.',
   'All ponds': 'Lahat ng pond',
   'All readings are within a healthy range.':
       'Lahat ng reading ay nasa malusog na saklaw.',
@@ -188,7 +195,6 @@ const Map<String, String> tagalogStrings = {
   'Good morning': 'Magandang umaga',
   'Google sign-in was cancelled.':
       'Kinansela ang pag-sign in gamit ang Google.',
-  'Got it': 'Sige',
   'Healthy range': 'Malusog na saklaw',
   'Hi! I\'m your pond assistant. Ask me about feeding, water quality or risks for this pond.':
       'Kumusta! Ako ang pond assistant mo. Magtanong ka tungkol sa pagpapakain, kalidad ng tubig o mga panganib sa pond na ito.',
@@ -479,13 +485,6 @@ const Map<String, String> tagalogStrings = {
   '{0} is already in use by another account.':
       'Ginagamit na ng ibang account ang {0}.',
   '{0} min ago': '{0} minuto ang nakalipas',
-  '{0} of {1} photos added. Add {2} more to continue.':
-      '{0} sa {1} litrato ang naidagdag. Magdagdag pa ng {2} para magpatuloy.',
-  '{0} of {1} photos added. Add {2} more.':
-      '{0} sa {1} litrato ang naidagdag. Magdagdag pa ng {2}.',
-  '{0} photos added. You can send them now{1}.':
-      '{0} litrato ang naidagdag. Maaari mo na itong ipadala{1}.',
-  '{0} photos ready.': '{0} litrato ang handa na.',
   '{0} ponds': '{0} pond',
   '{0} status': 'Kalagayan: {0}',
   '{0} updated': 'Na-update ang {0}',
@@ -493,4 +492,429 @@ const Map<String, String> tagalogStrings = {
   '{0}h ago': '{0}h ang nakalipas',
   '{0}m ago': '{0}m ang nakalipas',
   '“{0}” is verified': 'Na-verify na ang "{0}"',
+  'No readings in this timeframe': 'Walang reading sa panahong ito',
+  'Today': 'Ngayong araw',
+  'Yesterday': 'Kahapon',
+  '{0} readings': '{0} na reading',
+  'Connect your IsdaSafe device': 'Ikonekta ang iyong IsdaSafe device',
+  'Pairing needs the IsdaSafe device plugged into a laptop or desktop with a USB cable. Open IsdaSafe in Google Chrome or Microsoft Edge on that computer to continue.':
+      'Para makapagpares, kailangang nakasaksak ang IsdaSafe device sa laptop o desktop gamit ang USB cable. Buksan ang IsdaSafe sa Google Chrome o Microsoft Edge sa computer na iyon para magpatuloy.',
+  'Opening the connection…': 'Binubuksan ang koneksyon…',
+  'Connected. Waiting for the first reading — this can take up to a minute while the device starts up.':
+      'Nakakonekta na. Hinihintay ang unang reading — maaaring umabot ito nang hanggang isang minuto habang nagsisimula ang device.',
+  'Plug the device into this laptop with a USB cable, then choose its port. It usually shows up as "CP210x", "CH340" or "USB Serial".':
+      'Isaksak ang device sa laptop na ito gamit ang USB cable, saka piliin ang port nito. Karaniwan itong lumalabas bilang "CP210x", "CH340" o "USB Serial".',
+  'No device was connected. Make sure the cable is plugged in, close the Arduino Serial Monitor if it\'s open, and try again.':
+      'Walang naikonektang device. Siguraduhing nakasaksak ang cable, isara ang Arduino Serial Monitor kung bukas ito, at subukan ulit.',
+  'Some sensors aren\'t sending values yet. Check their wiring and power; this updates with every reading.':
+      'May mga sensor na hindi pa nagpapadala ng value. Suriin ang wiring at power nila; nag-a-update ito sa bawat reading.',
+  'Connect device': 'Ikonekta ang device',
+  'Not detected': 'Hindi nakita',
+  'This device is already registered to another account.':
+      'Naka-register na ang device na ito sa ibang account.',
+  "Couldn't register the device. Check your connection and try again.":
+      'Hindi ma-register ang device. Suriin ang iyong koneksyon at subukan ulit.',
+  'Device ID: {0}': 'Device ID: {0}',
+  "This device isn't sending an ID. Update its firmware to the version that prints ID= with each reading.":
+      'Hindi nagpapadala ng ID ang device na ito. I-update ang firmware nito sa bersyong nagpi-print ng ID= sa bawat reading.',
+  "The pond was added, but the device couldn't be linked to it.":
+      'Naidagdag ang pond, pero hindi naiugnay ang device dito.',
+  'Live from your IsdaSafe device': 'Live mula sa iyong IsdaSafe device',
+  'Connecting to your IsdaSafe device…':
+      'Kumokonekta sa iyong IsdaSafe device…',
+  'Device not connected. Showing the last readings it sent.':
+      'Hindi nakakonekta ang device. Ipinapakita ang huling mga reading na ipinadala nito.',
+  'Live readings need Chrome or Edge on the laptop the device is plugged into.':
+      'Kailangan ng Chrome o Edge sa laptop na kinasasaksakan ng device para sa live na reading.',
+  'Reconnect': 'Ikonekta ulit',
+  'Live from your IsdaSafe device: {0}. The other readings are sample data.':
+      'Live mula sa iyong IsdaSafe device: {0}. Sample data ang iba pang reading.',
+  "The device didn't confirm the pairing. Make sure it has the latest firmware, press its reset button, and try again.":
+      'Hindi kinumpirma ng device ang pagpapares. Siguraduhing pinakabago ang firmware nito, pindutin ang reset button nito, at subukan ulit.',
+  'Pairing the device with your account. Keep it plugged in; this can take up to a minute.':
+      'Ipinapares ang device sa iyong account. Huwag itong tanggalin sa saksakan; maaaring umabot ito nang hanggang isang minuto.',
+  'Remove this device?': 'Alisin ang device na ito?',
+  "Couldn't remove the device. Check your connection and try again.":
+      'Hindi maalis ang device. Suriin ang iyong koneksyon at subukan ulit.',
+  'Paired device: {0}': 'Nakapares na device: {0}',
+  'Remove device': 'Alisin ang device',
+  'Pair a device with {0}': 'Magpares ng device sa {0}',
+  'This device is already connected to another account.':
+      'Nakakonekta na ang device na ito sa ibang account.',
+  'This device is already paired with {0}. Remove it from that pond first, then pair it here.':
+      'Nakapares na ang device na ito sa {0}. Alisin muna ito sa pond na iyon, saka ipares dito.',
+  'another pond': 'ibang pond',
+  'This pond already has a paired device. Remove it first to pair a different one.':
+      'May nakapares nang device ang pond na ito. Alisin muna ito para makapagpares ng iba.',
+  'Change location?': 'Palitan ang lokasyon?',
+  '"{0}" will be verified again at its new location. Until that finishes it won\'t show on your dashboard. Its paired device stays paired and keeps recording.':
+      'Iveverify ulit ang "{0}" sa bago nitong lokasyon. Hangga\'t hindi ito tapos, hindi ito lalabas sa iyong dashboard. Mananatiling nakapares ang device nito at patuloy itong magre-record.',
+  "The device was paired, but couldn't be linked to this pond. Try again.":
+      'Naipares ang device, pero hindi ito naiugnay sa pond na ito. Subukan ulit.',
+  '{0} is now paired. Its readings will appear on the dashboard.':
+      'Nakapares na ang {0}. Lalabas ang mga reading nito sa dashboard.',
+  'This pond is no longer available.': 'Wala na ang pond na ito.',
+  '{0} already has a paired device.': 'May nakapares nang device ang {0}.',
+  'Waiting for the first reading': 'Hinihintay ang unang reading',
+  'No device paired yet': 'Wala pang nakapares na device',
+  'Device {0} is paired. Readings appear here once it sends one over WiFi.':
+      'Nakapares ang device na {0}. Lalabas dito ang mga reading kapag nagpadala na ito sa WiFi.',
+  "Pair an IsdaSafe device to see this pond's readings.":
+      'Magpares ng IsdaSafe device para makita ang mga reading ng pond na ito.',
+  'Pair a device': 'Magpares ng device',
+  'No device paired · Tap to pair one':
+      'Walang nakapares na device · I-tap para magpares',
+  'Live from your IsdaSafe device over USB.':
+      'Live mula sa iyong IsdaSafe device sa USB.',
+  'Readings from your IsdaSafe device, sent over WiFi.':
+      'Mga reading mula sa iyong IsdaSafe device, ipinadala sa WiFi.',
+  'Reconnect USB': 'Ikonekta ulit ang USB',
+  'Not sent by the device yet: {0}': 'Hindi pa ipinapadala ng device: {0}',
+  'No reading yet': 'Wala pang reading',
+  'Waiting for these readings from the device: {0}':
+      'Hinihintay pa ang mga reading na ito mula sa device: {0}',
+  'Pond & device': 'Pond at device',
+  'Location': 'Lokasyon',
+  'Change': 'Baguhin',
+  'IsdaSafe device': 'IsdaSafe device',
+  'Loading…': 'Naglo-load…',
+  'No device paired': 'Walang naka-pair na device',
+  'ID {0}': 'ID {0}',
+  "Its readings stop being saved until it's paired again.":
+      'Hindi na ise-save ang mga reading nito hanggang ma-pair ulit.',
+  "USB isn't available in this browser. Readings arrive over WiFi.":
+      'Hindi available ang USB sa browser na ito. Sa WiFi dumarating ang mga reading.',
+  'A different device ({0}) is plugged in.':
+      'Ibang device ({0}) ang nakakabit.',
+  'Connected — showing live readings.':
+      'Nakakonekta — ipinapakita ang live na reading.',
+  'Connecting…': 'Kumokonekta…',
+  'Not connected. Readings arrive over WiFi.':
+      'Hindi nakakonekta. Sa WiFi dumarating ang mga reading.',
+  'Connect': 'Ikonekta',
+  'Remove this pond?': 'Alisin ang pond na ito?',
+  'Change location': 'Palitan ang lokasyon',
+  'Mark all as read': 'Markahang nabasa na lahat',
+  'All caught up': 'Nabasa mo na lahat',
+  '1 unread notification': '1 hindi pa nababasang notification',
+  '{0} unread notifications': '{0} hindi pa nababasang notification',
+  'Push notifications': 'Mga push notification',
+  'Not available on this device or browser.':
+      'Hindi available sa device o browser na ito.',
+  'Blocked. Allow notifications for IsdaSafe in your browser or phone settings.':
+      'Naka-block. Payagan ang mga notification para sa IsdaSafe sa settings ng iyong browser o telepono.',
+  "Get notified when a pond is verified or needs photos, even when IsdaSafe isn't on screen.":
+      'Makatanggap ng abiso kapag na-verify ang pond o kailangan nito ng litrato, kahit hindi nakabukas ang IsdaSafe.',
+  'Notifications are blocked. Allow them for IsdaSafe in your browser or phone settings, then try again.':
+      'Naka-block ang mga notification. Payagan ang mga ito para sa IsdaSafe sa settings ng iyong browser o telepono, saka subukan ulit.',
+  '1 reading': '1 reading',
+  'All within healthy range': 'Lahat ay nasa malusog na saklaw',
+  '{0} outside healthy range': '{0} ang labas sa malusog na saklaw',
+  'Pond': 'Pond',
+
+  'Device {0} will stop sending readings to your account. To use it again, pair it with a pond by scanning its QR label.':
+      'Hindi na magpapadala ng reading sa iyong account ang device na {0}. Para magamit ulit, i-pair ito sa isang pond sa pag-scan ng QR label nito.',
+  "That isn't an IsdaSafe label. Scan the QR code on the device.":
+      'Hindi iyan label ng IsdaSafe. I-scan ang QR code na nasa device.',
+  'Check the device ID (12 characters) and the claim code on the label.':
+      'Suriin ang device ID (12 character) at ang claim code na nasa label.',
+  "That label doesn't match a registered IsdaSafe device. Check the device ID and claim code.":
+      'Hindi tugma ang label na iyan sa isang rehistradong IsdaSafe device. Suriin ang device ID at claim code.',
+  'Too many tries. Wait an hour, then try again.':
+      'Masyadong maraming subok. Maghintay ng isang oras, saka subukan ulit.',
+  "Couldn't pair the device. Check your connection and try again.":
+      'Hindi ma-pair ang device. Suriin ang iyong koneksyon at subukan ulit.',
+  "Couldn't send the request. Check your connection and try again.":
+      'Hindi maipadala ang request. Suriin ang iyong koneksyon at subukan ulit.',
+  "Scan the device's QR label": 'I-scan ang QR label ng device',
+  'Point the camera at the QR code on your IsdaSafe device. Make sure the device is switched on and connected to WiFi.':
+      'Itutok ang camera sa QR code ng iyong IsdaSafe device. Siguraduhing nakabukas ang device at nakakonekta sa WiFi.',
+  'Enter code instead': 'I-type na lang ang code',
+  "Enter the label's code": 'I-type ang code ng label',
+  'Type the device ID and claim code printed under the QR code.':
+      'I-type ang device ID at claim code na nakalimbag sa ilalim ng QR code.',
+  'Device ID': 'Device ID',
+  'Claim code': 'Claim code',
+  'Scan instead': 'I-scan na lang',
+  'Pair': 'I-pair',
+  'Pairing the device…': 'Pina-pair ang device…',
+  'This only takes a moment.': 'Sandali lang ito.',
+  'This device belongs to someone else': 'Pag-aari ng iba ang device na ito',
+  "You already asked its owner to transfer it to you. You'll get a notification when they answer.":
+      'Nakahiling ka na sa may-ari na ilipat ito sa iyo. Makakatanggap ka ng notification kapag sumagot sila.',
+  "It's paired with another IsdaSafe account. If they gave it to you, ask them to transfer it: they'll get a notification to approve.":
+      'Naka-pair ito sa ibang IsdaSafe account. Kung ibinigay nila ito sa iyo, hilingin na ilipat ito: makakatanggap sila ng notification para aprubahan.',
+  'Request transfer': 'Hilingin ang paglipat',
+  'Transfer requested': 'Nahiling na ang paglipat',
+  "The owner will get a notification. Once they approve, you'll be notified and can choose a pond for the device.":
+      'Makakatanggap ng notification ang may-ari. Kapag inaprubahan nila, aabisuhan ka at makakapili ka ng pond para sa device.',
+  "Couldn't pair the device": 'Hindi ma-pair ang device',
+  'Try again': 'Subukan ulit',
+  'Camera access is blocked. Allow it in your browser or phone settings, or enter the code instead.':
+      'Naka-block ang camera. Payagan ito sa settings ng iyong browser o telepono, o i-type na lang ang code.',
+  "The camera isn't available here. Enter the code instead.":
+      'Walang magagamit na camera dito. I-type na lang ang code.',
+  '{0} is now paired. Its readings appear once the device sends them over WiFi.':
+      'Naka-pair na ang {0}. Lalabas ang mga reading nito kapag naipadala na ng device sa WiFi.',
+  'To pair device {0}, add a pond and wait for it to be verified, then scan the label again.':
+      'Para ma-pair ang device na {0}, magdagdag ng pond at hintaying ma-verify ito, saka i-scan ulit ang label.',
+  'Pair device {0}': 'I-pair ang device na {0}',
+  'Which pond will this device monitor?':
+      'Aling pond ang babantayan ng device na ito?',
+  'This request was already answered.': 'Nasagot na ang request na ito.',
+  'Transfer device {0}?': 'Ilipat ang device na {0}?',
+  "Someone who has this device's label asked for it. If you approve, the device and its future readings move to their account and it's removed from your pond. Its past readings stay with you. Approve only if you gave them the device.":
+      'May humiling sa device na ito gamit ang label nito. Kapag inaprubahan mo, lilipat sa kanilang account ang device at ang mga susunod nitong reading, at aalisin ito sa iyong pond. Mananatili sa iyo ang mga nakaraang reading. Aprubahan lang kung ibinigay mo sa kanila ang device.',
+  'Transfer device': 'Ilipat ang device',
+  'Decline': 'Tanggihan',
+  "Couldn't send your answer. Check your connection and try again.":
+      'Hindi maipadala ang iyong sagot. Suriin ang iyong koneksyon at subukan ulit.',
+  'Device {0} was transferred.': 'Nailipat na ang device na {0}.',
+  'Transfer declined.': 'Tinanggihan ang paglipat.',
+  'Add a pond without a device first, then open this notification again.':
+      'Magdagdag muna ng pond na walang device, saka buksan ulit ang notification na ito.',
+  'Choose a pond for device {0}': 'Pumili ng pond para sa device na {0}',
+  'Answer': 'Sagutin',
+  'Choose a pond': 'Pumili ng pond',
+  'Device transfer requested': 'May humiling ng paglipat ng device',
+  'Device transfer declined': 'Tinanggihan ang paglipat ng device',
+  'Device transferred to you': 'Nailipat na sa iyo ang device',
+  'Upload a photo of the label': 'Mag-upload ng litrato ng label',
+  "Only use photos of your own device's label.":
+      'Gumamit lang ng litrato ng label ng sarili mong device.',
+  'Reading the photo…': 'Binabasa ang litrato…',
+  'Looking for the QR code on the label.': 'Hinahanap ang QR code sa label.',
+  "Couldn't open that photo. Try another one.":
+      'Hindi mabuksan ang litratong iyan. Sumubok ng iba.',
+  "Couldn't find a QR code in that photo. Try a sharper photo taken closer to the label, or enter the code instead.":
+      'Walang nakitang QR code sa litratong iyan. Sumubok ng mas malinaw na litrato na mas malapit sa label, o i-type na lang ang code.',
+  'Which fish or shrimp does this pond have, and how much? The biomass (total weight of each species in the pond) is used to work out how much to feed.':
+      'Anong isda o hipon ang nasa pond na ito, at gaano karami? Ginagamit ang biomass (kabuuang timbang ng bawat uri sa pond) para malaman kung gaano karaming pakain ang ibibigay.',
+  'Biomass of {0} (kg)': 'Biomass ng {0} (kg)',
+  'e.g. 120': 'hal. 120',
+  'Total weight of this species in the pond':
+      'Kabuuang timbang ng uring ito sa pond',
+  'Enter the biomass in kg': 'Ilagay ang biomass sa kg',
+  'Enter a number between 0 and {0} kg':
+      'Maglagay ng numero mula 0 hanggang {0} kg',
+  'Your pond request is being processed':
+      'Pinoproseso ang iyong request para sa pond',
+  "“{0}” is under review. This usually takes a minute or two. You can close this and keep using the app; we'll let you know whether it's approved or not.":
+      'Sinusuri ang “{0}”. Karaniwang isa o dalawang minuto ito. Puwede mo itong isara at ituloy ang paggamit ng app; ipapaalam namin sa iyo kung naaprubahan ito o hindi.',
+  '“{0}” is approved': 'Naaprubahan ang “{0}”',
+  'Your pond was verified. Pair your IsdaSafe device with it to start monitoring.':
+      'Na-verify ang iyong pond. I-pair ang iyong IsdaSafe device dito para simulan ang pagbabantay.',
+  '“{0}” needs photos': 'Kailangan ng litrato ang “{0}”',
+  'Add photos of the pond so we can finish the review.':
+      'Magdagdag ng mga litrato ng pond para matapos namin ang pagsusuri.',
+  "The review didn't finish": 'Hindi natapos ang pagsusuri',
+  'Something went wrong while checking “{0}”. Retry it from your dashboard.':
+      'Nagkaproblema habang sinusuri ang “{0}”. Subukan ulit mula sa iyong dashboard.',
+  "“{0}” wasn't approved": 'Hindi naaprubahan ang “{0}”',
+  "We couldn't verify this pond. You can add it again with a different pin or photos.":
+      'Hindi namin ma-verify ang pond na ito. Puwede mo itong idagdag ulit gamit ang ibang pin o mga litrato.',
+  "You'll get a notification in the app when the review is done.":
+      'Makakatanggap ka ng notification sa app kapag tapos na ang pagsusuri.',
+  "You'll get a notification in the app and a text message to {0} when the review is done.":
+      'Makakatanggap ka ng notification sa app at text message sa {0} kapag tapos na ang pagsusuri.',
+  "We've also sent this to your notifications.":
+      'Ipinadala rin namin ito sa iyong mga notification.',
+  "We've also sent this to your notifications and by text message to {0}.":
+      'Ipinadala rin namin ito sa iyong mga notification at sa text message sa {0}.',
+  'Once approved, it appears on your dashboard':
+      'Kapag naaprubahan, lalabas ito sa iyong dashboard',
+  'OK': 'OK',
+  'Air Temperature': 'Temperatura ng Hangin',
+  'Free Ammonia': 'Free Ammonia',
+  'Latest: {0}': 'Pinakabago: {0}',
+  'Healthy range: {0}': 'Malusog na saklaw: {0}',
+  'How warm the pond water is. Fish are cold-blooded, so it sets how fast they eat, grow and use oxygen. Warm water holds less oxygen and makes ammonia more toxic.':
+      'Kung gaano kainit ang tubig ng pond. Malamig ang dugo ng isda, kaya ito ang nagtatakda kung gaano sila kabilis kumain, lumaki at gumamit ng oxygen. Mas kaunting oxygen ang kayang hawakan ng mainit na tubig at mas nagiging nakalalason ang ammonia.',
+  'How much moisture is in the air around the device. Very humid, hot air slows evaporation and often comes with low oxygen at night; very dry air speeds up water loss.':
+      'Kung gaano karami ang halumigmig sa hangin sa paligid ng device. Pinababagal ng napakahalumigmig at mainit na hangin ang pagsingaw at kadalasang may kasamang mababang oxygen sa gabi; pinabibilis naman ng napakatuyong hangin ang pagkawala ng tubig.',
+  "Total ammonia nitrogen dissolved in the water, from fish waste and uneaten feed. It rises when the pond is overstocked or overfed and builds up when water isn't exchanged.":
+      'Kabuuang ammonia nitrogen na natunaw sa tubig, mula sa dumi ng isda at hindi nakaing pakain. Tumataas ito kapag sobra ang isda o pakain sa pond at naiipon kapag hindi napapalitan ang tubig.',
+  'How much oxygen is dissolved in the water for the fish to breathe. It drops at night, in hot weather and after overfeeding; low levels stress fish and can kill them.':
+      'Kung gaano karami ang oxygen na natunaw sa tubig para malanghap ng isda. Bumababa ito sa gabi, sa mainit na panahon at pagkatapos ng sobrang pagpapakain; nakaka-stress at nakamamatay sa isda ang mababang antas.',
+  'How acidic or alkaline the water is. Most pond fish do best near neutral. pH swings during the day with algae, and a high pH makes ammonia far more toxic.':
+      'Kung gaano ka-acidic o ka-alkaline ang tubig. Pinakamainam sa karamihan ng isda ang malapit sa neutral. Nagbabago ang pH sa maghapon dahil sa lumot, at lalong nagiging nakalalason ang ammonia kapag mataas ang pH.',
+  'How warm the air is around the device. It drives the water temperature: hot air warms the pond within hours.':
+      'Kung gaano kainit ang hangin sa paligid ng device. Ito ang nagpapainit sa tubig: napapainit ng mainit na hangin ang pond sa loob ng ilang oras.',
+  'The toxic part of the ammonia (un-ionised NH3), calculated from the total ammonia, pH and water temperature. Even small amounts damage the gills; it rises sharply when the water is warm or the pH is high.':
+      'Ang nakalalasong bahagi ng ammonia (un-ionised NH3), na kinuwenta mula sa kabuuang ammonia, pH at temperatura ng tubig. Kahit kaunti ay nakasisira sa hasang; mabilis itong tumataas kapag mainit ang tubig o mataas ang pH.',
+  'What is {0}?': 'Ano ang {0}?',
+  'What to do: {0}': 'Ano ang gagawin: {0}',
+  'Trend': 'Takbo',
+  'Show readings': 'Ipakita ang mga reading',
+  '{0} · Healthy: {1}': '{0} · Malusog: {1}',
+  'Updated just now': 'Na-update ngayon lang',
+  'Updated {0} min ago': 'Na-update {0} min ang nakalipas',
+  'Updated {0} h ago': 'Na-update {0} oras ang nakalipas',
+  'Updated {0} d ago': 'Na-update {0} araw ang nakalipas',
+  'Based on 1 reading in this timeframe': 'Batay sa 1 reading sa panahong ito',
+  'Based on {0} readings in this timeframe':
+      'Batay sa {0} reading sa panahong ito',
+  '1 reading in this timeframe': '1 reading sa panahong ito',
+  '{0} readings in this timeframe': '{0} reading sa panahong ito',
+  'The water is too warm. Shade the pond or add cooler water, run aeration (warm water holds less oxygen), and feed less until it cools down.':
+      'Masyadong mainit ang tubig. Lagyan ng lilim ang pond o dagdagan ng mas malamig na tubig, paganahin ang aerator (mas kaunting oxygen sa mainit na tubig), at bawasan ang pakain hanggang lumamig.',
+  'The water is too cold, so fish eat and grow slowly. Feed less, and avoid large water changes with cold water.':
+      'Masyadong malamig ang tubig, kaya mabagal kumain at lumaki ang isda. Bawasan ang pakain, at iwasan ang malakihang pagpapalit ng tubig gamit ang malamig na tubig.',
+  'The air is very humid. Watch dissolved oxygen closely at night and early morning, and aerate if it drops.':
+      'Napakahalumigmig ng hangin. Bantayang mabuti ang dissolved oxygen sa gabi at madaling-araw, at mag-aerate kapag bumaba.',
+  'The air is dry, so the pond loses water faster. Check the water level and top it up.':
+      'Tuyo ang hangin, kaya mas mabilis mabawasan ang tubig ng pond. Suriin ang lebel ng tubig at dagdagan ito.',
+  'Ammonia is building up. Stop or cut back feeding, change part of the water, and remove uneaten feed and dead fish.':
+      'Naiipon ang ammonia. Itigil o bawasan ang pagpapakain, palitan ang bahagi ng tubig, at alisin ang hindi nakaing pakain at patay na isda.',
+  'Oxygen is low. Turn on aerators or add fresh water now, stop feeding until it recovers, and check again at dawn, when it is lowest.':
+      'Mababa ang oxygen. Paganahin ang aerator o magdagdag ng sariwang tubig ngayon, itigil ang pagpapakain hanggang bumalik ito, at suriin ulit sa madaling-araw, kung kailan ito pinakamababa.',
+  'The water is too acidic. Apply agricultural lime and check the pH again after a few hours.':
+      'Masyadong acidic ang tubig. Maglagay ng agricultural lime at suriin ulit ang pH pagkalipas ng ilang oras.',
+  "The water is too alkaline, which makes ammonia more toxic. Change part of the water and don't add lime.":
+      'Masyadong alkaline ang tubig, kaya mas nakalalason ang ammonia. Palitan ang bahagi ng tubig at huwag maglagay ng lime.',
+  'Hot air will warm the pond. Shade it and keep an eye on the water temperature and oxygen.':
+      'Iinitin ng mainit na hangin ang pond. Lagyan ito ng lilim at bantayan ang temperatura ng tubig at ang oxygen.',
+  'Cool air will chill the pond. Feed less until it warms up.':
+      'Palalamigin ng malamig na hangin ang pond. Bawasan ang pakain hanggang uminit ito.',
+  'Toxic ammonia is high. Stop feeding, change part of the water and aerate. Bringing the pH and water temperature down also lowers it.':
+      'Mataas ang nakalalasong ammonia. Itigil ang pagpapakain, palitan ang bahagi ng tubig at mag-aerate. Bumababa rin ito kapag ibinaba ang pH at temperatura ng tubig.',
+  // Device WiFi setup and online status.
+  "Couldn't open the device. Plug it in with a USB cable and try again.":
+      'Hindi mabuksan ang device. Isaksak ito gamit ang USB cable at subukan ulit.',
+  "The device didn't answer. Make sure it's plugged in and has the latest firmware, or use the phone steps instead.":
+      'Hindi sumagot ang device. Siguraduhing nakasaksak ito at may pinakabagong firmware, o gamitin na lang ang mga hakbang sa phone.',
+  "The device didn't answer. Check the USB cable and try again.":
+      'Hindi sumagot ang device. Tingnan ang USB cable at subukan ulit.',
+  "Couldn't connect to {0}: {1}.": 'Hindi makakonekta sa {0}: {1}.',
+  'network not found': 'hindi makita ang network',
+  'wrong password or weak signal': 'maling password o mahinang signal',
+  'the device rejected the network details':
+      'tinanggihan ng device ang detalye ng network',
+  'Connect the device to WiFi': 'Ikonekta ang device sa WiFi',
+  'Reconnect the device to WiFi': 'Ikonekta ulit ang device sa WiFi',
+  "Change the device's WiFi": 'Palitan ang WiFi ng device',
+  'The device sends its readings over WiFi. Choose its network with your phone:':
+      'Sa WiFi ipinapadala ng device ang mga reading nito. Piliin ang network nito gamit ang iyong phone:',
+  "The device isn't sending readings. If your WiFi is working, the device may be out of range or its WiFi password may have changed. Choose its network again with your phone:":
+      'Hindi nagpapadala ng reading ang device. Kung gumagana ang WiFi mo, maaaring malayo ang device o napalitan ang password ng WiFi. Piliin ulit ang network nito gamit ang iyong phone:',
+  'The device keeps its current network until the new one works. Choose the new network with your phone:':
+      'Mananatili ang device sa kasalukuyang network hanggang gumana ang bago. Piliin ang bagong network gamit ang iyong phone:',
+  'Asking the device to open its setup hotspot...':
+      'Hinihiling sa device na buksan ang setup hotspot nito...',
+  'The device opens its setup hotspot within about a minute and keeps it open for 10 minutes.':
+      'Bubuksan ng device ang setup hotspot nito sa loob ng mga isang minuto at bukas ito nang 10 minuto.',
+  "Couldn't reach the server to ask the device. Check your connection and try again.":
+      'Hindi maabot ang server para hilingin ito sa device. Tingnan ang iyong koneksyon at subukan ulit.',
+  "Make sure the device is powered on. When it can't reach a WiFi network, it opens its own setup hotspot within about 2 minutes.":
+      'Siguraduhing nakabukas ang device. Kapag hindi ito makakonekta sa WiFi, bubuksan nito ang sarili nitong setup hotspot sa loob ng mga 2 minuto.',
+  'On your phone, join the WiFi network ':
+      'Sa iyong phone, kumonekta sa WiFi network na ',
+  ' (password: ': ' (password: ',
+  "A setup page opens (if it doesn't, open 192.168.4.1 in the browser). Pick your WiFi, type its password and tap Save and connect.":
+      'Magbubukas ang setup page (kung hindi, buksan ang 192.168.4.1 sa browser). Piliin ang iyong WiFi, i-type ang password nito at i-tap ang Save and connect.',
+  'When it says Connected, switch your phone back to your usual WiFi.':
+      'Kapag Connected na ang nakasulat, ibalik ang phone mo sa karaniwan mong WiFi.',
+  'The device screen also shows the network name and password while setup is open.':
+      'Ipinapakita rin ng screen ng device ang pangalan at password ng network habang bukas ang setup.',
+  'Looking for WiFi networks...': 'Naghahanap ng mga WiFi network...',
+  'Connecting the device to {0}. This takes up to 20 seconds.':
+      'Ikinokonekta ang device sa {0}. Aabot ito nang hanggang 20 segundo.',
+  'The device is connected to {0}. Its readings will appear shortly.':
+      'Nakakonekta na ang device sa {0}. Lalabas na ang mga reading nito maya-maya.',
+  'The device plugged in is {0}, not {1}.':
+      'Ang nakasaksak na device ay {0}, hindi {1}.',
+  'Choose a network': 'Pumili ng network',
+  'Scan again': 'Mag-scan ulit',
+  'No networks found.': 'Walang nakitang network.',
+  'Other (hidden) network': 'Ibang (nakatagong) network',
+  'Network name': 'Pangalan ng network',
+  'WiFi password': 'Password ng WiFi',
+  'Leave empty for an open network.': 'Iwanang blangko kung bukas na network.',
+  'Only 2.4 GHz networks are shown.':
+      '2.4 GHz na network lang ang ipinapakita.',
+  'Use USB instead': 'USB na lang ang gamitin',
+  'Back': 'Bumalik',
+  'Use phone instead': 'Phone na lang ang gamitin',
+  'Device online · Last reading: {0}':
+      'Online ang device · Huling reading: {0}',
+  'Device offline': 'Offline ang device',
+  'No reading since {0}. It may have lost its WiFi connection.':
+      'Walang reading mula {0}. Maaaring nawalan ito ng koneksyon sa WiFi.',
+  'Reconnect to WiFi': 'Ikonekta ulit sa WiFi',
+  'Internet': 'Internet',
+  'No reading received yet': 'Wala pang natatanggap na reading',
+  'Online · Last reading: {0}': 'Online · Huling reading: {0}',
+  'Offline · no reading since {0}': 'Offline · walang reading mula {0}',
+  'Change WiFi': 'Palitan ang WiFi',
+  'Connect to WiFi': 'Ikonekta sa WiFi',
+  // Weather around the pond (humidity + air temperature).
+  'Muggy': 'Maalinsangan',
+  'Dry': 'Tuyo',
+  'Comfortable': 'Maginhawa',
+  'Oxygen may drop tonight': 'Maaaring bumaba ang oxygen ngayong gabi',
+  'Oxygen is already {0} and the weather is humid and warm.':
+      '{0} na lang ang oxygen at maalinsangan at mainit ang panahon.',
+  'The weather is humid and warm, so the pond makes and holds less oxygen.':
+      'Maalinsangan at mainit ang panahon, kaya mas kaunting oxygen ang nagagawa at naiipon ng pond.',
+  'Run the aerators through the night and check oxygen at dawn, when it is lowest.':
+      'Paandarin ang mga aerator buong gabi at tingnan ang oxygen pagsapit ng madaling-araw, kung kailan ito pinakamababa.',
+  'Plan to run the aerators from evening until dawn, and feed less late in the day.':
+      'Ihanda ang pagpapaandar ng mga aerator mula gabi hanggang madaling-araw, at bawasan ang pakain sa hapon.',
+  'Water likely to keep warming': 'Malamang na patuloy na iinit ang tubig',
+  "The air ({0}) is warmer than the water and humid, so the pond can't cool down. Shade it and top up with cooler water before it passes {1}.":
+      'Mas mainit ang hangin ({0}) kaysa sa tubig at maalinsangan, kaya hindi lumalamig ang pond. Lagyan ito ng lilim at dagdagan ng mas malamig na tubig bago ito lumampas sa {1}.',
+  'Pond water is evaporating fast': 'Mabilis na sumisingaw ang tubig ng pond',
+  'Hot, dry air is lowering the water level, and ammonia is rising as it concentrates. Top up with fresh water rather than only cutting feed.':
+      'Pinabababa ng mainit at tuyong hangin ang lebel ng tubig, at tumataas ang ammonia habang kumakapal ito. Dagdagan ng sariwang tubig sa halip na bawasan lang ang pakain.',
+  'Hot, dry air is lowering the water level, which concentrates ammonia. Check the water level and top it up with fresh water.':
+      'Pinabababa ng mainit at tuyong hangin ang lebel ng tubig, kaya kumakapal ang ammonia. Tingnan ang lebel ng tubig at dagdagan ito ng sariwang tubig.',
+  "It's probably raining": 'Malamang na umuulan',
+  'Humidity jumped and the air cooled. Rain lowers the pH and can stir up the pond bottom: check pH and dissolved oxygen over the next few hours.':
+      'Biglang tumaas ang humidity at lumamig ang hangin. Pinabababa ng ulan ang pH at maaaring mahalo ang ilalim ng pond: tingnan ang pH at dissolved oxygen sa susunod na ilang oras.',
+  'Weather is raising toxic ammonia':
+      'Pinatataas ng panahon ang nakalalasong ammonia',
+  'Warm, humid weather keeps the water warm, which raises the toxic share of ammonia ({0}). Expect it to stay high until the weather cools: cut feeding and change part of the water.':
+      'Pinananatiling mainit ng maalinsangang panahon ang tubig, kaya tumataas ang nakalalasong bahagi ng ammonia ({0}). Asahang mananatili itong mataas hanggang lumamig ang panahon: bawasan ang pakain at palitan ang bahagi ng tubig.',
+  'Weather around the pond': 'Panahon sa paligid ng pond',
+  'No weather risks to the water right now.':
+      'Walang panganib mula sa panahon sa tubig ngayon.',
+  "How much moisture is in the air around the device. It doesn't affect the fish directly, so it never changes the pond's status on its own. IsdaSafe reads it with the air and water temperature to warn about weather that changes the water: muggy nights that lower oxygen, air that keeps the pond warm, dry heat that evaporates it, and rain that lowers the pH.":
+      'Gaano karami ang halumigmig sa hangin sa paligid ng device. Hindi nito direktang naaapektuhan ang isda, kaya hindi nito binabago nang mag-isa ang status ng pond. Binabasa ito ng IsdaSafe kasama ng temperatura ng hangin at tubig para magbabala tungkol sa panahong nagpapabago sa tubig: maalinsangang gabi na nagpapababa ng oxygen, hanging pumipigil sa paglamig ng pond, tuyong init na nagpapasingaw dito, at ulan na nagpapababa ng pH.',
+  // Text alerts (Settings).
+  "Get notified when a pond reading needs attention, or a pond is verified or needs photos, even when IsdaSafe isn't on screen.":
+      'Maabisuhan kapag may reading ng pond na kailangang asikasuhin, o kapag na-verify ang pond o kailangan nito ng mga larawan, kahit hindi nakabukas ang IsdaSafe.',
+  "Couldn't save. Check your connection and try again.":
+      'Hindi ma-save. Tingnan ang iyong koneksyon at subukan ulit.',
+  "Couldn't load your text alert setting.":
+      'Hindi ma-load ang setting ng iyong text alert.',
+  'Verify a phone number to get text alerts.':
+      'Mag-verify ng numero ng telepono para makatanggap ng text alert.',
+  'Texts to {0} when a pond reading needs attention. Alerts always appear in Notifications too.':
+      'Magte-text sa {0} kapag may reading ng pond na kailangang asikasuhin. Lumalabas din palagi ang mga alert sa Notifications.',
+  'Text alerts': 'Mga text alert',
+  'Warning and danger': 'Babala at panganib',
+  'Danger only': 'Panganib lang',
+  'Off': 'Naka-off',
+  // WiFi connected, test push, loading more readings.
+  'Waiting for the device to connect...':
+      'Hinihintay na kumonekta ang device...',
+  'Device connected to WiFi': 'Nakakonekta na sa WiFi ang device',
+  'Device {0} is online. Its readings will appear within a minute.':
+      'Online na ang device na {0}. Lalabas ang mga reading nito sa loob ng isang minuto.',
+  'Device {0} is now connected to "{1}". Its readings will appear within a minute.':
+      'Nakakonekta na ang device na {0} sa "{1}". Lalabas ang mga reading nito sa loob ng isang minuto.',
+  'Test notification sent. It arrives in about {0} seconds: leave the app now to see it like a real alert.':
+      'Naipadala ang test notification. Darating ito sa loob ng mga {0} segundo: lumabas muna sa app para makita ito na parang totoong alert.',
+  "Push isn't set up on the server yet: add the Firebase key (FCM_SERVICE_ACCOUNT) in Supabase.":
+      'Hindi pa naka-set up ang push sa server: idagdag ang Firebase key (FCM_SERVICE_ACCOUNT) sa Supabase.',
+  "This phone couldn't register for push. Check that notifications are allowed for IsdaSafe, then try again.":
+      'Hindi ma-register ang phone na ito para sa push. Tiyaking pinapayagan ang notifications para sa IsdaSafe, saka subukan ulit.',
+  'Push notifications are only available in the Android app.':
+      'Available lang ang push notifications sa Android app.',
+  "Couldn't send the test notification. Check your connection and try again.":
+      'Hindi maipadala ang test notification. Tingnan ang iyong koneksyon at subukan ulit.',
+  'Send a test notification': 'Magpadala ng test notification',
+  'Checks that push notifications reach this phone.':
+      'Tinitingnan kung umaabot ang push notifications sa phone na ito.',
+  'Load more': 'Mag-load pa',
 };

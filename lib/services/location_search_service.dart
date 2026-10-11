@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 
 /// One place returned by a location search.
@@ -46,40 +47,51 @@ abstract class LocationSearchService {
   Future<List<PlaceResult>> search(String query);
 }
 
-/// Searches Komoot's public Photon geocoder (OpenStreetMap data), limited to a
-/// box around the Philippines. Unlike Nominatim it matches partial and
-/// misspelled names ("Sta Maria", "Dagupn") and ranks fuzzy hits, so a short
-/// query returns a useful list instead of one exact match. No API key; like
-/// Nominatim it expects light, user-triggered use (one request per search).
-class PhotonLocationSearchService implements LocationSearchService {
-  PhotonLocationSearchService({
+/// Searches Google Places (Places API (New) "Text Search"), restricted to the
+/// Philippines. It needs an API key with billing enabled — see
+/// `GOOGLE_PLACES_KEY` in `.env`. Restrict that key to the Places API (and, for
+/// the web build, to the site's HTTP referrers) in Google Cloud.
+class GooglePlacesLocationSearchService implements LocationSearchService {
+  GooglePlacesLocationSearchService({
+    required this.apiKey,
     http.Client? client,
-    this.baseUrl = 'https://photon.komoot.io',
+    this.baseUrl = 'https://places.googleapis.com',
   }) : _client = client ?? http.Client();
 
+  final String apiKey;
   final http.Client _client;
   final String baseUrl;
-
-  // west, south, east, north — keeps results inside the Philippines.
-  static const _philippinesBox = '116.9,4.5,126.7,21.2';
 
   @override
   Future<List<PlaceResult>> search(String query) async {
     final trimmed = query.trim();
     if (trimmed.length < 2) return const [];
 
-    final uri = Uri.parse('$baseUrl/api/').replace(
-      queryParameters: {
-        'q': trimmed,
-        'limit': '8',
-        'lang': 'en',
-        'bbox': _philippinesBox,
-      },
-    );
-
     try {
       final response = await _client
-          .get(uri)
+          .post(
+            Uri.parse('$baseUrl/v1/places:searchText'),
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Goog-Api-Key': apiKey,
+              // Only ask for what's shown: the name, address and position.
+              'X-Goog-FieldMask':
+                  'places.displayName,places.formattedAddress,places.location',
+            },
+            body: jsonEncode({
+              'textQuery': trimmed,
+              'regionCode': 'PH',
+              'languageCode': 'en',
+              'pageSize': 8,
+              // Bounding box around the Philippines.
+              'locationRestriction': {
+                'rectangle': {
+                  'low': {'latitude': 4.5, 'longitude': 116.9},
+                  'high': {'latitude': 21.2, 'longitude': 126.7},
+                },
+              },
+            }),
+          )
           .timeout(const Duration(seconds: 10));
       if (response.statusCode == 429) {
         throw const LocationSearchException(
@@ -87,57 +99,48 @@ class PhotonLocationSearchService implements LocationSearchService {
         );
       }
       if (response.statusCode != 200) {
+        debugPrint(
+          'GooglePlacesLocationSearchService: ${response.statusCode} ${response.body}',
+        );
         throw const LocationSearchException(
           "Couldn't search for places right now. Please try again.",
         );
       }
       final data = jsonDecode(response.body);
-      final features = data is Map ? data['features'] : null;
-      if (features is! List) return const [];
+      final places = data is Map ? data['places'] : null;
+      if (places is! List) return const [];
 
       final results = <PlaceResult>[];
-      final seen = <String>{};
-      for (final feature in features) {
-        if (feature is! Map) continue;
-        final coords = (feature['geometry'] as Map?)?['coordinates'];
-        final props = feature['properties'];
-        if (coords is! List || coords.length < 2 || props is! Map) continue;
-
-        // "Calamba, Calamba, Laguna" -> "Calamba, Laguna": drop repeated parts.
-        final parts = <String>[];
-        for (final key in [
-          'name',
-          'street',
-          'district',
-          'city',
-          'county',
-          'state',
-          'country',
-        ]) {
-          final value = props[key];
-          if (value is String &&
-              value.trim().isNotEmpty &&
-              !parts.contains(value.trim())) {
-            parts.add(value.trim());
-          }
+      for (final place in places) {
+        if (place is! Map) continue;
+        final location = place['location'];
+        if (location is! Map ||
+            location['latitude'] is! num ||
+            location['longitude'] is! num) {
+          continue;
         }
+        final name = (place['displayName'] as Map?)?['text'];
+        final address = place['formattedAddress'];
+        // "Name, address" so [PlaceResult.title] is the place's own name.
+        final parts = <String>[
+          if (name is String && name.trim().isNotEmpty) name.trim(),
+          if (address is String &&
+              address.trim().isNotEmpty &&
+              address.trim() != name)
+            address.trim(),
+        ];
         if (parts.isEmpty) continue;
-
-        final lon = (coords[0] as num).toDouble();
-        final lat = (coords[1] as num).toDouble();
-        // Photon often lists the same place several times (one per OSM object);
-        // keep one per name within ~1 km.
-        final key =
-            '${parts.join(',')}|${lat.toStringAsFixed(2)}|${lon.toStringAsFixed(2)}';
-        if (!seen.add(key)) continue;
         results.add(
           PlaceResult(
             displayName: parts.join(', '),
-            latitude: lat,
-            longitude: lon,
+            latitude: (location['latitude'] as num).toDouble(),
+            longitude: (location['longitude'] as num).toDouble(),
           ),
         );
       }
+      debugPrint(
+        'LocationSearch: "$trimmed" -> Google Places (${results.length} results)',
+      );
       return results;
     } on LocationSearchException {
       rethrow;
@@ -146,7 +149,7 @@ class PhotonLocationSearchService implements LocationSearchService {
         'The search timed out. Check your connection and try again.',
       );
     } catch (e) {
-      debugPrint('PhotonLocationSearchService: $e');
+      debugPrint('GooglePlacesLocationSearchService: $e');
       throw const LocationSearchException(
         "Couldn't reach the search service. Check your connection and try again.",
       );
@@ -154,106 +157,39 @@ class PhotonLocationSearchService implements LocationSearchService {
   }
 }
 
-/// Asks [primary] first and only falls back to [fallback] if it fails or finds
-/// nothing, so one flaky or overloaded free geocoder doesn't leave the user
-/// with an empty search.
-class FallbackLocationSearchService implements LocationSearchService {
-  const FallbackLocationSearchService({
-    required this.primary,
-    required this.fallback,
-  });
-
-  final LocationSearchService primary;
-  final LocationSearchService fallback;
+/// A search that always fails with [message]; used when no Google key is set,
+/// so the dialog shows a clear error instead of silently using another source.
+class UnavailableLocationSearchService implements LocationSearchService {
+  const UnavailableLocationSearchService(this.message);
+  final String message;
 
   @override
-  Future<List<PlaceResult>> search(String query) async {
-    LocationSearchException? primaryError;
-    try {
-      final results = await primary.search(query);
-      if (results.isNotEmpty) return results;
-    } on LocationSearchException catch (e) {
-      primaryError = e;
-    }
-    try {
-      return await fallback.search(query);
-    } on LocationSearchException {
-      // The primary answered "nothing found" cleanly; only surface an error if
-      // neither service could answer at all.
-      if (primaryError == null) return const [];
-      rethrow;
-    }
-  }
+  Future<List<PlaceResult>> search(String query) async =>
+      throw LocationSearchException(message);
 }
 
-/// Searches OpenStreetMap's public Nominatim geocoder, limited to the
-/// Philippines. It needs no API key. Its usage policy allows light,
-/// user-triggered searches like this one (one request per search, never per
-/// keystroke); if search volume grows, point [baseUrl] at a self-hosted
-/// instance or swap this class for a Google Geocoding-backed one.
-class NominatimLocationSearchService implements LocationSearchService {
-  NominatimLocationSearchService({
-    http.Client? client,
-    this.baseUrl = 'https://nominatim.openstreetmap.org',
-  }) : _client = client ?? http.Client();
-
-  final http.Client _client;
-  final String baseUrl;
-
-  @override
-  Future<List<PlaceResult>> search(String query) async {
-    final trimmed = query.trim();
-    if (trimmed.length < 2) return const [];
-
-    final uri = Uri.parse('$baseUrl/search').replace(
-      queryParameters: {
-        'q': trimmed,
-        'format': 'jsonv2',
-        'limit': '8',
-        'countrycodes': 'ph',
-        'accept-language': 'en',
-      },
+/// The app's place search: Google Places API (New) only, using
+/// `GOOGLE_PLACES_KEY` (or, on web, `ISDASAFE_WEB_MAPS_KEY`).
+LocationSearchService createDefaultLocationSearch() {
+  String? key;
+  try {
+    key = dotenv.env['GOOGLE_PLACES_KEY'];
+    // The web Maps key can serve Places too, if it allows the Places API (New).
+    // The Android key can't: it's tied to the app's signature, which a plain
+    // HTTP request doesn't carry.
+    if ((key == null || key.isEmpty) && kIsWeb) {
+      key = dotenv.env['ISDASAFE_WEB_MAPS_KEY'];
+    }
+  } catch (_) {
+    key = null; // dotenv not loaded (tests)
+  }
+  if (key == null || key.isEmpty) {
+    debugPrint(
+      'LocationSearch: no GOOGLE_PLACES_KEY set -> place search unavailable',
     );
-
-    try {
-      final response = await _client
-          .get(uri)
-          .timeout(const Duration(seconds: 10));
-      if (response.statusCode == 429) {
-        throw const LocationSearchException(
-          'Search is busy right now. Please try again in a moment.',
-        );
-      }
-      if (response.statusCode != 200) {
-        throw const LocationSearchException(
-          "Couldn't search for places right now. Please try again.",
-        );
-      }
-      final data = jsonDecode(response.body);
-      if (data is! List) return const [];
-      return [
-        for (final row in data)
-          if (row is Map &&
-              row['lat'] != null &&
-              row['lon'] != null &&
-              row['display_name'] is String)
-            PlaceResult(
-              displayName: row['display_name'] as String,
-              latitude: double.parse('${row['lat']}'),
-              longitude: double.parse('${row['lon']}'),
-            ),
-      ];
-    } on LocationSearchException {
-      rethrow;
-    } on TimeoutException {
-      throw const LocationSearchException(
-        'The search timed out. Check your connection and try again.',
-      );
-    } catch (e) {
-      debugPrint('NominatimLocationSearchService: $e');
-      throw const LocationSearchException(
-        "Couldn't reach the search service. Check your connection and try again.",
-      );
-    }
+    return const UnavailableLocationSearchService(
+      "Couldn't search for places right now. Please try again.",
+    );
   }
+  return GooglePlacesLocationSearchService(apiKey: key);
 }

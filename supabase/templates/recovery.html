@@ -1,0 +1,77 @@
+<!-- Supabase "Reset Password" email. Paste into Authentication > Emails >
+     Templates > Reset Password. Subject: Your IsdaSafe password reset code
+     Styled to match the app: logo teal #0F7490, rounded cards, Lexend headings
+     and Source Sans body (with safe fallbacks - email clients ignore web fonts). -->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>Your IsdaSafe password reset code</title>
+  </head>
+  <body style="margin:0;padding:0;background-color:#EAF3F6;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#EAF3F6;">
+      <tr>
+        <td align="center" style="padding:32px 16px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:480px;">
+            <!-- Brand header -->
+            <tr>
+              <td align="center" style="padding:0 0 20px 0;">
+                <span style="font-family:Lexend,'Segoe UI',Helvetica,Arial,sans-serif;font-size:26px;font-weight:700;letter-spacing:0.3px;color:#0F7490;">Isda<span style="color:#0B4F63;">Safe</span></span>
+              </td>
+            </tr>
+
+            <!-- Card -->
+            <tr>
+              <td style="background-color:#FFFFFF;border-radius:20px;overflow:hidden;box-shadow:0 2px 10px rgba(15,116,144,0.12);">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                  <!-- Teal banner -->
+                  <tr>
+                    <td align="center" style="background-color:#0F7490;padding:28px 24px;">
+                      <div style="display:inline-block;width:56px;height:56px;line-height:56px;border-radius:28px;background-color:#FFFFFF;font-size:28px;text-align:center;">&#128274;</div>
+                      <h1 style="margin:14px 0 0 0;font-family:Lexend,'Segoe UI',Helvetica,Arial,sans-serif;font-size:22px;font-weight:600;color:#FFFFFF;">Reset your password</h1>
+                    </td>
+                  </tr>
+
+                  <!-- Body -->
+                  <tr>
+                    <td style="padding:28px 28px 8px 28px;font-family:'Source Sans 3','Segoe UI',Helvetica,Arial,sans-serif;font-size:16px;line-height:24px;color:#1F2A30;">
+                      <p style="margin:0 0 16px 0;">Hi there,</p>
+                      <p style="margin:0 0 20px 0;">Enter this 6-digit code in the IsdaSafe app to set a new password.</p>
+                    </td>
+                  </tr>
+
+                  <!-- Code -->
+                  <tr>
+                    <td align="center" style="padding:0 28px;">
+                      <div style="background-color:#E6F2F5;border:2px dashed #0F7490;border-radius:16px;padding:18px 12px;">
+                        <div style="font-family:'Source Sans 3','Segoe UI',Helvetica,Arial,sans-serif;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;color:#4B6470;margin-bottom:6px;">Verification code</div>
+                        <div style="font-family:Lexend,'Courier New',monospace;font-size:34px;font-weight:700;letter-spacing:10px;color:#0B4F63;">{{ .Token }}</div>
+                      </div>
+                    </td>
+                  </tr>
+
+                  <!-- Notes -->
+                  <tr>
+                    <td style="padding:20px 28px 28px 28px;font-family:'Source Sans 3','Segoe UI',Helvetica,Arial,sans-serif;font-size:14px;line-height:21px;color:#4B6470;">
+                      <p style="margin:0 0 12px 0;">This code expires soon and can only be used once. Never share it with anyone.</p>
+                      <p style="margin:0;">Didn't ask to reset your password? You can safely ignore this email &mdash; your password won't change.</p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Footer -->
+            <tr>
+              <td align="center" style="padding:20px 8px 0 8px;font-family:'Source Sans 3','Segoe UI',Helvetica,Arial,sans-serif;font-size:12px;line-height:18px;color:#6B8490;">
+                IsdaSafe &middot; Monitor your ponds, wherever you are.
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

@@ -37,7 +37,9 @@ class _PondMapScreenState extends State<PondMapScreen> {
     if (isWide) {
       setState(() => _selected = pond);
     } else {
-      Navigator.of(context).push(MaterialPageRoute(builder: (_) => PondDashboardScreen(pond: pond)));
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => PondDashboardScreen(pond: pond)),
+      );
     }
   }
 
@@ -86,7 +88,10 @@ class _PondMapScreenState extends State<PondMapScreen> {
                   : ChangeNotifierProvider<DashboardProvider>(
                       key: ValueKey(selected.id),
                       create: (_) => DashboardProvider(pond: selected!),
-                      child: PondDashboardBody(pond: selected, showHeader: true),
+                      child: PondDashboardBody(
+                        pond: selected,
+                        showHeader: true,
+                      ),
                     ),
             ),
           ],
@@ -97,15 +102,22 @@ class _PondMapScreenState extends State<PondMapScreen> {
 }
 
 class _PondMap extends StatelessWidget {
-  const _PondMap({required this.ponds, required this.cache, required this.selectedId, required this.onSelect});
+  const _PondMap({
+    required this.ponds,
+    required this.cache,
+    required this.selectedId,
+    required this.onSelect,
+  });
 
   final List<Pond> ponds;
   final PondSnapshotCache cache;
   final String? selectedId;
   final ValueChanged<Pond> onSelect;
 
-  double _hueForStatus(ReadingStatus status) {
+  double _hueForStatus(ReadingStatus? status) {
     return switch (status) {
+      // No device paired yet: no reading to judge by.
+      null => BitmapDescriptor.hueAzure,
       ReadingStatus.normal => BitmapDescriptor.hueGreen,
       ReadingStatus.warning => BitmapDescriptor.hueOrange,
       ReadingStatus.critical => BitmapDescriptor.hueRed,
@@ -118,13 +130,16 @@ class _PondMap extends StatelessWidget {
   /// normal, content-sized card. Tapping either the marker or the bubble
   /// opens the pond (right panel on wide, full screen on narrow).
   Marker _markerFor(Pond pond) {
-    final status = overallStatus(cache.snapshotFor(pond).readings);
+    final snapshot = cache.snapshotFor(pond);
+    final status = snapshot == null ? null : overallStatus(snapshot.readings);
     return Marker(
       markerId: MarkerId(pond.id),
       position: LatLng(pond.latitude!, pond.longitude!),
       infoWindow: InfoWindow(
         title: pond.name,
-        snippet: 'Status: {0} · Tap to view readings'.trf([status.label]),
+        snippet: status == null
+            ? 'No device paired · Tap to pair one'.tr
+            : 'Status: {0} · Tap to view readings'.trf([status.label]),
         onTap: () => onSelect(pond),
       ),
       icon: BitmapDescriptor.defaultMarkerWithHue(_hueForStatus(status)),
@@ -140,7 +155,10 @@ class _PondMap extends StatelessWidget {
         : kDefaultMapCenter;
 
     return GoogleMap(
-      initialCameraPosition: CameraPosition(target: initialTarget, zoom: kDefaultMapZoom),
+      initialCameraPosition: CameraPosition(
+        target: initialTarget,
+        zoom: kDefaultMapZoom,
+      ),
       myLocationButtonEnabled: false,
       markers: {for (final pond in located) _markerFor(pond)},
     );
@@ -151,7 +169,11 @@ class _PondMap extends StatelessWidget {
 /// native — Windows/Linux/macOS) — same limitation `LocationPickerMap`
 /// already works around.
 class _PondCoordinateList extends StatelessWidget {
-  const _PondCoordinateList({required this.ponds, required this.selectedId, required this.onSelect});
+  const _PondCoordinateList({
+    required this.ponds,
+    required this.selectedId,
+    required this.onSelect,
+  });
 
   final List<Pond> ponds;
   final String? selectedId;
@@ -165,8 +187,11 @@ class _PondCoordinateList extends StatelessWidget {
       padding: const EdgeInsets.all(AppSpacing.lg),
       children: [
         Text(
-          'Map view isn\'t available on this platform. Select a pond to see its readings.'.tr,
-          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          'Map view isn\'t available on this platform. Select a pond to see its readings.'
+              .tr,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
         ),
         const SizedBox(height: AppSpacing.md),
         for (final pond in ponds)
@@ -200,7 +225,11 @@ class _NoPondSelected extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.water_drop_outlined, size: 48, color: theme.colorScheme.outline),
+            Icon(
+              Icons.water_drop_outlined,
+              size: 48,
+              color: theme.colorScheme.outline,
+            ),
             const SizedBox(height: AppSpacing.md),
             Text(
               'Tap a pond marker to see its readings'.tr,

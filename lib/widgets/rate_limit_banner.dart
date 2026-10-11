@@ -27,19 +27,28 @@ class RateLimitBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
       decoration: BoxDecoration(
         color: theme.colorScheme.errorContainer,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
         children: [
-          Icon(Icons.timer_outlined, size: 18, color: theme.colorScheme.onErrorContainer),
+          Icon(
+            Icons.timer_outlined,
+            size: 18,
+            color: theme.colorScheme.onErrorContainer,
+          ),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Text(
               message.tr,
-              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onErrorContainer),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onErrorContainer,
+              ),
             ),
           ),
         ],

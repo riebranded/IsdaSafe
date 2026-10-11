@@ -7,6 +7,7 @@ import '../theme/app_spacing.dart';
 import 'password_strength_checklist.dart';
 import 'phone_input.dart';
 import '../l10n/tr.dart';
+import 'confirm_dialog.dart';
 
 final _emailRegExp = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
 
@@ -55,8 +56,9 @@ String _label(String what) => switch (what) {
   _ => 'Password'.tr,
 };
 
-String _errorText(Object e) =>
-    e is AuthException ? e.message : 'Something went wrong. Please try again.'.tr;
+String _errorText(Object e) => e is AuthException
+    ? e.message
+    : 'Something went wrong. Please try again.'.tr;
 
 class _ChangeEmailDialog extends StatefulWidget {
   const _ChangeEmailDialog({this.currentEmail});
@@ -94,19 +96,24 @@ class _ChangeEmailDialogState extends State<_ChangeEmailDialog> {
     });
     try {
       if (await AuthService.isEmailTaken(email)) {
-        _notifyFailed('email', '{0} is already in use by another account.'.trf([email]));
+        _notifyFailed(
+          'email',
+          '{0} is already in use by another account.'.trf([email]),
+        );
         if (mounted) setState(() => _error = 'That email is already in use'.tr);
         return;
       }
       await AuthService.requestEmailChange(email);
       _notifySucceeded(
         'email',
-        'We sent a confirmation link to {0}. Follow it to finish the change.'.trf([email]),
+        'We sent a confirmation link to {0}. Follow it to finish the change.'
+            .trf([email]),
         title: 'Email change requested'.tr,
       );
       if (mounted) {
         Navigator.of(context).pop(
-          'Confirmation sent — follow the link in your email to finish the change.'.tr,
+          'Confirmation sent — follow the link in your email to finish the change.'
+              .tr,
         );
       }
     } catch (e) {
@@ -128,7 +135,8 @@ class _ChangeEmailDialogState extends State<_ChangeEmailDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'We\'ll email a confirmation link. Your email changes once you follow it.'.tr,
+              'We\'ll email a confirmation link. Your email changes once you follow it.'
+                  .tr,
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: AppSpacing.md),
@@ -337,7 +345,8 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
   List<Widget> _passwordStep(ThemeData theme) => [
     if (_needsEmailCode) ...[
       Text(
-        'For your security, we also emailed you a code. Enter it to confirm the change.'.tr,
+        'For your security, we also emailed you a code. Enter it to confirm the change.'
+            .tr,
         style: theme.textTheme.bodySmall,
       ),
       const SizedBox(height: AppSpacing.md),
@@ -384,24 +393,15 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
   /// Asks before abandoning the change; closes the dialog on yes.
   Future<void> _confirmCancel() async {
     if (_busy) return;
-    final sure = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Cancel password change?'.tr),
-        content: Text('Your password won\'t be changed.'.tr),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text('Keep editing'.tr),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text('Yes, cancel'.tr),
-          ),
-        ],
-      ),
+    final sure = await showConfirmDialog(
+      context,
+      icon: Icons.lock_reset,
+      title: 'Cancel password change?'.tr,
+      message: 'Your password won\'t be changed.'.tr,
+      cancelLabel: 'Keep editing'.tr,
+      confirmLabel: 'Yes, cancel'.tr,
     );
-    if (sure == true && mounted) Navigator.of(context).pop();
+    if (sure && mounted) Navigator.of(context).pop();
   }
 
   @override

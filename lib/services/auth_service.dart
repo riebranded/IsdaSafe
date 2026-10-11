@@ -5,6 +5,8 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'push_service.dart';
+
 /// Wraps Supabase Auth (email/password, Google OAuth) and native Google
 /// Sign-In behind a single static API, mirroring the style of
 /// [CurrentLocationService].
@@ -113,7 +115,11 @@ abstract final class AuthService {
     String email, {
     required String captchaToken,
   }) {
-    return _auth.resetPasswordForEmail(email, captchaToken: captchaToken, redirectTo: _siteBase());
+    return _auth.resetPasswordForEmail(
+      email,
+      captchaToken: captchaToken,
+      redirectTo: _siteBase(),
+    );
   }
 
   /// Checks the one-time code from the password-reset email. On success
@@ -326,7 +332,10 @@ abstract final class AuthService {
   /// docs recommend, and it needs only the one redirect URI registered in
   /// Google Cloud Console (unlike the native button, which requires every
   /// dev/prod origin registered as a JavaScript origin).
-  static Future<void> signInWithGoogle() async {
+  ///
+  /// Returns false when the user backs out of Google's account picker, so
+  /// callers can stay put quietly instead of showing an error.
+  static Future<bool> signInWithGoogle() async {
     if (kIsWeb) {
       // Without an explicit redirectTo, GoTrue sends the browser back to
       // whatever "Site URL" is configured in the Supabase dashboard once
@@ -347,38 +356,78 @@ abstract final class AuthService {
         redirectTo: Uri.base.toString(),
         queryParams: {'prompt': 'select_account'},
       );
-      return;
+      return true;
     }
 
-    final googleUser = await _authenticateWithGoogle();
-    if (googleUser == null) {
-      throw const AuthException('Google sign-in was cancelled.');
+    final GoogleSignInAccount googleUser;
+    try {
+      final account = await _authenticateWithGoogle();
+      if (account == null) return false;
+      googleUser = account;
+    } on GoogleSignInException catch (e) {
+      if (e.code == GoogleSignInExceptionCode.canceled) return false;
+      rethrow;
     }
+    debugPrint('AuthService[google]: signed in as ${googleUser.email}');
 
     const scopes = ['email', 'profile'];
-    final authorization =
-        await googleUser.authorizationClient.authorizationForScopes(scopes) ??
-        await googleUser.authorizationClient.authorizeScopes(scopes);
+    final authorization = await _googleStep(
+      'authorizationForScopes/authorizeScopes',
+      () async =>
+          await googleUser.authorizationClient.authorizationForScopes(scopes) ??
+          await googleUser.authorizationClient.authorizeScopes(scopes),
+    );
 
     final idToken = googleUser.authentication.idToken;
+    debugPrint(
+      'AuthService[google]: idToken ${idToken == null ? 'MISSING' : 'present'}',
+    );
     if (idToken == null) {
       throw const AuthException('No ID token returned by Google.');
     }
 
-    await _auth.signInWithIdToken(
-      provider: OAuthProvider.google,
-      idToken: idToken,
-      accessToken: authorization.accessToken,
+    await _googleStep(
+      'Supabase signInWithIdToken',
+      () => _auth.signInWithIdToken(
+        provider: OAuthProvider.google,
+        idToken: idToken,
+        accessToken: authorization.accessToken,
+      ),
     );
+    return true;
   }
 
   static Future<GoogleSignInAccount?> _authenticateWithGoogle() async {
     final googleSignIn = GoogleSignIn.instance;
-    var googleUser = await googleSignIn.attemptLightweightAuthentication();
+    // The silent attempt is only a shortcut: if it errors, still offer the
+    // interactive account picker instead of failing sign-in outright.
+    GoogleSignInAccount? googleUser;
+    try {
+      googleUser = await _googleStep(
+        'attemptLightweightAuthentication',
+        () async => await googleSignIn.attemptLightweightAuthentication(),
+      );
+    } on GoogleSignInException catch (e) {
+      if (e.code == GoogleSignInExceptionCode.canceled) return null;
+    }
     if (googleUser == null && googleSignIn.supportsAuthenticate()) {
-      googleUser = await googleSignIn.authenticate();
+      googleUser = await _googleStep('authenticate', googleSignIn.authenticate);
     }
     return googleUser;
+  }
+
+  /// Debug helper: logs which Google sign-in step is running and which one
+  /// threw, then rethrows so callers see the original error.
+  static Future<T> _googleStep<T>(String step, Future<T> Function() run) async {
+    debugPrint('AuthService[google]: $step...');
+    try {
+      final result = await run();
+      debugPrint('AuthService[google]: $step OK');
+      return result;
+    } catch (e, st) {
+      debugPrint('AuthService[google]: $step FAILED: $e\n$st');
+      rethrow;
+    }
   }
 
   static Future<void> signOut() async {
@@ -394,6 +443,9 @@ abstract final class AuthService {
         debugPrint('AuthService: GoogleSignIn.signOut error $e');
       }
     }
+    // Needs the session, so before signing out: no more pushes to this
+    // phone for this account.
+    await PushService.instance.unregister();
     await _auth.signOut();
   }
 
@@ -475,6 +527,49 @@ abstract final class AuthService {
     }
   }
 
+  /// Which pond water alerts are texted to the verified phone
+  /// (`profiles.alert_sms`): [AlertSms.warning] (warning and danger),
+  /// [AlertSms.critical] (danger only) or [AlertSms.off]. Null if it can't be
+  /// loaded.
+  static Future<({AlertSms level, String? phone})?> fetchAlertSms() async {
+    final uid = currentUser?.id;
+    if (uid == null) return null;
+    try {
+      final row = await _client
+          .from('profiles')
+          .select('alert_sms, phone, phone_verified')
+          .eq('id', uid)
+          .maybeSingle();
+      if (row == null) return null;
+      return (
+        level: AlertSms.values.firstWhere(
+          (v) => v.name == row['alert_sms'],
+          orElse: () => AlertSms.warning,
+        ),
+        phone: row['phone_verified'] == true ? row['phone'] as String? : null,
+      );
+    } catch (e) {
+      debugPrint('AuthService: fetchAlertSms error $e');
+      return null;
+    }
+  }
+
+  /// Saves [level] as `profiles.alert_sms`. Returns false on failure.
+  static Future<bool> updateAlertSms(AlertSms level) async {
+    final uid = currentUser?.id;
+    if (uid == null) return false;
+    try {
+      await _client
+          .from('profiles')
+          .update({'alert_sms': level.name})
+          .eq('id', uid);
+      return true;
+    } catch (e) {
+      debugPrint('AuthService: updateAlertSms error $e');
+      return false;
+    }
+  }
+
   /// Used by the dashboard sidebar's account section to show the current
   /// user's name/email/photo. Unlike [hasVerifiedProfile], failures surface
   /// as null rather than being swallowed, since the caller has a clear
@@ -500,4 +595,15 @@ abstract final class AuthService {
       return null;
     }
   }
+}
+
+/// Which pond water alerts are texted (`profiles.alert_sms`).
+enum AlertSms {
+  /// Warning and danger.
+  warning,
+
+  /// Danger only.
+  critical,
+
+  off,
 }

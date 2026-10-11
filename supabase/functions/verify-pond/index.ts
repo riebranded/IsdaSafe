@@ -7,7 +7,7 @@
 //     analysed by Gemini. If it can't confirm a pond but sees BUILDINGS there
 //     (a pond could be covered or indoors), the pond becomes `needs_photos`
 //     instead of being rejected.
-//   - `needs_photos` ponds: the owner uploads at least 3 photos of the pond to
+//   - `needs_photos` ponds: the owner uploads at least 1 photo of the pond to
 //     the private pond-photos bucket and calls again with { pond_id,
 //     photo_paths }. Gemini then compares those photos with the satellite image
 //     to decide that they're real pond photos taken at that same location.
@@ -15,7 +15,7 @@
 //     satellite check still runs first, and only if buildings hide the pond are
 //     the photos compared right away instead of being asked for later.
 //   - "photo" ponds (in-house, not visible from above): there is no satellite
-//     check. The owner sends at least 3 photos with the first call and Gemini
+//     check. The owner sends at least 1 photo with the first call and Gemini
 //     checks that every one is a genuine pond/tank photo; none may already be
 //     used for another pond. (Older in-house ponds with a single photo_path are
 //     still checked the old way.)
@@ -54,7 +54,8 @@ const RUN_WINDOW_MS = 5 * 60_000;
 const CONFIRM_THRESHOLD = 0.7;
 const MAX_PHOTO_BYTES = 3 * 1024 * 1024;
 // Photos asked for when buildings hide the pond (kept in sync with the app).
-const MIN_EVIDENCE_PHOTOS = 3;
+const MIN_EVIDENCE_PHOTOS = 1;
+const photoWord = (n: number) => (n === 1 ? "photo" : "photos");
 const MAX_EVIDENCE_PHOTOS = 6;
 // Everything goes to Gemini inline in one request, which has a size limit.
 const MAX_EVIDENCE_TOTAL_BYTES = 12 * 1024 * 1024;
@@ -270,7 +271,7 @@ async function verifySatellite(pond: Pond, mark: (s: string) => void): Promise<O
     return {
       status: "needs_photos",
       message:
-        `Buildings cover this spot, so the pond may be covered or indoors. Add at least ${MIN_EVIDENCE_PHOTOS} clear photos of the pond so we can match them to the satellite view.`,
+        `Buildings cover this spot, so the pond may be covered or indoors. Add at least ${MIN_EVIDENCE_PHOTOS} clear ${photoWord(MIN_EVIDENCE_PHOTOS)} of the pond so we can match it to the satellite view.`,
       confidence,
     };
   }
@@ -544,8 +545,10 @@ async function runVerification(pond: Pond, admin: SupabaseClient, evidenceOnly: 
   const copy = {
     verified: {
       title: "Pond verified",
-      body: `"${name}" was verified. ${outcome.message} You can now monitor it.`,
-      sms: `IsdaSafe: Your pond "${smsName(name)}" has been verified. You can now monitor it in the app.`,
+      // Readings only start once a device is paired; tapping this
+      // notification in the app opens pairing.
+      body: `"${name}" was verified. ${outcome.message} Tap here to pair your IsdaSafe device and start monitoring it.`,
+      sms: `IsdaSafe: Your pond "${smsName(name)}" has been verified. Open the app to pair your IsdaSafe device and start monitoring it.`,
     },
     rejected: {
       title: "Pond not verified",
@@ -561,7 +564,7 @@ async function runVerification(pond: Pond, admin: SupabaseClient, evidenceOnly: 
       title: "Photos needed",
       body: `We need a little more to verify "${name}". ${outcome.message} Open your dashboard and tap Add photos.`,
       sms:
-        `IsdaSafe: We need at least ${MIN_EVIDENCE_PHOTOS} photos of your pond "${smsName(name)}" to finish verifying it. Open the app to add them.`,
+        `IsdaSafe: We need at least ${MIN_EVIDENCE_PHOTOS} ${photoWord(MIN_EVIDENCE_PHOTOS)} of your pond "${smsName(name)}" to finish verifying it. Open the app to add them.`,
     },
   }[outcome.status];
 
@@ -645,7 +648,7 @@ Deno.serve(async (req) => {
         !photoPaths.every((p) => typeof p === "string" && p.startsWith(folder) && !p.includes(".."))
       ) {
         return jsonResponse(
-          { error: `Send between ${MIN_EVIDENCE_PHOTOS} and ${MAX_EVIDENCE_PHOTOS} different photos of the pond.` },
+          { error: `Send between ${MIN_EVIDENCE_PHOTOS} and ${MAX_EVIDENCE_PHOTOS} different photo(s) of the pond.` },
           400,
         );
       }

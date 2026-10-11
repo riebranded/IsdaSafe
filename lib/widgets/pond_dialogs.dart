@@ -1,15 +1,20 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
 
 import '../models/pond_verification.dart';
+import '../services/auth_service.dart';
 import '../services/current_location_service.dart';
 import '../services/fish_species_catalog.dart';
 import '../services/location_search_service.dart';
 import '../services/pond_photo_picker.dart';
 import '../theme/app_spacing.dart';
+import '../theme/app_theme.dart';
 import 'location_picker_map.dart';
 import '../l10n/tr.dart';
+import '../providers/pond_provider.dart';
 
 /// Shows a text-field dialog for renaming a pond.
 /// Returns the entered (trimmed, non-empty) name, or null if cancelled.
@@ -103,12 +108,7 @@ Future<NewPondDraft?> showAddPondDialog(
       currentLocationLoader:
           currentLocationLoader ?? CurrentLocationService.getCurrentLocation,
       photoPicker: photoPicker ?? ImagePickerPondPhotoPicker(),
-      locationSearch:
-          locationSearch ??
-          FallbackLocationSearchService(
-            primary: PhotonLocationSearchService(),
-            fallback: NominatimLocationSearchService(),
-          ),
+      locationSearch: locationSearch ?? createDefaultLocationSearch(),
     ),
   );
 }
@@ -120,22 +120,57 @@ Future<void> showVerificationStartedDialog(
   required String pondName,
   VerificationMethod method = VerificationMethod.satellite,
   String? checkingLabel,
+  PondProvider? provider,
+  String? pondId,
+  String? phone,
 }) {
   return showDialog<void>(
     context: context,
-    builder: (context) => _VerificationStartedDialog(
+    builder: (dialogContext) => _VerificationStartedDialog(
       pondName: pondName,
       method: method,
       checkingLabel: checkingLabel,
+      provider: provider,
+      pondId: pondId,
+      phone: phone ?? _signedInPhone(),
     ),
   );
 }
 
+/// The signed-in user's phone, or null (also when Supabase isn't set up, e.g.
+/// in tests).
+String? _signedInPhone() {
+  try {
+    return AuthService.currentUser?.phone;
+  } catch (_) {
+    return null;
+  }
+}
+
+/// [phone] (E.164 or Semaphore's digits-only form) with all but its last four
+/// digits hidden, e.g. "+63 9•• ••• 4567". Null when there's no usable number.
+String? maskedPhone(String? phone) {
+  final digits = (phone ?? '').replaceAll(RegExp(r'\D'), '');
+  if (digits.length < 10) return null;
+  final last4 = digits.substring(digits.length - 4);
+  if (digits.startsWith('63') && digits.length == 12) {
+    return '+63 9•• ••• $last4';
+  }
+  return '••• ••• $last4';
+}
+
+/// "Your pond is under review" while the check runs, then the result, in the
+/// same modal: it stays up until the user closes it, so they always see that
+/// the request went through and how they'll hear back (an in-app
+/// notification, plus a text message to their verified phone).
 class _VerificationStartedDialog extends StatelessWidget {
   const _VerificationStartedDialog({
     required this.pondName,
     required this.method,
     this.checkingLabel,
+    this.provider,
+    this.pondId,
+    this.phone,
   });
 
   final String pondName;
@@ -144,15 +179,99 @@ class _VerificationStartedDialog extends StatelessWidget {
   /// Overrides the default "what we're checking" line.
   final String? checkingLabel;
 
+  /// With [pondId], lets the modal switch to the result when the review ends.
+  final PondProvider? provider;
+  final String? pondId;
+  final String? phone;
+
   @override
   Widget build(BuildContext context) {
+    final provider = this.provider;
+    final pondId = this.pondId;
+    if (provider == null || pondId == null) return _content(context, null);
+    return ListenableBuilder(
+      listenable: provider,
+      builder: (context, _) {
+        final status = provider.pondById(pondId)?.verificationStatus;
+        return _content(
+          context,
+          status == VerificationStatus.pending ? null : status,
+          provider.pondById(pondId)?.verificationMessage,
+        );
+      },
+    );
+  }
+
+  /// [result] is null while the review is still running.
+  Widget _content(
+    BuildContext context,
+    VerificationStatus? result, [
+    String? resultMessage,
+  ]) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final masked = maskedPhone(phone);
     final checking =
         checkingLabel ??
         (method == VerificationMethod.photo
             ? 'Checking your pond photos'.tr
             : 'Analyzing satellite imagery of your pin'.tr);
+
+    final (
+      IconData icon,
+      Color color,
+      String title,
+      String message,
+    ) = switch (result) {
+      null => (
+        Icons.hourglass_top,
+        scheme.primary,
+        'Your pond request is being processed'.tr,
+        '“{0}” is under review. This usually takes a minute or two. You can close this and keep using the app; we\'ll let you know whether it\'s approved or not.'
+            .trf([pondName]),
+      ),
+      VerificationStatus.verified => (
+        Icons.verified,
+        context.statusColors.good,
+        '“{0}” is approved'.trf([pondName]),
+        'Your pond was verified. Pair your IsdaSafe device with it to start monitoring.'
+            .tr,
+      ),
+      VerificationStatus.needsPhotos => (
+        Icons.photo_camera_outlined,
+        context.statusColors.warning,
+        '“{0}” needs photos'.trf([pondName]),
+        resultMessage ??
+            'Add photos of the pond so we can finish the review.'.tr,
+      ),
+      VerificationStatus.error => (
+        Icons.error_outline,
+        scheme.error,
+        'The review didn\'t finish'.tr,
+        resultMessage ??
+            'Something went wrong while checking “{0}”. Retry it from your dashboard.'
+                .trf([pondName]),
+      ),
+      _ => (
+        Icons.cancel_outlined,
+        scheme.error,
+        '“{0}” wasn\'t approved'.trf([pondName]),
+        resultMessage ??
+            'We couldn\'t verify this pond. You can add it again with a different pin or photos.'
+                .tr,
+      ),
+    };
+
+    final notifyText = result == null
+        ? (masked == null
+              ? 'You\'ll get a notification in the app when the review is done.'
+                    .tr
+              : 'You\'ll get a notification in the app and a text message to {0} when the review is done.'
+                    .trf([masked]))
+        : (masked == null
+              ? 'We\'ve also sent this to your notifications.'.tr
+              : 'We\'ve also sent this to your notifications and by text message to {0}.'
+                    .trf([masked]));
 
     return Dialog(
       shape: RoundedRectangleBorder(
@@ -176,25 +295,21 @@ class _VerificationStartedDialog extends StatelessWidget {
                           width: 72,
                           height: 72,
                           decoration: BoxDecoration(
-                            color: scheme.primaryContainer,
+                            color: color.withValues(alpha: 0.15),
                             shape: BoxShape.circle,
                           ),
-                          child: Icon(
-                            Icons.verified_user_outlined,
-                            size: 36,
-                            color: scheme.onPrimaryContainer,
-                          ),
+                          child: Icon(icon, size: 36, color: color),
                         ),
                       ),
                       const SizedBox(height: AppSpacing.lg),
                       Text(
-                        '“{0}” is under review'.trf([pondName]),
+                        title,
                         textAlign: TextAlign.center,
                         style: theme.textTheme.titleLarge,
                       ),
                       const SizedBox(height: AppSpacing.sm),
                       Text(
-                        'Your pond has an ongoing review. This usually takes a minute or two, and you can keep using the app meanwhile.'.tr,
+                        message,
                         textAlign: TextAlign.center,
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: scheme.onSurfaceVariant,
@@ -215,21 +330,25 @@ class _VerificationStartedDialog extends StatelessWidget {
                           ),
                           child: Column(
                             children: [
+                              if (result == null)
+                                _VerificationStep(
+                                  icon: Icons.travel_explore,
+                                  text: checking,
+                                  active: true,
+                                ),
                               _VerificationStep(
-                                icon: Icons.travel_explore,
-                                text: checking,
-                                active: true,
+                                icon: masked == null
+                                    ? Icons.notifications_outlined
+                                    : Icons.sms_outlined,
+                                text: notifyText,
                               ),
-                              _VerificationStep(
-                                icon: Icons.notifications_outlined,
-                                text:
-                                    "We'll notify you on your device and in the app when the review updates".tr,
-                              ),
-                              _VerificationStep(
-                                icon: Icons.dashboard_outlined,
-                                text:
-                                    'Once verified, it appears on your dashboard'.tr,
-                              ),
+                              if (result == null)
+                                _VerificationStep(
+                                  icon: Icons.dashboard_outlined,
+                                  text:
+                                      'Once approved, it appears on your dashboard'
+                                          .tr,
+                                ),
                             ],
                           ),
                         ),
@@ -241,7 +360,7 @@ class _VerificationStartedDialog extends StatelessWidget {
               const SizedBox(height: AppSpacing.xl),
               FilledButton(
                 onPressed: () => Navigator.of(context).pop(),
-                child: Text('Got it'.tr),
+                child: Text(result == null ? 'Got it'.tr : 'OK'.tr),
               ),
             ],
           ),
@@ -388,7 +507,8 @@ class _AddPondDialogState extends State<_AddPondDialog> {
       messenger.showSnackBar(
         SnackBar(
           content: Text(
-            'Couldn\'t get your location. Check that location access is allowed for this site/app.'.tr,
+            'Couldn\'t get your location. Check that location access is allowed for this site/app.'
+                .tr,
           ),
         ),
       );
@@ -397,7 +517,10 @@ class _AddPondDialogState extends State<_AddPondDialog> {
     messenger.showSnackBar(
       SnackBar(
         content: Text(
-          'Located: {0}, {1}'.trf([location.latitude.toStringAsFixed(4), location.longitude.toStringAsFixed(4)]),
+          'Located: {0}, {1}'.trf([
+            location.latitude.toStringAsFixed(4),
+            location.longitude.toStringAsFixed(4),
+          ]),
         ),
       ),
     );
@@ -567,7 +690,9 @@ class _AddPondDialogState extends State<_AddPondDialog> {
               child: LocationPickerMap(
                 initialCenter: _center.value,
                 initialZoom: _mapZoom,
-                centerLabel: _isAtUserLocation ? 'You\'re here'.tr : _searchLabel,
+                centerLabel: _isAtUserLocation
+                    ? 'You\'re here'.tr
+                    : _searchLabel,
                 onUserInteraction: _handleUserInteraction,
                 onCenterChanged: _handleCenterChanged,
                 onLocateMe: _handleLocateMe,
@@ -615,7 +740,10 @@ class _AddPondDialogState extends State<_AddPondDialog> {
     }
     if (_isInHouse && _evidencePhotos.length < kMinEvidencePhotos) {
       final missing = kMinEvidencePhotos - _evidencePhotos.length;
-      return 'Add {0} more {1} to continue.'.trf([missing, missing == 1 ? 'photo'.tr : 'photos'.tr]);
+      return 'Add {0} more {1} to continue.'.trf([
+        missing,
+        missing == 1 ? 'photo'.tr : 'photos'.tr,
+      ]);
     }
     return null;
   }
@@ -677,7 +805,8 @@ class _AddPondDialogState extends State<_AddPondDialog> {
               children: [
                 if (mapAbove != null) ...[mapAbove, gap],
                 Text(
-                  'Pin your pond on the map. We\'ll verify it before it appears on your dashboard.'.tr,
+                  'Pin your pond on the map. We\'ll verify it before it appears on your dashboard.'
+                      .tr,
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -717,7 +846,10 @@ class _AddPondDialogState extends State<_AddPondDialog> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Type of pond'.tr, style: theme.textTheme.titleSmall),
+                      Text(
+                        'Type of pond'.tr,
+                        style: theme.textTheme.titleSmall,
+                      ),
                       const SizedBox(height: AppSpacing.sm),
                       // Material (not DecoratedBox) so the tile's tap ripple
                       // shows on top of the tinted background.
@@ -743,7 +875,8 @@ class _AddPondDialogState extends State<_AddPondDialog> {
                           onChanged: _handleInHouseChanged,
                           title: Text('In-house pond'.tr),
                           subtitle: Text(
-                            'Covered, indoors, or a tank that satellite can\'t see. You\'ll verify with a photo instead.'.tr,
+                            'Covered, indoors, or a tank that satellite can\'t see. You\'ll verify with a photo instead.'
+                                .tr,
                           ),
                         ),
                       ),
@@ -869,8 +1002,10 @@ class _AddPondDialogState extends State<_AddPondDialog> {
         const SizedBox(height: AppSpacing.xs),
         Text(
           required
-              ? 'Add at least {0} photos of the pond or tank, showing the water. The satellite check is skipped for in-house ponds, so these photos are the proof.'.trf([kMinEvidencePhotos])
-              : "Add {0} or more. If buildings hide the pond on the satellite map, we'll compare them with it right away, so you won't be asked for photos later.".trf([kMinEvidencePhotos]),
+              ? 'Add at least {0} photo of the pond or tank, showing the water. The satellite check is skipped for in-house ponds, so your photos are the proof.'
+                    .trf([kMinEvidencePhotos])
+              : "Optional: add a photo. If buildings hide the pond on the satellite map, we'll compare it with the satellite view right away, so you won't be asked for photos later."
+                    .tr,
           style: theme.textTheme.bodySmall?.copyWith(
             color: scheme.onSurfaceVariant,
           ),
@@ -906,10 +1041,18 @@ class _AddPondDialogState extends State<_AddPondDialog> {
               Expanded(
                 child: Text(
                   enough
-                      ? '{0} photos ready.'.trf([count])
+                      ? 'Photos ready: {0}.'.trf([count])
                       : required
-                      ? '{0} of {1} photos added. Add {2} more to continue.'.trf([count, kMinEvidencePhotos, kMinEvidencePhotos - count])
-                      : "Add {0} more, or remove these. They're only used with {1} or more.".trf([kMinEvidencePhotos - count, kMinEvidencePhotos]),
+                      ? '{0} of {1} added. Add {2} more to continue.'.trf([
+                          count,
+                          kMinEvidencePhotos,
+                          kMinEvidencePhotos - count,
+                        ])
+                      : "Add {0} more, or remove these. They're only used with {1} or more."
+                            .trf([
+                              kMinEvidencePhotos - count,
+                              kMinEvidencePhotos,
+                            ]),
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: enough ? scheme.primary : scheme.onSurfaceVariant,
                   ),
@@ -954,36 +1097,47 @@ class _PlaceSearchState extends State<_PlaceSearch> {
   final _controller = TextEditingController();
   var _isSearching = false;
 
+  /// Waits for a pause in typing before searching, like Google Maps' live
+  /// suggestions.
+  Timer? _debounce;
+
+  /// Identifies the latest search so a slow, older answer can't overwrite it.
+  var _searchId = 0;
+
   /// Matches for the last search; null when nothing should be listed.
   List<PlaceResult>? _results;
   String? _error;
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _controller.dispose();
     super.dispose();
   }
 
-  Future<void> _search() async {
+  /// [live] searches come from typing: they keep the keyboard open.
+  Future<void> _search({bool live = false}) async {
+    _debounce?.cancel();
     final query = _controller.text.trim();
-    if (query.length < 2 || _isSearching) return;
-    FocusScope.of(context).unfocus();
+    if (query.length < 2) return;
+    if (!live) FocusScope.of(context).unfocus();
+    final id = ++_searchId;
     setState(() {
       _isSearching = true;
       _error = null;
-      _results = null;
     });
     try {
       final results = await widget.service.search(query);
-      if (!mounted) return;
+      if (!mounted || id != _searchId) return;
       setState(() {
         _isSearching = false;
         _results = results;
       });
     } on LocationSearchException catch (e) {
-      if (!mounted) return;
+      if (!mounted || id != _searchId) return;
       setState(() {
         _isSearching = false;
+        _results = null;
         _error = e.message.tr;
       });
     }
@@ -1016,13 +1170,24 @@ class _PlaceSearchState extends State<_PlaceSearch> {
             controller: _controller,
             textInputAction: TextInputAction.search,
             onSubmitted: (_) => _search(),
-            onChanged: (_) {
-              if (_results != null || _error != null) {
-                setState(() {
-                  _results = null;
-                  _error = null;
-                });
+            onChanged: (value) {
+              _debounce?.cancel();
+              if (value.trim().length < 3) {
+                // Too short to search: drop any list and ignore late answers.
+                _searchId++;
+                if (_results != null || _error != null || _isSearching) {
+                  setState(() {
+                    _results = null;
+                    _error = null;
+                    _isSearching = false;
+                  });
+                }
+                return;
               }
+              _debounce = Timer(
+                const Duration(milliseconds: 450),
+                () => _search(live: true),
+              );
             },
             decoration: InputDecoration(
               hintText: 'Search for a place'.tr,
@@ -1302,20 +1467,24 @@ class _EvidencePhotosDialogState extends State<_EvidencePhotosDialog> {
                         icon: Icons.photo_library_outlined,
                         title: 'Add photos of “{0}”'.trf([widget.pondName]),
                         subtitle:
-                            'Buildings cover this spot on the satellite map, so we compare your photos with it to confirm the pond is really there.'.tr,
+                            'Buildings cover this spot on the satellite map, so we compare your photos with it to confirm the pond is really there.'
+                                .tr,
                       ),
                       const SizedBox(height: AppSpacing.md),
                       _PhotoTip(
                         text:
-                            'Add at least {0} photos from different angles'.trf([kMinEvidencePhotos]),
+                            'Add at least {0} photo (more from different angles helps)'
+                                .trf([kMinEvidencePhotos]),
                       ),
                       _PhotoTip(
                         text:
-                            'Show the water and what is around it: roof, walls, fence, trees'.tr,
+                            'Show the water and what is around it: roof, walls, fence, trees'
+                                .tr,
                       ),
                       _PhotoTip(
                         text:
-                            'Screenshots, internet images and photos of a screen are rejected'.tr,
+                            'Screenshots, internet images and photos of a screen are rejected'
+                                .tr,
                       ),
                       const SizedBox(height: AppSpacing.lg),
                       _PhotoGrid(
@@ -1343,8 +1512,17 @@ class _EvidencePhotosDialogState extends State<_EvidencePhotosDialog> {
                           Expanded(
                             child: Text(
                               _enough
-                                  ? '{0} photos added. You can send them now{1}.'.trf([_photos.length, _full ? '' : ' or add up to ${kMaxEvidencePhotos - _photos.length} more'])
-                                  : '{0} of {1} photos added. Add {2} more.'.trf([_photos.length, kMinEvidencePhotos, kMinEvidencePhotos - _photos.length]),
+                                  ? '{0} added. You can send now{1}.'.trf([
+                                      _photos.length,
+                                      _full
+                                          ? ''
+                                          : ' or add up to ${kMaxEvidencePhotos - _photos.length} more',
+                                    ])
+                                  : '{0} of {1} added. Add {2} more.'.trf([
+                                      _photos.length,
+                                      kMinEvidencePhotos,
+                                      kMinEvidencePhotos - _photos.length,
+                                    ]),
                               style: theme.textTheme.bodySmall?.copyWith(
                                 color: _enough
                                     ? scheme.primary
@@ -1540,17 +1718,26 @@ class _AddPhotoTile extends StatelessWidget {
             borderRadius: BorderRadius.circular(AppRadius.md),
           ),
           onTap: onTap,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, color: scheme.primary),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                style: Theme.of(context).textTheme.labelSmall,
-                textAlign: TextAlign.center,
-              ),
-            ],
+          child: Padding(
+            padding: const EdgeInsets.all(4),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, color: scheme.primary),
+                const SizedBox(height: 4),
+                // Fixed square tile: two short lines at most, so a Tagalog
+                // label or large system font can't push past the bottom.
+                Flexible(
+                  child: Text(
+                    label,
+                    style: Theme.of(context).textTheme.labelSmall,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1558,74 +1745,217 @@ class _AddPhotoTile extends StatelessWidget {
   }
 }
 
+/// What [showSelectSpeciesDialog] returns: the species a pond holds, and each
+/// one's biomass (total weight of that species in the pond) in kg.
+typedef SpeciesSelection = ({
+  List<String> names,
+  Map<String, double> biomassKg,
+});
+
+/// Largest biomass accepted per species, to catch typos (e.g. grams typed as
+/// kg). A big commercial pond can hold a few tonnes.
+const double kMaxSpeciesBiomassKg = 100000;
+
+/// Parses a typed biomass ("120", "45.5", "1,200") in kg; null if it isn't a
+/// positive number within [kMaxSpeciesBiomassKg].
+double? parseBiomassKg(String text) {
+  final kg = double.tryParse(text.trim().replaceAll(',', ''));
+  if (kg == null || !kg.isFinite || kg <= 0 || kg > kMaxSpeciesBiomassKg) {
+    return null;
+  }
+  return kg;
+}
+
 /// Shows a checklist of [FishSpeciesCatalog.species] for the user to mark
-/// which fish/shrimp a pond actually holds — used afterwards to suggest
-/// feeding times on that pond's dashboard. Pass [initialSelection] (species
-/// names) to pre-check a pond's existing species when editing.
+/// which fish/shrimp a pond actually holds and, for each one, its biomass in
+/// kg, used afterwards to work out the feeding schedule on that pond's
+/// dashboard. Pass [initialSelection] (species names) and [initialBiomassKg]
+/// to pre-fill a pond's existing species when editing.
 ///
-/// Returns the selected species' names, or null if the dialog was
-/// dismissed/skipped (callers should leave the pond's species untouched in
-/// that case, rather than clearing them).
-Future<List<String>?> showSelectSpeciesDialog(
+/// Returns the selection, or null if the dialog was dismissed/skipped
+/// (callers should leave the pond's species untouched in that case, rather
+/// than clearing them).
+Future<SpeciesSelection?> showSelectSpeciesDialog(
   BuildContext context, {
   List<String> initialSelection = const [],
+  Map<String, double> initialBiomassKg = const {},
   String title = 'Add fish species',
 }) {
-  final selected = {...initialSelection};
-
-  return showDialog<List<String>>(
+  return showDialog<SpeciesSelection>(
     context: context,
-    builder: (context) {
-      return StatefulBuilder(
-        builder: (context, setState) {
-          return AlertDialog(
-            title: Text(title.tr),
-            content: SizedBox(
-              width: 360,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Which fish or shrimp does this pond have? This is used to suggest feeding times.'.tr,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  for (final species in FishSpeciesCatalog.species.where(
-                    (s) => s.assignableToPond,
-                  ))
-                    CheckboxListTile(
-                      contentPadding: EdgeInsets.zero,
-                      value: selected.contains(species.name),
-                      title: Text('${species.name} (${species.localName})'),
-                      onChanged: (checked) {
-                        setState(() {
-                          if (checked ?? false) {
-                            selected.add(species.name);
-                          } else {
-                            selected.remove(species.name);
-                          }
-                        });
-                      },
-                    ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: Text('Skip'.tr),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.of(context).pop(selected.toList()),
-                child: Text('Done'.tr),
-              ),
-            ],
-          );
-        },
-      );
-    },
+    builder: (context) => _SelectSpeciesDialog(
+      title: title,
+      initialSelection: initialSelection,
+      initialBiomassKg: initialBiomassKg,
+    ),
   );
+}
+
+class _SelectSpeciesDialog extends StatefulWidget {
+  const _SelectSpeciesDialog({
+    required this.title,
+    required this.initialSelection,
+    required this.initialBiomassKg,
+  });
+
+  final String title;
+  final List<String> initialSelection;
+  final Map<String, double> initialBiomassKg;
+
+  @override
+  State<_SelectSpeciesDialog> createState() => _SelectSpeciesDialogState();
+}
+
+class _SelectSpeciesDialogState extends State<_SelectSpeciesDialog> {
+  late final _selected = {...widget.initialSelection};
+  final _biomass = <String, TextEditingController>{};
+
+  /// Set once Done was tapped, so missing biomass only shows as an error then.
+  bool _triedSubmit = false;
+
+  TextEditingController _biomassField(String species) =>
+      _biomass.putIfAbsent(species, () {
+        final kg = widget.initialBiomassKg[species];
+        return TextEditingController(
+          text: kg == null
+              ? ''
+              : (kg == kg.roundToDouble()
+                    ? kg.toInt().toString()
+                    : kg.toString()),
+        );
+      });
+
+  @override
+  void dispose() {
+    for (final controller in _biomass.values) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  void _submit() {
+    final biomass = <String, double>{};
+    for (final name in _selected) {
+      final kg = parseBiomassKg(_biomassField(name).text);
+      if (kg == null) {
+        setState(() => _triedSubmit = true);
+        return;
+      }
+      biomass[name] = kg;
+    }
+    // Catalog order, so the pond's species list doesn't depend on tap order.
+    final names = [
+      for (final species in FishSpeciesCatalog.species)
+        if (_selected.contains(species.name)) species.name,
+    ];
+    Navigator.of(context).pop((names: names, biomassKg: biomass));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AlertDialog(
+      title: Text(widget.title.tr),
+      content: SizedBox(
+        width: 380,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Which fish or shrimp does this pond have, and how much? The biomass (total weight of each species in the pond) is used to work out how much to feed.'
+                    .tr,
+                style: theme.textTheme.bodySmall,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              for (final species in FishSpeciesCatalog.species.where(
+                (s) => s.assignableToPond,
+              )) ...[
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: _selected.contains(species.name),
+                  title: Text('${species.name} (${species.localName})'),
+                  onChanged: (checked) => setState(() {
+                    if (checked ?? false) {
+                      _selected.add(species.name);
+                    } else {
+                      _selected.remove(species.name);
+                    }
+                  }),
+                ),
+                if (_selected.contains(species.name))
+                  Padding(
+                    padding: const EdgeInsets.only(
+                      left: AppSpacing.lg,
+                      bottom: AppSpacing.sm,
+                    ),
+                    child: _BiomassField(
+                      controller: _biomassField(species.name),
+                      speciesName: species.name,
+                      showError: _triedSubmit,
+                      onSubmitted: _submit,
+                    ),
+                  ),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text('Skip'.tr),
+        ),
+        FilledButton(onPressed: _submit, child: Text('Done'.tr)),
+      ],
+    );
+  }
+}
+
+/// One species' biomass, in kg.
+class _BiomassField extends StatelessWidget {
+  const _BiomassField({
+    required this.controller,
+    required this.speciesName,
+    required this.showError,
+    required this.onSubmitted,
+  });
+
+  final TextEditingController controller;
+  final String speciesName;
+  final bool showError;
+  final VoidCallback onSubmitted;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder(
+      valueListenable: controller,
+      builder: (context, value, _) {
+        final valid = parseBiomassKg(value.text) != null;
+        return TextField(
+          controller: controller,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => onSubmitted(),
+          decoration: InputDecoration(
+            labelText: 'Biomass of {0} (kg)'.trf([speciesName]),
+            hintText: 'e.g. 120'.tr,
+            helperText: 'Total weight of this species in the pond'.tr,
+            suffixText: 'kg',
+            isDense: true,
+            errorText: showError && !valid
+                ? (value.text.trim().isEmpty
+                      ? 'Enter the biomass in kg'.tr
+                      : 'Enter a number between 0 and {0} kg'.trf([
+                          kMaxSpeciesBiomassKg.toInt(),
+                        ]))
+                : null,
+          ),
+        );
+      },
+    );
+  }
 }
 
 /// Result of [showEditLocationDialog].

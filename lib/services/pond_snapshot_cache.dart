@@ -2,43 +2,60 @@ import '../models/metric_type.dart';
 import '../models/pond.dart';
 import '../models/sensor_reading.dart';
 import '../models/trend_range.dart';
-import 'mock_sensor_service.dart';
+import 'usb_sensor/pond_readings_store.dart';
+import 'usb_sensor/usb_sensor_hub.dart';
 
-/// Simple memoizing cache around [MockSensorService] so a screen can show
-/// "at a glance" pond status without re-rolling mock data on every rebuild.
+/// What every screen reads pond readings through.
+///
+/// A pond only has readings once an IsdaSafe device is paired to it (see
+/// [PondReadingsStore]): until then [snapshotFor] returns null and screens
+/// show a "Pair a device" prompt instead. A paired pond shows the readings its
+/// device uploaded, overlaid with live USB readings when the device is
+/// plugged into this computer ([UsbSensorHub]). Metrics the device has never
+/// sent (e.g. while the pH/ammonia probe is disconnected) are left out, and
+/// screens show "No reading yet" for them.
 ///
 /// Not a `ChangeNotifier` — callers own their own widget state and call
 /// [refreshAll] from a setState-triggering event handler (pull-to-refresh,
 /// a refresh button, etc.).
 class PondSnapshotCache {
-  PondSnapshotCache({MockSensorService? sensorService})
-    : _sensorService = sensorService ?? MockSensorService();
-
-  final MockSensorService _sensorService;
-  final Map<String, PondSnapshot> _snapshots = {};
-
-  PondSnapshot snapshotFor(Pond pond) {
-    return _snapshots.putIfAbsent(
-      pond.id,
-      () => _sensorService.generateSnapshot(pond),
-    );
-  }
-
-  void refreshAll(List<Pond> ponds) {
-    for (final pond in ponds) {
-      _snapshots[pond.id] = _sensorService.generateSnapshot(pond);
+  /// Combines the stored and live readings for [pond]; null when the pond has
+  /// no device or no readings yet. Shared with `DashboardProvider`.
+  static PondSnapshot? compose(Pond pond) {
+    final store = PondReadingsStore.instance;
+    final state = store.stateFor(pond.id);
+    if (state == PondDataState.loading || state == PondDataState.unpaired) {
+      return null;
     }
+    final stored = store.snapshotFor(pond);
+    return UsbSensorHub.instance.liveSnapshotFor(pond, fallback: stored) ??
+        stored;
   }
 
-  void discard(String pondId) => _snapshots.remove(pondId);
+  /// [pond]'s readings, or null when it has none to show (no paired device,
+  /// no readings yet, or still loading — see [PondReadingsStore.stateFor]).
+  PondSnapshot? snapshotFor(Pond pond) => compose(pond);
+
+  void refreshAll(List<Pond> ponds) => PondReadingsStore.instance.refresh();
+
+  void discard(String pondId) {}
 
   /// The Analytics screen's day/week/month/year trend data — a separate,
   /// on-demand series from [snapshotFor]'s fixed recent-history window.
+  /// Empty when the pond has no readings of [type] to show.
   List<SensorReading> historyForRange(
     Pond pond,
     MetricType type,
     TrendRange range,
-  ) => _sensorService.historyForRange(pond, type, range);
+  ) {
+    final now = DateTime.now();
+    return historyForPeriod(
+      pond,
+      type,
+      now.subtract(range.interval * range.pointCount),
+      now,
+    );
+  }
 
   /// Trend data for a custom [start]..[end] timeframe.
   List<SensorReading> historyForPeriod(
@@ -46,5 +63,14 @@ class PondSnapshotCache {
     MetricType type,
     DateTime start,
     DateTime end,
-  ) => _sensorService.historyForPeriod(pond, type, start, end);
+  ) {
+    final store = PondReadingsStore.instance;
+    if (store.stateFor(pond.id) != PondDataState.ready) return const [];
+    return [
+      for (final reading in store.historyFor(pond.id)[type]!)
+        if (!reading.timestamp.isBefore(start) &&
+            !reading.timestamp.isAfter(end))
+          reading,
+    ];
+  }
 }

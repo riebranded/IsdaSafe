@@ -11,14 +11,16 @@ import '../providers/notification_provider.dart';
 import '../providers/pond_provider.dart';
 import '../services/pond_snapshot_cache.dart';
 import '../theme/app_spacing.dart';
-import '../widgets/location_picker_map.dart';
 import '../widgets/add_pond_flow.dart';
+import '../widgets/pond_actions.dart';
 import '../widgets/pond_dialogs.dart';
+import '../widgets/pair_device_prompt.dart';
 import '../widgets/reading_grid.dart';
 import '../widgets/staggered_entrance.dart';
 import '../widgets/status_badge.dart';
 import 'pond_dashboard_screen.dart';
 import '../l10n/tr.dart';
+import '../widgets/confirm_dialog.dart';
 
 /// Shown whenever a Supabase write (rename/move/remove/species/create) fails
 /// — the in-memory list has already rolled back to match, so this is purely
@@ -83,41 +85,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (!ok && context.mounted) _showSaveError(context);
   }
 
-  Future<void> _editLocation(BuildContext context, Pond pond) async {
-    final location = await showEditLocationDialog(
-      context,
-      initialLatitude: pond.latitude ?? kDefaultMapCenter.latitude,
-      initialLongitude: pond.longitude ?? kDefaultMapCenter.longitude,
-    );
-    if (location == null || !context.mounted) return;
-
-    final ok = await context.read<PondProvider>().setLocation(
-      pond.id,
-      latitude: location.latitude,
-      longitude: location.longitude,
-    );
-    if (!ok && context.mounted) _showSaveError(context);
-  }
+  Future<void> _editLocation(BuildContext context, Pond pond) =>
+      changePondLocation(context, pond);
 
   Future<void> _removePond(BuildContext context, Pond pond) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Remove pond'.tr),
-        content: Text('Remove "{0}"? This cannot be undone.'.trf([pond.name])),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text('Cancel'.tr),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text('Remove'.tr),
-          ),
-        ],
-      ),
+    final confirmed = await showConfirmDialog(
+      context,
+      icon: Icons.delete_outline,
+      title: 'Remove this pond?'.tr,
+      message: 'Remove "{0}"? This cannot be undone.'.trf([pond.name]),
+      confirmLabel: 'Remove pond'.tr,
+      destructive: true,
     );
-    if (confirmed != true || !context.mounted) return;
+    if (!confirmed || !context.mounted) return;
 
     final ok = await context.read<PondProvider>().removePond(pond.id);
     if (ok) {
@@ -154,7 +134,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final species = await showSelectSpeciesDialog(context);
     // Dismissed without choosing: keep the prompt so they can come back to it.
     if (species == null || !context.mounted) return;
-    final ok = await provider.setSpecies(pond.id, species);
+    final ok = await provider.setSpecies(
+      pond.id,
+      species.names,
+      biomassKg: species.biomassKg,
+    );
     if (!context.mounted) return;
     if (!ok) {
       _showSaveError(context);
@@ -178,7 +162,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         content: Text(
           allSent
               ? 'Verification restarted. We\'ll notify you when it\'s done.'.tr
-              : 'Couldn\'t restart verification. Check your connection and try again.'.tr,
+              : 'Couldn\'t restart verification. Check your connection and try again.'
+                    .tr,
         ),
       ),
     );
@@ -283,7 +268,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     var warning = 0;
     var critical = 0;
     for (final pond in ponds) {
-      switch (overallStatus(widget.cache.snapshotFor(pond).readings)) {
+      final snapshot = widget.cache.snapshotFor(pond);
+      if (snapshot == null) continue; // No device paired / no readings yet.
+      switch (overallStatus(snapshot.readings)) {
         case ReadingStatus.normal:
           normal++;
         case ReadingStatus.warning:
@@ -318,8 +305,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               index: index,
               child: _MobilePondCard(
                 pond: pond,
-                status: overallStatus(widget.cache.snapshotFor(pond).readings),
-                readings: widget.cache.snapshotFor(pond).readings,
+                readings: widget.cache.snapshotFor(pond)?.readings,
                 onTap: () => _openPond(context, pond),
                 onRename: () => _renamePond(context, pond),
                 onEditLocation: () => _editLocation(context, pond),
@@ -359,9 +345,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             index: index,
             child: _PondSummaryCard(
               pond: pond,
-              status: overallStatus(snapshot.readings),
-              readings: snapshot.readings,
-              history: snapshot.history,
+              snapshot: snapshot,
               onTap: () => _openPond(context, pond),
               onRename: () => _renamePond(context, pond),
               onEditLocation: () => _editLocation(context, pond),
@@ -558,7 +542,6 @@ class _SummaryTile extends StatelessWidget {
 class _MobilePondCard extends StatelessWidget {
   const _MobilePondCard({
     required this.pond,
-    required this.status,
     required this.readings,
     required this.onTap,
     required this.onRename,
@@ -567,8 +550,9 @@ class _MobilePondCard extends StatelessWidget {
   });
 
   final Pond pond;
-  final ReadingStatus status;
-  final Map<MetricType, SensorReading> readings;
+
+  /// Null until a device is paired and has sent a reading.
+  final Map<MetricType, SensorReading>? readings;
   final VoidCallback onTap;
   final VoidCallback onRename;
   final VoidCallback onEditLocation;
@@ -606,7 +590,8 @@ class _MobilePondCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: AppSpacing.sm),
-                  StatusBadge(status: status),
+                  if (readings case final readings?)
+                    StatusBadge(status: overallStatus(readings)),
                   PopupMenuButton<String>(
                     tooltip: 'Pond options'.tr,
                     padding: EdgeInsets.zero,
@@ -617,34 +602,31 @@ class _MobilePondCard extends StatelessWidget {
                       if (value == 'remove') onRemove();
                     },
                     itemBuilder: (context) => [
-                      PopupMenuItem(
-                        value: 'rename',
-                        child: Text('Rename'.tr),
-                      ),
+                      PopupMenuItem(value: 'rename', child: Text('Rename'.tr)),
                       PopupMenuItem(
                         value: 'location',
                         child: Text('Edit location'.tr),
                       ),
-                      PopupMenuItem(
-                        value: 'remove',
-                        child: Text('Remove'.tr),
-                      ),
+                      PopupMenuItem(value: 'remove', child: Text('Remove'.tr)),
                     ],
                   ),
                 ],
               ),
               const SizedBox(height: AppSpacing.md),
-              Row(
-                children: [
-                  for (final type in MetricType.values)
-                    Expanded(
-                      child: _ReadingChip(
-                        type: type,
-                        value: readings[type]!.value,
+              if (readings case final readings?)
+                Row(
+                  children: [
+                    for (final type in MetricType.primary)
+                      Expanded(
+                        child: _ReadingChip(
+                          type: type,
+                          value: readings[type]?.value,
+                        ),
                       ),
-                    ),
-                ],
-              ),
+                  ],
+                )
+              else
+                PairDevicePrompt(pond: pond, compact: true),
             ],
           ),
         ),
@@ -658,11 +640,14 @@ class _ReadingChip extends StatelessWidget {
   const _ReadingChip({required this.type, required this.value});
 
   final MetricType type;
-  final double value;
+
+  /// Null when the device hasn't sent this metric.
+  final double? value;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final value = this.value;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -672,7 +657,7 @@ class _ReadingChip extends StatelessWidget {
         FittedBox(
           fit: BoxFit.scaleDown,
           child: Text(
-            type.format(value),
+            value == null ? '—' : type.format(value),
             maxLines: 1,
             style: theme.textTheme.labelMedium?.copyWith(
               fontWeight: FontWeight.w600,
@@ -725,9 +710,7 @@ class _PondLocationLine extends StatelessWidget {
 class _PondSummaryCard extends StatelessWidget {
   const _PondSummaryCard({
     required this.pond,
-    required this.status,
-    required this.readings,
-    required this.history,
+    required this.snapshot,
     required this.onTap,
     required this.onRename,
     required this.onEditLocation,
@@ -735,9 +718,9 @@ class _PondSummaryCard extends StatelessWidget {
   });
 
   final Pond pond;
-  final ReadingStatus status;
-  final Map<MetricType, SensorReading> readings;
-  final Map<MetricType, List<SensorReading>> history;
+
+  /// Null until a device is paired and has sent a reading.
+  final PondSnapshot? snapshot;
   final VoidCallback onTap;
   final VoidCallback onRename;
   final VoidCallback onEditLocation;
@@ -767,7 +750,8 @@ class _PondSummaryCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: AppSpacing.sm),
-                  StatusBadge(status: status),
+                  if (snapshot case final snapshot?)
+                    StatusBadge(status: overallStatus(snapshot.readings)),
                   PopupMenuButton<String>(
                     tooltip: 'Pond options'.tr,
                     onSelected: (value) {
@@ -776,24 +760,24 @@ class _PondSummaryCard extends StatelessWidget {
                       if (value == 'remove') onRemove();
                     },
                     itemBuilder: (context) => [
-                      PopupMenuItem(
-                        value: 'rename',
-                        child: Text('Rename'.tr),
-                      ),
+                      PopupMenuItem(value: 'rename', child: Text('Rename'.tr)),
                       PopupMenuItem(
                         value: 'location',
                         child: Text('Edit location'.tr),
                       ),
-                      PopupMenuItem(
-                        value: 'remove',
-                        child: Text('Remove'.tr),
-                      ),
+                      PopupMenuItem(value: 'remove', child: Text('Remove'.tr)),
                     ],
                   ),
                 ],
               ),
               const SizedBox(height: AppSpacing.md),
-              ReadingGrid(readings: readings, history: history),
+              if (snapshot case final snapshot?)
+                ReadingGrid(
+                  readings: snapshot.readings,
+                  history: snapshot.history,
+                )
+              else
+                PairDevicePrompt(pond: pond, compact: true),
             ],
           ),
         ),
@@ -847,7 +831,8 @@ class _SpeciesPromptBanner extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'Tell us which fish or shrimp it holds to get feeding-time suggestions.'.tr,
+                        'Tell us which fish or shrimp it holds to get feeding-time suggestions.'
+                            .tr,
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: scheme.onPrimaryContainer,
                         ),
@@ -864,10 +849,7 @@ class _SpeciesPromptBanner extends StatelessWidget {
                 spacing: AppSpacing.sm,
                 children: [
                   TextButton(onPressed: onLater, child: Text('Later'.tr)),
-                  FilledButton(
-                    onPressed: onAdd,
-                    child: Text('Add species'.tr),
-                  ),
+                  FilledButton(onPressed: onAdd, child: Text('Add species'.tr)),
                 ],
               ),
             ),
@@ -892,8 +874,9 @@ class _VerificationBanner extends StatelessWidget {
   final List<Pond> failed;
   final VoidCallback onRetry;
 
-  String _names(List<Pond> ponds) =>
-      ponds.length == 1 ? '“${ponds.first.name}”' : '{0} ponds'.trf([ponds.length]);
+  String _names(List<Pond> ponds) => ponds.length == 1
+      ? '“${ponds.first.name}”'
+      : '{0} ponds'.trf([ponds.length]);
 
   @override
   Widget build(BuildContext context) {
@@ -906,7 +889,8 @@ class _VerificationBanner extends StatelessWidget {
         : 'Verifying {0}…'.trf([_names(pending)]);
     final body = hasFailed
         ? 'A technical problem stopped the check. Retry to try again.'.tr
-        : 'It will appear here once it\'s verified. We\'ll send you a notification when it is.'.tr;
+        : 'It will appear here once it\'s verified. We\'ll send you a notification when it is.'
+              .tr;
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -959,7 +943,9 @@ class _VerificationBanner extends StatelessWidget {
                         minimumSize: const Size(0, 32),
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
-                      child: Text(hasFailed ? 'Retry'.tr : 'Taking long? Retry'.tr),
+                      child: Text(
+                        hasFailed ? 'Retry'.tr : 'Taking long? Retry'.tr,
+                      ),
                     ),
                   ),
                 ],
@@ -1027,8 +1013,10 @@ class _EmptyDashboard extends StatelessWidget {
             const SizedBox(height: AppSpacing.xs),
             Text(
               waitingForVerification
-                  ? 'Verified ponds show up here with their live water quality.'.tr
-                  : 'Add a pond to start tracking its water quality and\nsee which fish species it can support.'.tr,
+                  ? 'Verified ponds show up here with their live water quality.'
+                        .tr
+                  : 'Add a pond to start tracking its water quality and\nsee which fish species it can support.'
+                        .tr,
               textAlign: TextAlign.center,
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,

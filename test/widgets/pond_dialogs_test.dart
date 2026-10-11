@@ -170,7 +170,10 @@ void main() {
       '120.9842',
     );
 
-    await tester.enterText(find.widgetWithText(TextField, 'Pond name'), 'Located pond');
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Pond name'),
+      'Located pond',
+    );
     await tester.pump();
 
     final addButton = tester.widget<FilledButton>(
@@ -189,12 +192,15 @@ void main() {
     expect(result?.verification.photo, isNull);
   });
 
-  testWidgets('in-house pond skips satellite and needs at least 3 photos', (
+  testWidgets('in-house pond skips satellite and needs at least 1 photo', (
     tester,
   ) async {
     NewPondDraft? result;
     await openDialog(tester, onResult: (r) => result = r);
-    await tester.enterText(find.widgetWithText(TextField, 'Pond name'), 'Backyard tank');
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Pond name'),
+      'Backyard tank',
+    );
     await tester.pump();
 
     await tester.ensureVisible(find.byType(CheckboxListTile));
@@ -203,14 +209,8 @@ void main() {
 
     // No separate step any more: the same form, with the photos now required.
     expect(find.text('Required'), findsOneWidget);
-    expect(find.textContaining('0 of 3 photos'), findsOneWidget);
+    expect(find.textContaining('0 of 1 added'), findsOneWidget);
     Finder add() => find.widgetWithText(FilledButton, 'Add pond');
-    expect(tester.widget<FilledButton>(add()).onPressed, isNull);
-
-    await tester.ensureVisible(find.text('Add photos'));
-    await tester.tap(find.text('Add photos'));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('2 of 3 photos'), findsOneWidget);
     expect(tester.widget<FilledButton>(add()).onPressed, isNull);
 
     await tester.ensureVisible(find.text('Add photos'));
@@ -223,7 +223,7 @@ void main() {
 
     expect(result?.name, 'Backyard tank');
     expect(result?.verification.method, VerificationMethod.photo);
-    expect(result?.verification.evidencePhotos, hasLength(4));
+    expect(result?.verification.evidencePhotos, hasLength(2));
   });
 
   testWidgets('map opens immediately and preserves manual adjustment', (
@@ -241,7 +241,10 @@ void main() {
     // platform view).
     expect(find.byType(TextField), findsNWidgets(4));
 
-    await tester.enterText(find.widgetWithText(TextField, 'Pond name'), 'Manual pond');
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Pond name'),
+      'Manual pond',
+    );
     await tester.enterText(find.byType(TextField).at(0), '15.0000');
     await tester.pump();
 
@@ -279,7 +282,10 @@ void main() {
       loader: () async => null,
       search: search,
     );
-    await tester.enterText(find.widgetWithText(TextField, 'Pond name'), 'Lakeside pond');
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Pond name'),
+      'Lakeside pond',
+    );
     await tester.pump();
     expect(
       tester
@@ -358,12 +364,12 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
 
+    expect(find.text('Your pond request is being processed'), findsOneWidget);
     expect(find.textContaining('Pond X'), findsOneWidget);
     expect(find.text('Checking your pond photos'), findsOneWidget);
-    expect(find.textContaining('notify you on your device'), findsOneWidget);
-    // SMS is switched off, so the dialog must not promise a text.
-    expect(find.textContaining('text'), findsNothing);
-    expect(find.textContaining('notify you on your device'), findsOneWidget);
+    // No phone number known (not signed in here): no promise of a text.
+    expect(find.textContaining('notification in the app'), findsOneWidget);
+    expect(find.textContaining('text message'), findsNothing);
     expect(find.textContaining('appears on your dashboard'), findsOneWidget);
 
     await tester.tap(find.text('Got it'));
@@ -499,7 +505,10 @@ void main() {
       (tester) async {
         NewPondDraft? result;
         await openDialog(tester, onResult: (r) => result = r);
-        await tester.enterText(find.widgetWithText(TextField, 'Pond name'), 'Roof pond');
+        await tester.enterText(
+          find.widgetWithText(TextField, 'Pond name'),
+          'Roof pond',
+        );
         await tester.pump();
 
         expect(find.text('Photos of your pond'), findsOneWidget);
@@ -511,7 +520,7 @@ void main() {
         // ...and a second pick takes it past the minimum.
         await addPhotos(tester);
         expect(find.byType(Image), findsNWidgets(4));
-        expect(find.text('4 photos ready.'), findsOneWidget);
+        expect(find.text('Photos ready: 4.'), findsOneWidget);
 
         await tester.tap(find.widgetWithText(FilledButton, 'Add pond'));
         await tester.pumpAndSettle();
@@ -521,22 +530,26 @@ void main() {
       },
     );
 
-    testWidgets('fewer than the minimum are explained and not sent', (
-      tester,
-    ) async {
+    testWidgets('a single picture is enough and is sent', (tester) async {
       NewPondDraft? result;
       await openDialog(tester, onResult: (r) => result = r);
-      await tester.enterText(find.widgetWithText(TextField, 'Pond name'), 'Roof pond');
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Pond name'),
+        'Roof pond',
+      );
       await tester.pump();
 
       await addPhotos(tester);
-      expect(find.textContaining('Add 1 more'), findsOneWidget);
+      await tester.tap(find.bySemanticsLabel('Remove photo').first);
+      await tester.pumpAndSettle();
+      expect(find.byType(Image), findsNWidgets(1));
+      expect(find.text('Photos ready: 1.'), findsOneWidget);
 
       await tester.tap(find.widgetWithText(FilledButton, 'Add pond'));
       await tester.pumpAndSettle();
 
       expect(result?.name, 'Roof pond');
-      expect(result?.verification.evidencePhotos, isEmpty);
+      expect(result?.verification.evidencePhotos, hasLength(1));
     });
 
     testWidgets('a photo can be removed again', (tester) async {
@@ -597,30 +610,25 @@ void main() {
 
     Finder submit() => find.byType(FilledButton).last;
 
-    testWidgets('needs at least 3 photos before it can be submitted', (
+    testWidgets('needs at least 1 photo before it can be submitted', (
       tester,
     ) async {
       List<PondPhoto>? result;
       await open(tester, onResult: (r) => result = r);
 
       expect(find.textContaining('Roof Pond'), findsOneWidget);
-      expect(find.textContaining('0 of 3 photos'), findsOneWidget);
+      expect(find.textContaining('0 of 1 added'), findsOneWidget);
       expect(tester.widget<FilledButton>(submit()).onPressed, isNull);
 
-      // A single pick brings in two pictures: still short of three.
+      // A single pick brings in two pictures: more than enough.
       await tester.tap(find.text('Add photos'));
       await tester.pumpAndSettle();
-      expect(find.textContaining('2 of 3 photos'), findsOneWidget);
-      expect(tester.widget<FilledButton>(submit()).onPressed, isNull);
-
-      await tester.tap(find.text('Add photos'));
-      await tester.pumpAndSettle();
-      expect(find.textContaining('4 photos added'), findsOneWidget);
+      expect(find.textContaining('2 added'), findsOneWidget);
       expect(tester.widget<FilledButton>(submit()).onPressed, isNotNull);
 
       await tester.tap(submit());
       await tester.pumpAndSettle();
-      expect(result, hasLength(4));
+      expect(result, hasLength(2));
     });
 
     testWidgets('the add button disappears at the maximum', (tester) async {

@@ -5,6 +5,7 @@ import '../models/app_notification.dart';
 import '../models/metric_type.dart';
 import '../models/pond.dart';
 import '../models/reading_bands.dart';
+import '../models/weather_context.dart';
 import '../providers/notification_provider.dart';
 import '../providers/pond_provider.dart';
 import '../services/pond_snapshot_cache.dart';
@@ -19,17 +20,21 @@ class _Alert {
     required this.type,
     required this.value,
     required this.status,
+    this.reason,
   });
 
   final String pondName;
   final MetricType type;
   final double value;
   final ReadingStatus status;
+
+  /// For a weather risk: what the weather is doing (e.g. "Oxygen may drop
+  /// tonight"); null for a reading outside its range.
+  final String? reason;
 }
 
-/// Derived list of current threshold breaches across every pond — no new
-/// backend, just re-reads the same mock snapshots already used elsewhere
-/// (`metricBands[type]!.statusFor(...)`), sorted worst-first.
+/// Current threshold breaches across every pond (from the same readings the
+/// dashboard shows, worst first), then the server-sent notifications.
 class NotificationsScreen extends StatelessWidget {
   const NotificationsScreen({super.key, required this.cache});
 
@@ -39,15 +44,43 @@ class NotificationsScreen extends StatelessWidget {
     final alerts = <_Alert>[];
     for (final pond in ponds) {
       final snapshot = cache.snapshotFor(pond);
+      if (snapshot == null) continue; // No device paired yet.
+      final alerted = <MetricType>{};
       for (final entry in snapshot.readings.entries) {
+        // Only water readings alert; humidity and the companion readings
+        // (air temperature, free ammonia) count through weather risks below.
+        if (!MetricType.water.contains(entry.key)) continue;
         final status = metricBands[entry.key]!.statusFor(entry.value.value);
         if (status == ReadingStatus.normal) continue;
+        alerted.add(entry.key);
         alerts.add(
           _Alert(
             pondName: pond.name,
             type: entry.key,
             value: entry.value.value,
             status: status,
+          ),
+        );
+      }
+      // Weather risks serious enough to raise the pond's status, unless that
+      // reading already alerts on its own.
+      for (final insight in weatherInsights(
+        snapshot.readings,
+        history: snapshot.history,
+      )) {
+        final reading = snapshot.reading(insight.affects);
+        if (insight.severity == ReadingStatus.normal ||
+            reading == null ||
+            alerted.contains(insight.affects)) {
+          continue;
+        }
+        alerts.add(
+          _Alert(
+            pondName: pond.name,
+            type: insight.affects,
+            value: reading.value,
+            status: insight.severity,
+            reason: insight.title,
           ),
         );
       }
@@ -97,13 +130,10 @@ class NotificationsScreen extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(AppSpacing.lg),
       children: [
-        if (notificationProvider.unreadCount > 0)
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton(
-              onPressed: notificationProvider.markAllRead,
-              child: Text('Mark all read'.tr),
-            ),
+        if (notifications.isNotEmpty)
+          _ReadAllHeader(
+            unread: notificationProvider.unreadCount,
+            onMarkAllRead: notificationProvider.markAllRead,
           ),
         for (final alert in alerts)
           Padding(
@@ -120,16 +150,62 @@ class NotificationsScreen extends StatelessWidget {
                   waitingForPhotos.contains(notification.pondId),
               onTap: () {
                 notificationProvider.markRead(notification.id);
-                // A "photos needed" notification opens the photo modal.
+                // A "photos needed" notification opens the photo modal; a
+                // "pond verified" one pairs a device with the pond.
                 final pondId = notification.pondId;
                 if (notification.type == 'pond_needs_photos' &&
                     pondId != null) {
                   openAddPhotosForPond(context, pondId);
+                } else if (notification.type == 'pond_verified' &&
+                    pondId != null) {
+                  openPairDeviceForPond(context, pondId);
+                } else if (notification.type == 'device_transfer_request') {
+                  openTransferRequest(context, notification.body);
+                } else if (notification.isDeviceTransferredToUs) {
+                  openAssignTransferredDevice(context, notification.body);
                 }
               },
             ),
           ),
       ],
+    );
+  }
+}
+
+/// How many notifications are unread, with a button to mark them all read.
+class _ReadAllHeader extends StatelessWidget {
+  const _ReadAllHeader({required this.unread, required this.onMarkAllRead});
+
+  final int unread;
+  final VoidCallback onMarkAllRead;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.md),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              unread == 0
+                  ? 'All caught up'.tr
+                  : unread == 1
+                  ? '1 unread notification'.tr
+                  : '{0} unread notifications'.trf([unread]),
+              style: theme.textTheme.titleSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          FilledButton.tonalIcon(
+            onPressed: unread == 0 ? null : onMarkAllRead,
+            icon: const Icon(Icons.done_all, size: 18),
+            label: Text('Mark all as read'.tr),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -173,7 +249,7 @@ class _AlertCard extends StatelessWidget {
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   Text(
-                    alert.type.format(alert.value),
+                    [alert.type.format(alert.value), ?alert.reason].join(' · '),
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: scheme.onSurfaceVariant,
                     ),
@@ -197,9 +273,21 @@ class _AlertCard extends StatelessWidget {
 ) {
   final scheme = Theme.of(context).colorScheme;
   return switch (notification.type) {
+    'water_alert_danger' => (Icons.error, scheme.error),
+    'water_alert_warning' => (Icons.warning_rounded, scheme.tertiary),
+    'water_alert_cleared' => (Icons.check_circle_outline, scheme.primary),
     'pond_verified' => (Icons.verified, scheme.primary),
     'pond_rejected' => (Icons.cancel_outlined, scheme.error),
     'pond_needs_photos' => (Icons.photo_camera_outlined, scheme.secondary),
+    'device_transfer_request' => (Icons.swap_horiz, scheme.tertiary),
+    'device_transfer_result' when notification.isDeviceTransferredToUs => (
+      Icons.memory,
+      scheme.primary,
+    ),
+    'device_transfer_result' => (
+      Icons.do_not_disturb_on_outlined,
+      scheme.error,
+    ),
     final t when t.startsWith('account_') && t.endsWith('_failed') => (
       Icons.error_outline,
       scheme.error,

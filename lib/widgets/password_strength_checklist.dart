@@ -17,7 +17,10 @@ class PasswordRule {
 /// submit-time validator), so they can never disagree.
 final List<PasswordRule> passwordRules = [
   PasswordRule('At least 8 characters', (v) => v.length >= 8),
-  PasswordRule('An uppercase letter (A-Z)', (v) => v.contains(RegExp(r'[A-Z]'))),
+  PasswordRule(
+    'An uppercase letter (A-Z)',
+    (v) => v.contains(RegExp(r'[A-Z]')),
+  ),
   PasswordRule('A lowercase letter (a-z)', (v) => v.contains(RegExp(r'[a-z]'))),
   PasswordRule('A number (0-9)', (v) => v.contains(RegExp(r'[0-9]'))),
   PasswordRule(
@@ -26,7 +29,8 @@ final List<PasswordRule> passwordRules = [
   ),
 ];
 
-bool isStrongPassword(String value) => passwordRules.every((rule) => rule.test(value));
+bool isStrongPassword(String value) =>
+    passwordRules.every((rule) => rule.test(value));
 
 /// Live checklist rendered beneath the password field on Register, ticking
 /// each rule off in realtime as the user types.
@@ -48,12 +52,18 @@ class PasswordStrengthChecklist extends StatelessWidget {
             child: Row(
               children: [
                 Icon(
-                  rule.test(password) ? Icons.check_circle : Icons.cancel_outlined,
+                  rule.test(password)
+                      ? Icons.check_circle
+                      : Icons.cancel_outlined,
                   size: 16,
-                  color: rule.test(password) ? context.statusColors.good : theme.colorScheme.onSurfaceVariant,
+                  color: rule.test(password)
+                      ? context.statusColors.good
+                      : theme.colorScheme.onSurfaceVariant,
                 ),
                 const SizedBox(width: AppSpacing.sm),
-                Text(rule.label.tr, style: theme.textTheme.bodySmall),
+                Flexible(
+                  child: Text(rule.label.tr, style: theme.textTheme.bodySmall),
+                ),
               ],
             ),
           ),

@@ -7,9 +7,11 @@ import '../providers/pond_provider.dart';
 import '../services/pond_snapshot_cache.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/individual_trend_chart.dart';
+import '../widgets/pair_device_prompt.dart';
 import '../widgets/metric_detail_view.dart';
 import '../widgets/modal_date_range_picker.dart';
 import '../widgets/reading_history_table.dart';
+import '../widgets/timeframe_picker.dart';
 import '../l10n/tr.dart';
 
 /// A pond selector plus that pond's per-metric trends and raw reading
@@ -96,76 +98,67 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: SegmentedButton<String>(
-              segments: [
+          LayoutBuilder(
+            builder: (context, constraints) => DropdownMenu<String>(
+              // Rebuilt when the shown pond changes (or is renamed) so its
+              // text follows.
+              key: ValueKey((selected.id, selected.name)),
+              width: constraints.maxWidth < 360 ? constraints.maxWidth : 320,
+              label: Text('Pond'.tr),
+              leadingIcon: const Icon(Icons.water_drop_outlined),
+              initialSelection: selected.id,
+              requestFocusOnTap: false,
+              dropdownMenuEntries: [
                 for (final pond in ponds)
-                  ButtonSegment(value: pond.id, label: Text(pond.name)),
+                  DropdownMenuEntry(value: pond.id, label: pond.name),
               ],
-              selected: {selected.id},
-              onSelectionChanged: (ids) =>
-                  setState(() => _selectedId = ids.first),
+              onSelected: (id) {
+                if (id != null) setState(() => _selectedId = id);
+              },
             ),
           ),
           const SizedBox(height: AppSpacing.md),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                SegmentedButton<TrendRange>(
-                  emptySelectionAllowed: true,
-                  segments: [
-                    for (final range in TrendRange.values)
-                      ButtonSegment(value: range, label: Text(range.label)),
-                  ],
-                  selected: custom == null ? {_range} : {},
-                  onSelectionChanged: (ranges) => setState(() {
-                    _custom = null;
-                    if (ranges.isNotEmpty) _range = ranges.first;
-                  }),
-                ),
-                const SizedBox(width: AppSpacing.sm),
-                if (custom == null)
-                  OutlinedButton.icon(
-                    onPressed: _pickCustomRange,
-                    icon: const Icon(Icons.date_range, size: 18),
-                    label: Text('Custom'.tr),
-                  )
-                else
-                  InputChip(
-                    avatar: const Icon(Icons.date_range, size: 18),
-                    label: Text(_customLabel(custom)),
-                    onPressed: _pickCustomRange,
-                    onDeleted: () => setState(() => _custom = null),
-                    deleteButtonTooltipMessage: 'Clear custom timeframe'.tr,
-                  ),
-              ],
-            ),
+          TimeframePicker(
+            range: _range,
+            custom: custom,
+            customLabel: custom == null ? null : _customLabel(custom),
+            onRange: (range) => setState(() {
+              _custom = null;
+              _range = range;
+            }),
+            onCustom: _pickCustomRange,
+            onClearCustom: () => setState(() => _custom = null),
           ),
           const SizedBox(height: AppSpacing.lg),
-          Text('Individual trends'.tr, style: theme.textTheme.titleMedium),
-          const SizedBox(height: AppSpacing.md),
-          for (final type in MetricType.values) ...[
-            IndividualTrendChart(
-              type: type,
-              history: rangedHistory[type]!,
-              range: _range,
-              timeFormat: custom == null ? null : timeFormat,
-              onTap: () => showMetricDetail(
-                context,
-                pond: selected,
+          if (widget.cache.snapshotFor(selected) == null)
+            PairDevicePrompt(pond: selected)
+          else ...[
+            Text('Individual trends'.tr, style: theme.textTheme.titleMedium),
+            const SizedBox(height: AppSpacing.md),
+            for (final type in MetricType.primary) ...[
+              IndividualTrendChart(
                 type: type,
-                cache: widget.cache,
-                initialRange: _range,
-                initialCustom: custom,
+                history: rangedHistory[type]!,
+                range: _range,
+                timeFormat: custom == null ? null : timeFormat,
+                onTap: () => showMetricDetail(
+                  context,
+                  pond: selected,
+                  type: type,
+                  cache: widget.cache,
+                  initialRange: _range,
+                  initialCustom: custom,
+                ),
               ),
+              const SizedBox(height: AppSpacing.lg),
+            ],
+            Text('Individual readings'.tr, style: theme.textTheme.titleMedium),
+            const SizedBox(height: AppSpacing.md),
+            ReadingHistoryTable(
+              key: ValueKey((selected.id, _range, custom)),
+              history: rangedHistory,
             ),
-            const SizedBox(height: AppSpacing.lg),
           ],
-          Text('Individual readings'.tr, style: theme.textTheme.titleMedium),
-          const SizedBox(height: AppSpacing.md),
-          ReadingHistoryTable(history: rangedHistory),
         ],
       ),
     );

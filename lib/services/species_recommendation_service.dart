@@ -11,7 +11,9 @@ import 'prediction_api_config.dart';
 /// into an AI-recommended fish species, factored out so it can be unit
 /// tested against a fake instead of a real network call.
 abstract class SpeciesRecommendationService {
-  Future<SpeciesRecommendation> recommend(Map<MetricType, SensorReading> readings);
+  Future<SpeciesRecommendation> recommend(
+    Map<MetricType, SensorReading> readings,
+  );
 }
 
 /// Calls the Render-hosted `isdasafe-server` FastAPI service
@@ -22,14 +24,16 @@ abstract class SpeciesRecommendationService {
 /// callers should surface a suitably patient loading state.
 class HttpSpeciesRecommendationService implements SpeciesRecommendationService {
   HttpSpeciesRecommendationService({http.Client? client, String? baseUrl})
-      : _client = client ?? http.Client(),
-        _baseUrl = resolvePredictionApiBaseUrl(baseUrl);
+    : _client = client ?? http.Client(),
+      _baseUrl = resolvePredictionApiBaseUrl(baseUrl);
 
   final http.Client _client;
   final String _baseUrl;
 
   @override
-  Future<SpeciesRecommendation> recommend(Map<MetricType, SensorReading> readings) async {
+  Future<SpeciesRecommendation> recommend(
+    Map<MetricType, SensorReading> readings,
+  ) async {
     final body = jsonEncode({
       'ammonia': readings[MetricType.ammonia]!.value,
       'dissolved_oxygen': readings[MetricType.dissolvedOxygen]!.value,
@@ -47,11 +51,15 @@ class HttpSpeciesRecommendationService implements SpeciesRecommendationService {
           )
           .timeout(const Duration(seconds: 60));
     } on Exception {
-      throw Exception('The server is waking up — please try again in a moment.');
+      throw Exception(
+        'The server is waking up — please try again in a moment.',
+      );
     }
 
     if (response.statusCode != 200) {
-      throw Exception('Prediction request failed (${response.statusCode}): ${response.body}');
+      throw Exception(
+        'Prediction request failed (${response.statusCode}): ${response.body}',
+      );
     }
 
     try {
@@ -61,7 +69,9 @@ class HttpSpeciesRecommendationService implements SpeciesRecommendationService {
         confidence: (json['confidence'] as num?)?.toDouble(),
       );
     } catch (_) {
-      throw Exception('Received an unexpected response from the prediction server.');
+      throw Exception(
+        'Received an unexpected response from the prediction server.',
+      );
     }
   }
 }

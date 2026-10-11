@@ -43,6 +43,16 @@ class IndividualTrendChart extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final color = context.metricPalette.of(type);
+    if (history.isEmpty) {
+      return Card(
+        margin: EdgeInsets.zero,
+        child: ListTile(
+          leading: Icon(type.icon, color: color),
+          title: Text(type.label),
+          subtitle: Text('No readings in this timeframe'.tr),
+        ),
+      );
+    }
     final latest = history.last;
     final status = metricBands[type]!.statusFor(latest.value);
 

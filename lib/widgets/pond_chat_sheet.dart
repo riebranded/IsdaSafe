@@ -589,7 +589,8 @@ class _Composer extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(right: AppSpacing.sm),
             child: Text(
-              'AI advice can be wrong. For disease outbreaks, contact your local BFAR office.'.tr,
+              'AI advice can be wrong. For disease outbreaks, contact your local BFAR office.'
+                  .tr,
               textAlign: TextAlign.center,
               style: theme.textTheme.labelSmall?.copyWith(
                 color: scheme.onSurfaceVariant,

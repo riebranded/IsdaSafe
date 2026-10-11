@@ -70,7 +70,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     super.dispose();
   }
 
-  void _startResendCountdown({Duration duration = AuthService.otpCooldownDuration}) {
+  void _startResendCountdown({
+    Duration duration = AuthService.otpCooldownDuration,
+  }) {
     _secondsRemaining = duration.inSeconds;
     _resendTimer?.cancel();
     _resendTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -90,7 +92,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message.tr)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message.tr)));
   }
 
   String get _code => _otpController.text;
@@ -107,7 +111,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     try {
       debugPrint('OtpVerificationScreen: confirming code...');
       await AuthService.confirmSemaphoreOtp(_code);
-      debugPrint('OtpVerificationScreen: confirmed — upserting profile as verified...');
+      debugPrint(
+        'OtpVerificationScreen: confirmed — upserting profile as verified...',
+      );
       await AuthService.upsertProfile(
         fullName: widget.fullName,
         email: widget.email,
@@ -116,7 +122,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         photoUrl: widget.photoUrl,
       );
       await AuthService.refreshAuthState();
-      debugPrint('OtpVerificationScreen: profile upsert done, navigating into the app');
+      debugPrint(
+        'OtpVerificationScreen: profile upsert done, navigating into the app',
+      );
       if (!mounted) return;
       Navigator.of(context).popUntil((route) => route.isFirst);
     } on AuthException catch (e) {
@@ -141,7 +149,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       await AuthService.requestSemaphoreOtp(widget.phone);
       if (mounted) {
         _otpController.clear();
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Verification code resent.'.tr)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Verification code resent.'.tr)));
         _startResendCountdown();
       }
     } on AuthException catch (e) {
@@ -192,13 +202,23 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.sms_outlined, size: 48, color: theme.colorScheme.primary),
+                  Icon(
+                    Icons.sms_outlined,
+                    size: 48,
+                    color: theme.colorScheme.primary,
+                  ),
                   const SizedBox(height: AppSpacing.md),
-                  Text('Enter verification code'.tr, style: theme.textTheme.headlineSmall, textAlign: TextAlign.center),
+                  Text(
+                    'Enter verification code'.tr,
+                    style: theme.textTheme.headlineSmall,
+                    textAlign: TextAlign.center,
+                  ),
                   const SizedBox(height: AppSpacing.xs),
                   Text(
                     'We sent a 6-digit code to {0}'.trf([widget.phone]),
-                    style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: AppSpacing.xl),
@@ -207,7 +227,11 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                     child: Stack(
                       alignment: Alignment.center,
                       children: [
-                        _OtpBoxes(code: _code, length: _kOtpLength, enabled: !_isVerifying),
+                        _OtpBoxes(
+                          code: _code,
+                          length: _kOtpLength,
+                          enabled: !_isVerifying,
+                        ),
                         // The real field: invisible, but this is what
                         // actually receives typing, backspace, paste, and
                         // autofill — a single normal text field handles all
@@ -232,19 +256,35 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                   ),
                   const SizedBox(height: AppSpacing.xl),
                   FilledButton(
-                    onPressed: (!_isVerifying && _code.length == _kOtpLength) ? _verify : null,
+                    onPressed: (!_isVerifying && _code.length == _kOtpLength)
+                        ? _verify
+                        : null,
                     child: _isVerifying
-                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
                         : Text('Verify'.tr),
                   ),
                   const SizedBox(height: AppSpacing.lg),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      Text('Didn\'t get a code?'.tr, style: theme.textTheme.bodyMedium),
+                      Text(
+                        'Didn\'t get a code?'.tr,
+                        style: theme.textTheme.bodyMedium,
+                      ),
                       TextButton(
                         onPressed: canResend ? _resend : null,
-                        child: Text(canResend ? 'Resend'.tr : 'Resend in {0}'.trf([formatCountdown(_secondsRemaining)])),
+                        child: Text(
+                          canResend
+                              ? 'Resend'.tr
+                              : 'Resend in {0}'.trf([
+                                  formatCountdown(_secondsRemaining),
+                                ]),
+                        ),
                       ),
                     ],
                   ),
@@ -266,7 +306,11 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 /// password field) once filled. The real input is the invisible [TextField]
 /// stacked on top of this in [_OtpVerificationScreenState.build].
 class _OtpBoxes extends StatelessWidget {
-  const _OtpBoxes({required this.code, required this.length, required this.enabled});
+  const _OtpBoxes({
+    required this.code,
+    required this.length,
+    required this.enabled,
+  });
 
   final String code;
   final int length;
@@ -294,7 +338,9 @@ class _OtpBoxes extends StatelessWidget {
                 width: i == activeIndex && enabled ? 2 : 1,
               ),
             ),
-            child: i < code.length ? Text('●', style: theme.textTheme.titleLarge) : null,
+            child: i < code.length
+                ? Text('●', style: theme.textTheme.titleLarge)
+                : null,
           ),
       ],
     );
