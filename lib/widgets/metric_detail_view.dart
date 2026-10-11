@@ -87,7 +87,7 @@ Future<void> showMetricDetail(
 ///    highest values and when they happened;
 ///  * every reading in that timeframe (folded away until asked for).
 /// Metrics with [MetricTypeInfo.companions] (humidity → air temperature,
-/// ammonia → free ammonia) show those alongside: both current values, and a
+/// free ammonia → total ammonia) show those alongside: both current values, and a
 /// switch between their trends.
 class MetricDetailView extends StatefulWidget {
   const MetricDetailView({

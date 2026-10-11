@@ -184,7 +184,7 @@ class PondDashboardBody extends StatelessWidget {
             ),
             const SizedBox(height: AppSpacing.md),
             // Tapping a reading opens what it means and its trend, with a
-            // custom timeframe (and humidity/ammonia's companion readings).
+            // custom timeframe (and humidity/free ammonia's companion readings).
             ReadingGrid(
               readings: snapshot.readings,
               history: snapshot.history,

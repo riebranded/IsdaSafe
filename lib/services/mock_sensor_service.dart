@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import '../models/free_ammonia.dart';
 import '../models/metric_type.dart';
 import '../models/pond.dart';
 import '../models/sensor_reading.dart';
@@ -45,7 +46,8 @@ class MockSensorService {
 
     final readings = <MetricType, SensorReading>{};
     final history = <MetricType, List<SensorReading>>{};
-    for (final type in MetricType.primary) {
+    // What the device measures; free ammonia is worked out from these.
+    for (final type in _bands.keys) {
       final band = _bands[type]!;
       final baseline =
           band.min + baselineRandom.nextDouble() * (band.max - band.min);
@@ -57,8 +59,36 @@ class MockSensorService {
       history[type] = _generateHistory(pond, type, band, jitter, value, now);
     }
 
+    readings[MetricType.freeAmmonia] = _freeAmmonia(
+      readings[MetricType.ammonia]!,
+      readings[MetricType.ph]!,
+      readings[MetricType.temperature]!,
+    );
+    history[MetricType.freeAmmonia] = [
+      for (var i = 0; i < history[MetricType.ammonia]!.length; i++)
+        _freeAmmonia(
+          history[MetricType.ammonia]![i],
+          history[MetricType.ph]![i],
+          history[MetricType.temperature]![i],
+        ),
+    ];
+
     return PondSnapshot(pond: pond, readings: readings, history: history);
   }
+
+  static SensorReading _freeAmmonia(
+    SensorReading ammonia,
+    SensorReading ph,
+    SensorReading temperature,
+  ) => SensorReading(
+    type: MetricType.freeAmmonia,
+    value: freeAmmonia(
+      totalAmmonia: ammonia.value,
+      ph: ph.value,
+      tempC: temperature.value,
+    ),
+    timestamp: ammonia.timestamp,
+  );
 
   /// Synthesizes a short walk ending at [currentValue] — stands in for a
   /// real sensor's logged history until one exists. Seeded on `pond.seed`
