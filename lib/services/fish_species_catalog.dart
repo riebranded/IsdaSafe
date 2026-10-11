@@ -10,7 +10,7 @@ class FishSpeciesCatalog {
       tempRange: MetricRange(25, 32),
       phRange: MetricRange(6.5, 9.0),
       doRange: MetricRange(3, 10),
-      ammoniaRange: MetricRange(0, 0.05),
+      freeAmmoniaRange: MetricRange(0, 0.05),
       feedingTimes: ['7:00 AM', '12:00 PM', '5:00 PM'],
     ),
     FishSpecies(
@@ -19,7 +19,7 @@ class FishSpeciesCatalog {
       tempRange: MetricRange(24, 31),
       phRange: MetricRange(7.5, 8.5),
       doRange: MetricRange(4, 10),
-      ammoniaRange: MetricRange(0, 0.03),
+      freeAmmoniaRange: MetricRange(0, 0.03),
       feedingTimes: ['7:00 AM', '4:00 PM'],
     ),
     FishSpecies(
@@ -28,7 +28,7 @@ class FishSpeciesCatalog {
       tempRange: MetricRange(25, 30),
       phRange: MetricRange(6.5, 8.0),
       doRange: MetricRange(2, 10),
-      ammoniaRange: MetricRange(0, 0.1),
+      freeAmmoniaRange: MetricRange(0, 0.1),
       feedingTimes: ['6:00 AM', '6:00 PM'],
     ),
   ];

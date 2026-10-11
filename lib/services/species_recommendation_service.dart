@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../models/free_ammonia.dart';
 import '../models/metric_type.dart';
 import '../models/sensor_reading.dart';
 import '../models/species_recommendation.dart';
@@ -18,8 +19,9 @@ abstract class SpeciesRecommendationService {
 
 /// Calls the Render-hosted `isdasafe-server` FastAPI service
 /// (`POST /predict`), which runs a trained RandomForestClassifier over
-/// ammonia/dissolved-oxygen/pH/temperature and returns the recommended
-/// species. The service is on Render's free tier, so a request after a
+/// free ammonia/dissolved-oxygen/pH/temperature and returns the recommended
+/// species. The model was trained on free (un-ionised) NH3, so that's what's
+/// sent as `ammonia`, not the sensor's total ammonia. The service is on Render's free tier, so a request after a
 /// period of inactivity can take up to ~50s while the instance wakes up —
 /// callers should surface a suitably patient loading state.
 class HttpSpeciesRecommendationService implements SpeciesRecommendationService {
@@ -34,11 +36,19 @@ class HttpSpeciesRecommendationService implements SpeciesRecommendationService {
   Future<SpeciesRecommendation> recommend(
     Map<MetricType, SensorReading> readings,
   ) async {
+    final ph = readings[MetricType.ph]!.value;
+    final temperature = readings[MetricType.temperature]!.value;
     final body = jsonEncode({
-      'ammonia': readings[MetricType.ammonia]!.value,
+      'ammonia':
+          readings[MetricType.freeAmmonia]?.value ??
+          freeAmmonia(
+            totalAmmonia: readings[MetricType.ammonia]!.value,
+            ph: ph,
+            tempC: temperature,
+          ),
       'dissolved_oxygen': readings[MetricType.dissolvedOxygen]!.value,
-      'ph': readings[MetricType.ph]!.value,
-      'temperature': readings[MetricType.temperature]!.value,
+      'ph': ph,
+      'temperature': temperature,
     });
 
     final http.Response response;

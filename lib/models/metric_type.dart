@@ -14,7 +14,8 @@ enum MetricType {
 
   /// Un-ionised (free) ammonia, NH3: the toxic part of [ammonia], worked out
   /// from it, pH and water temperature (see `free_ammonia.dart`). Shown with
-  /// [ammonia]; not one of the [primary] metrics.
+  /// [ammonia]; not one of the [primary] metrics, but it's the ammonia that
+  /// counts in [water].
   freeAmmonia;
 
   /// The pond's five main readings: the reading cards and trend charts. The
@@ -23,9 +24,11 @@ enum MetricType {
   static const primary = [temperature, humidity, ammonia, dissolvedOxygen, ph];
 
   /// The water readings: these alone decide the pond's status and alerts.
-  /// [humidity] and [airTemperature] describe the weather, which only
-  /// matters through what it does to these (see `weather_context.dart`).
-  static const water = [temperature, ammonia, dissolvedOxygen, ph];
+  /// Ammonia counts as [freeAmmonia], the part that's toxic to fish, not the
+  /// total [ammonia]. [humidity] and [airTemperature] describe the weather,
+  /// which only matters through what it does to these (see
+  /// `weather_context.dart`).
+  static const water = [temperature, freeAmmonia, dissolvedOxygen, ph];
 }
 
 extension MetricTypeInfo on MetricType {

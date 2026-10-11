@@ -47,8 +47,8 @@ class NotificationsScreen extends StatelessWidget {
       if (snapshot == null) continue; // No device paired yet.
       final alerted = <MetricType>{};
       for (final entry in snapshot.readings.entries) {
-        // Only water readings alert; humidity and the companion readings
-        // (air temperature, free ammonia) count through weather risks below.
+        // Only water readings alert (ammonia as free ammonia); humidity, air
+        // temperature and total ammonia count through weather risks below.
         if (!MetricType.water.contains(entry.key)) continue;
         final status = metricBands[entry.key]!.statusFor(entry.value.value);
         if (status == ReadingStatus.normal) continue;

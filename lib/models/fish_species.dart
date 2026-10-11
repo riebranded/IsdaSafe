@@ -21,7 +21,7 @@ class FishSpecies {
     required this.tempRange,
     required this.phRange,
     required this.doRange,
-    required this.ammoniaRange,
+    required this.freeAmmoniaRange,
     required this.feedingTimes,
     this.assignableToPond = true,
   });
@@ -31,7 +31,10 @@ class FishSpecies {
   final MetricRange tempRange;
   final MetricRange phRange;
   final MetricRange doRange;
-  final MetricRange ammoniaRange;
+
+  /// Free (un-ionised) ammonia, NH3 mg/L: the part of the ammonia that's
+  /// toxic to fish.
+  final MetricRange freeAmmoniaRange;
 
   /// Suggested times of day to feed this species, e.g. `['6:00 AM', '5:00 PM']`.
   final List<String> feedingTimes;
@@ -55,7 +58,7 @@ enum Suitability {
 }
 
 /// A species' [Suitability] for a set of readings, plus which readings fall
-/// outside its range (e.g. "Ammonia too high") so the verdict can be explained.
+/// outside its range (e.g. "Free Ammonia too high") so the verdict can be explained.
 class SpeciesFit {
   const SpeciesFit(this.level, this.issues);
 
@@ -71,7 +74,7 @@ extension SpeciesSuitability on FishSpecies {
       MetricType.temperature: tempRange,
       MetricType.ph: phRange,
       MetricType.dissolvedOxygen: doRange,
-      MetricType.ammonia: ammoniaRange,
+      MetricType.freeAmmonia: freeAmmoniaRange,
     };
     final issues = <String>[];
     for (final entry in ranges.entries) {

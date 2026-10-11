@@ -124,9 +124,9 @@ const Map<MetricType, MetricBands> metricBands = {
 /// Worst status across the pond's [MetricType.water] readings in
 /// [readings], and the weather risks to them (see [weatherInsights], e.g.
 /// borderline oxygen on a muggy evening) — used for pond-level at-a-glance
-/// health (list screen chip, dashboard summary banner). Humidity and the
-/// companion readings (air temperature, free ammonia) only count through
-/// those weather risks.
+/// health (list screen chip, dashboard summary banner). Ammonia counts as
+/// free ammonia; humidity, air temperature and total ammonia only count
+/// through those weather risks.
 ReadingStatus overallStatus(Map<MetricType, SensorReading> readings) {
   var worst = worstSeverity(weatherInsights(readings));
   for (final entry in readings.entries) {
