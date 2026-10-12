@@ -235,8 +235,8 @@ void main() {
 
     await tester.tap(find.text('Humidity'));
     // A metric without a reading yet still opens its explanation.
-    await tester.tap(find.text('Ammonia'));
-    expect(tapped, [MetricType.humidity, MetricType.ammonia]);
+    await tester.tap(find.text('Free Ammonia'));
+    expect(tapped, [MetricType.humidity, MetricType.freeAmmonia]);
   });
 }
 

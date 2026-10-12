@@ -191,7 +191,7 @@ void main() {
       expect(find.text('Latest readings'), findsOneWidget);
       expect(find.text('Water Temperature'), findsAtLeastNWidgets(1));
       expect(find.text('Humidity'), findsAtLeastNWidgets(1));
-      expect(find.text('Ammonia'), findsAtLeastNWidgets(1));
+      expect(find.text('Free Ammonia'), findsAtLeastNWidgets(1));
       expect(find.text('Dissolved Oxygen'), findsAtLeastNWidgets(1));
       expect(find.text('pH Level'), findsAtLeastNWidgets(1));
 

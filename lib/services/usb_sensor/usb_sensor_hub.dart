@@ -66,7 +66,8 @@ class WifiConnectResult {
 
   final bool ok;
 
-  /// Why it failed, from the device (e.g. "wrong password or weak signal").
+  /// Why it failed, from the device (e.g. "wrong password", "network not
+  /// found", "signal too weak"; see the firmware's wifiFailText()).
   /// Null when the device didn't answer.
   final String? reason;
 }

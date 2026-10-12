@@ -788,6 +788,12 @@ const Map<String, String> tagalogStrings = {
   "Couldn't connect to {0}: {1}.": 'Hindi makakonekta sa {0}: {1}.',
   'network not found': 'hindi makita ang network',
   'wrong password or weak signal': 'maling password o mahinang signal',
+  'wrong password': 'mali ang password',
+  'signal too weak': 'masyadong mahina ang signal',
+  "its security type isn't supported":
+      'hindi suportado ang uri ng seguridad nito',
+  'the password is too short (WiFi passwords have at least 8 characters)':
+      'masyadong maikli ang password (hindi bababa sa 8 character ang password ng WiFi)',
   'the device rejected the network details':
       'tinanggihan ng device ang detalye ng network',
   'Connect the device to WiFi': 'Ikonekta ang device sa WiFi',
