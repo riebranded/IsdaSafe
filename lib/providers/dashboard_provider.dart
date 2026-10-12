@@ -70,7 +70,6 @@ class DashboardProvider extends ChangeNotifier {
 
   /// Whether this pond has a paired device and readings yet.
   PondDataState get dataState {
-    if (PondSnapshotCache.mockReadings) return PondDataState.ready;
     final state = PondReadingsStore.instance.stateFor(_pond.id);
     // Live USB readings count even before the first upload lands.
     if (state == PondDataState.waiting && _snapshot != null) {

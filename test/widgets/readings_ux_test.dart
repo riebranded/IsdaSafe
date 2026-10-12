@@ -15,63 +15,88 @@ void main() {
   }
 
   group('TimeframePicker', () {
-    Future<void> pump(WidgetTester tester, {DateTimeRange? custom}) =>
+    final october = DateTimeRange(
+      start: DateTime(2026, 10),
+      end: DateTime(2026, 10, 11),
+    );
+
+    Future<void> pump(WidgetTester tester, TrendSelection selection) =>
         tester.pumpWidget(
           MaterialApp(
             theme: AppTheme.light,
             home: Scaffold(
               body: Padding(
                 padding: const EdgeInsets.all(16),
-                child: TimeframePicker(
-                  range: TrendRange.hourly,
-                  custom: custom,
-                  customLabel: custom == null ? null : '10/1/2026 – 10/11/2026',
-                  onRange: (_) {},
-                  onCustom: () {},
-                  onClearCustom: () {},
-                ),
+                child: TimeframePicker(selection: selection, onChanged: (_) {}),
               ),
             ),
           ),
         );
 
-    testWidgets('on a phone the custom button has its own line', (
+    testWidgets('on a phone every preset and custom is on screen, apart', (
       tester,
     ) async {
       for (final width in [320.0, 360.0, 412.0]) {
-        for (final custom in [
-          null,
-          DateTimeRange(start: DateTime(2026, 10), end: DateTime(2026, 10, 11)),
+        for (final selection in [
+          const TrendSelection.preset(TrendRange.hourly),
+          TrendSelection.dates(october),
         ]) {
           setScreen(tester, width);
-          await pump(tester, custom: custom);
+          await pump(tester, selection);
           expect(tester.takeException(), isNull, reason: 'width $width');
 
           final customRect = tester.getRect(
-            find.text(custom == null ? 'Custom' : '10/1/2026 – 10/11/2026'),
+            find.text(selection.customLabel ?? 'Custom'),
           );
-          for (final r in TrendRange.values) {
-            final preset = tester.getRect(find.text(r.label));
-            expect(preset.overlaps(customRect), isFalse);
-            expect(preset.bottom, lessThanOrEqualTo(customRect.top));
+          final presets = [
+            for (final r in TrendRange.values)
+              tester.getRect(find.text(r.label)),
+          ];
+          for (final (i, preset) in presets.indexed) {
+            expect(preset.left, greaterThanOrEqualTo(0));
             expect(preset.right, lessThanOrEqualTo(width));
+            expect(preset.overlaps(customRect), isFalse);
+            expect(customRect.right, lessThanOrEqualTo(width));
+            for (final other in presets.skip(i + 1)) {
+              expect(preset.overlaps(other), isFalse);
+            }
           }
-          // The clear button only while a custom range is in use.
+          // Clearing and "Group by" only while a custom range is in use.
+          final isCustom = selection.isCustom;
           expect(
             find.byTooltip('Clear custom timeframe'),
-            custom == null ? findsNothing : findsOneWidget,
+            isCustom ? findsOneWidget : findsNothing,
+          );
+          expect(
+            find.text('Group by'),
+            isCustom ? findsOneWidget : findsNothing,
           );
         }
       }
     });
 
-    testWidgets('on a wide screen it all fits one line', (tester) async {
+    testWidgets('says what is shown', (tester) async {
       setScreen(tester, 1000);
-      await pump(tester);
-      final custom = tester.getRect(find.text('Custom'));
-      final hourly = tester.getRect(find.text('Hourly'));
-      expect((custom.center.dy - hourly.center.dy).abs(), lessThan(4));
-      expect(hourly.overlaps(custom), isFalse);
+      await pump(tester, const TrendSelection.preset(TrendRange.daily));
+      expect(find.text('Last 7 days · by day'), findsOneWidget);
+
+      await pump(tester, TrendSelection.dates(october));
+      expect(find.text('Oct 1 – Oct 11 · by day'), findsOneWidget);
+      await pump(
+        tester,
+        TrendSelection.dates(october, customStep: TrendStep.week),
+      );
+      expect(find.text('Oct 1 – Oct 11 · by week'), findsOneWidget);
+    });
+
+    testWidgets('on a wide screen the presets share one line', (tester) async {
+      setScreen(tester, 1000);
+      await pump(tester, const TrendSelection.preset(TrendRange.hourly));
+      final first = tester.getRect(find.text(TrendRange.values.first.label));
+      for (final r in TrendRange.values) {
+        final rect = tester.getRect(find.text(r.label));
+        expect((rect.center.dy - first.center.dy).abs(), lessThan(4));
+      }
     });
   });
 

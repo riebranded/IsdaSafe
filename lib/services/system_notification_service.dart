@@ -157,6 +157,13 @@ class SystemNotificationService extends ChangeNotifier {
     }
   }
 
+  /// The test from Settings shown right here: in the browser (which has no
+  /// Firebase push), a browser notification.
+  void showWebTest({required String title, required String body}) {
+    if (!isEnabled || !kIsWeb) return;
+    BrowserNotifications.show(title, body);
+  }
+
   /// Water alerts get their own Android channel, so they can be given a
   /// different sound (or silenced) separately in the phone's settings.
   static const _alertChannelId = 'water_alerts';

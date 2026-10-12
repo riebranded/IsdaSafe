@@ -156,7 +156,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('on a phone the custom timeframe sits below the presets', (
+  testWidgets('on a phone every timeframe is on screen, none overlapping', (
     tester,
   ) async {
     for (final width in [320.0, 360.0, 390.0]) {
@@ -188,7 +188,7 @@ void main() {
           isFalse,
           reason: '${r.label} overlaps Custom at width $width',
         );
-        expect(preset.bottom, lessThanOrEqualTo(custom.top));
+        expect(custom.right, lessThanOrEqualTo(width));
         // Every preset is fully on screen, not scrolled out of view.
         expect(preset.left, greaterThanOrEqualTo(0));
         expect(preset.right, lessThanOrEqualTo(width));

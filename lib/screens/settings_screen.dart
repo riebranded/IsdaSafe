@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -287,8 +288,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: AppSpacing.lg),
             const _NotificationsCard(),
             const SizedBox(height: AppSpacing.lg),
-            const _TextAlertsCard(),
-            const SizedBox(height: AppSpacing.lg),
             Card(
               child: ListTile(
                 leading: const Icon(Icons.logout),
@@ -304,7 +303,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 }
 
 /// Push notifications on/off: pond updates shown by the phone's or browser's
-/// own notifications, not just inside the app.
+/// own notifications (through Firebase Cloud Messaging on Android), not just
+/// inside the app; and SMS alerts on/off.
 class _NotificationsCard extends StatelessWidget {
   const _NotificationsCard();
 
@@ -375,8 +375,9 @@ class _NotificationsCard extends StatelessWidget {
                       : null,
                 ),
                 // To check that push works on this phone (Android).
-                if (PushService.instance.isSupported && service.isEnabled)
+                if (PushService.instance.canTest && service.isEnabled)
                   const _TestPushTile(),
+                const _SmsAlertsTile(),
               ],
             ),
           ),
@@ -433,7 +434,11 @@ class _TestPushTileState extends State<_TestPushTile> {
     return ListTile(
       leading: const Icon(Icons.send_to_mobile_outlined),
       title: Text('Send a test notification'.tr),
-      subtitle: Text('Checks that push notifications reach this phone.'.tr),
+      subtitle: Text(
+        kIsWeb
+            ? 'Checks that notifications show in this browser.'.tr
+            : 'Checks that push notifications reach this phone.'.tr,
+      ),
       trailing: _sending
           ? const SizedBox(
               width: 20,
@@ -446,36 +451,39 @@ class _TestPushTileState extends State<_TestPushTile> {
   }
 }
 
-/// Which pond water alerts are texted to the account's verified phone
-/// (`profiles.alert_sms`). The alerts themselves always appear in the
-/// Notifications list (and as push notifications when those are on).
-class _TextAlertsCard extends StatefulWidget {
-  const _TextAlertsCard();
+/// SMS alerts on/off (`profiles.alert_sms`): when a new reading puts a pond's
+/// water in warning or danger, the server texts the account's verified phone
+/// (the `evaluate_water_alerts()` trigger and the `send-alert-sms` edge
+/// function). The alerts always appear in the Notifications list too.
+class _SmsAlertsTile extends StatefulWidget {
+  const _SmsAlertsTile();
 
   @override
-  State<_TextAlertsCard> createState() => _TextAlertsCardState();
+  State<_SmsAlertsTile> createState() => _SmsAlertsTileState();
 }
 
-class _TextAlertsCardState extends State<_TextAlertsCard> {
+class _SmsAlertsTileState extends State<_SmsAlertsTile> {
   late final Future<({AlertSms level, String? phone})?> _loaded =
       AuthService.fetchAlertSms().then((value) {
-        if (value != null && mounted) setState(() => _level = value.level);
+        if (value != null && mounted) setState(() => _on = value.level.isOn);
         return value;
       });
-  AlertSms? _level;
+  bool? _on;
   bool _saving = false;
 
-  Future<void> _choose(AlertSms level) async {
-    final previous = _level;
+  Future<void> _set(bool on) async {
+    final previous = _on;
     setState(() {
-      _level = level;
+      _on = on;
       _saving = true;
     });
-    final ok = await AuthService.updateAlertSms(level);
+    final ok = await AuthService.updateAlertSms(
+      on ? AlertSms.warning : AlertSms.off,
+    );
     if (!mounted) return;
     setState(() {
       _saving = false;
-      if (!ok) _level = previous;
+      if (!ok) _on = previous;
     });
     if (!ok) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -490,67 +498,107 @@ class _TextAlertsCardState extends State<_TextAlertsCard> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-        child: FutureBuilder(
-          future: _loaded,
-          builder: (context, snapshot) {
-            final phone = snapshot.data?.phone;
-            final level = _level;
-            final String subtitle;
-            if (snapshot.connectionState != ConnectionState.done) {
-              subtitle = 'Loading…'.tr;
-            } else if (snapshot.data == null) {
-              subtitle = "Couldn't load your text alert setting.".tr;
-            } else if (phone == null) {
-              subtitle = 'Verify a phone number to get text alerts.'.tr;
-            } else {
-              subtitle =
-                  'Texts to {0} when a pond reading needs attention. Alerts always appear in Notifications too.'
-                      .trf([phone]);
-            }
-            final enabled = phone != null && level != null && !_saving;
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.sms_outlined),
-                  title: Text(
-                    'Text alerts'.tr,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  subtitle: Text(subtitle),
-                ),
-                RadioGroup<AlertSms>(
-                  groupValue: level,
-                  onChanged: (value) {
-                    if (enabled && value != null) _choose(value);
-                  },
-                  child: Column(
-                    children: [
-                      for (final (value, label) in [
-                        (AlertSms.warning, 'Warning and danger'.tr),
-                        (AlertSms.critical, 'Danger only'.tr),
-                        (AlertSms.off, 'Off'.tr),
-                      ])
-                        RadioListTile<AlertSms>(
-                          value: value,
-                          enabled: enabled,
-                          dense: true,
-                          title: Text(label),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
-            );
-          },
-        ),
+    return FutureBuilder(
+      future: _loaded,
+      builder: (context, snapshot) {
+        final phone = snapshot.data?.phone;
+        final on = _on;
+        final String subtitle;
+        if (snapshot.connectionState != ConnectionState.done) {
+          subtitle = 'Loading…'.tr;
+        } else if (snapshot.data == null) {
+          subtitle = "Couldn't load your text alert setting.".tr;
+        } else if (phone == null) {
+          subtitle = 'Verify a phone number to get text alerts.'.tr;
+        } else {
+          subtitle = 'Texts {0} when a pond reading is in warning or danger.'
+              .trf([phone]);
+        }
+        return Column(
+          children: [
+            SwitchListTile(
+              secondary: const Icon(Icons.sms_outlined),
+              title: Text('SMS alerts'.tr),
+              subtitle: Text(subtitle),
+              // Off until there's a verified phone to text.
+              value: phone != null && (on ?? false),
+              onChanged: phone != null && on != null && !_saving ? _set : null,
+            ),
+            if (phone != null) _TestSmsTile(phone: phone),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// Texts a made-up water alert to the verified phone, to check that alert
+/// texts really arrive (and say why not when they can't).
+class _TestSmsTile extends StatefulWidget {
+  const _TestSmsTile({required this.phone});
+
+  final String phone;
+
+  @override
+  State<_TestSmsTile> createState() => _TestSmsTileState();
+}
+
+class _TestSmsTileState extends State<_TestSmsTile> {
+  bool _sending = false;
+
+  Future<void> _send() async {
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _sending = true);
+    final result = await AuthService.sendTestSms();
+    if (!mounted) return;
+    setState(() => _sending = false);
+    messenger.showSnackBar(
+      SnackBar(
+        duration: const Duration(seconds: 8),
+        content: Text(switch (result) {
+          TestSmsResult.sent =>
+            'Test SMS sent to {0}. It should arrive within a minute.'.trf([
+              widget.phone,
+            ]),
+          TestSmsResult.failed =>
+            'Semaphore rejected the SMS. Check your Semaphore credits and sender name.'
+                .tr,
+          TestSmsResult.disabled =>
+            'SMS is switched off on the server: set the SMS_ENABLED secret to true in Supabase.'
+                .tr,
+          TestSmsResult.notConfigured =>
+            "SMS isn't set up on the server yet: add the SEMAPHORE_API_KEY secret in Supabase."
+                .tr,
+          TestSmsResult.noPhone =>
+            'Verify a phone number to get text alerts.'.tr,
+          TestSmsResult.rateLimited =>
+            'Too many test texts. Try again in an hour.'.tr,
+          TestSmsResult.unreachable =>
+            "Couldn't send the test SMS. Check your connection and try again."
+                .tr,
+        }),
       ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: const Icon(Icons.outgoing_mail),
+      title: Text('Send a test SMS alert'.tr),
+      subtitle: Text(
+        'Texts a sample water alert to {0} to check SMS alerts work.'.trf([
+          widget.phone,
+        ]),
+      ),
+      trailing: _sending
+          ? const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(Icons.chevron_right),
+      onTap: _sending ? null : _send,
     );
   }
 }

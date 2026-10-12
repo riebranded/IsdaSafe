@@ -53,6 +53,10 @@ class PushService {
   /// Whether this platform gets push notifications at all.
   bool get isSupported => _ready;
 
+  /// Whether Settings can send a test notification here: through Firebase on
+  /// Android, as a browser notification on the web.
+  bool get canTest => _ready || kIsWeb;
+
   /// How long [sendTest] waits before pushing, so there's time to leave the
   /// app and see it arrive like a real alert.
   static const testDelay = Duration(seconds: 5);
@@ -118,6 +122,7 @@ class PushService {
   /// Asks the server to push a test notification to this account's phones
   /// after [testDelay]. Makes sure this phone is registered first.
   Future<TestPushResult> sendTest() async {
+    if (kIsWeb) return _sendWebTest();
     if (!_ready) return TestPushResult.unsupported;
     if (!SystemNotificationService.instance.isEnabled) {
       return TestPushResult.notRegistered;
@@ -141,6 +146,23 @@ class PushService {
       debugPrint('PushService: test push failed $e');
       return TestPushResult.failed;
     }
+  }
+
+  /// The browser has no Firebase push: shows a browser notification after
+  /// [testDelay] instead, so there's time to switch tabs and see it arrive.
+  TestPushResult _sendWebTest() {
+    final notifications = SystemNotificationService.instance;
+    if (!notifications.isEnabled) return TestPushResult.notRegistered;
+    unawaited(
+      Future.delayed(
+        testDelay,
+        () => notifications.showWebTest(
+          title: 'IsdaSafe test notification',
+          body: 'Notifications work in this browser.',
+        ),
+      ),
+    );
+    return TestPushResult.scheduled;
   }
 
   /// Stops push to this phone for the signed-in account. Call before

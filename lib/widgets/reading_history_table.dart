@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../models/metric_type.dart';
 import '../models/reading_bands.dart';
 import '../models/sensor_reading.dart';
+import '../models/trend_range.dart';
+import '../services/readings_pager.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_theme.dart';
 import 'lazy_load_footer.dart';
@@ -14,59 +16,124 @@ import '../l10n/tr.dart';
 /// for when a farmer wants the exact numbers. Values outside the healthy range
 /// are colored by their status so they stand out while scrolling. Wide screens
 /// get a table; narrow ones a card per reading with each value under its
-/// sensor's name. Readings appear a page at a time, the next page loading as
-/// the list is scrolled to its end. Give it a key per pond and timeframe so
-/// it starts over at the first page when either changes.
+/// sensor's name.
+///
+/// Readings come from a [ReadingsPager]: only a page is fetched at first, and
+/// the next one as the list is scrolled to its end, so a long timeframe never
+/// downloads everything at once. Give it a key per pond and timeframe so it
+/// starts over when either changes.
 class ReadingHistoryTable extends StatefulWidget {
-  const ReadingHistoryTable({super.key, required this.history});
+  const ReadingHistoryTable({super.key, this.pager, this.history, this.types})
+    : assert(pager != null || history != null);
 
-  /// Per metric, oldest first (see `PondSnapshotCache`).
-  final Map<MetricType, List<SensorReading>> history;
+  /// Fetches the timeframe's readings page by page. Owned by the caller.
+  final ReadingsPager? pager;
+
+  /// Readings already in memory, per metric and oldest first, used instead
+  /// of [pager].
+  final Map<MetricType, List<SensorReading>>? history;
+
+  /// Only these metrics' columns; by default every metric with a value.
+  final List<MetricType>? types;
 
   @override
   State<ReadingHistoryTable> createState() => _ReadingHistoryTableState();
 }
 
 class _ReadingHistoryTableState extends State<ReadingHistoryTable> {
-  static const _pageSize = 20;
-  int _shown = _pageSize;
+  ReadingsPager? _own;
+
+  ReadingsPager get _pager => widget.pager ?? _own!;
 
   @override
-  Widget build(BuildContext context) {
+  void initState() {
+    super.initState();
+    if (widget.pager == null) {
+      final history = widget.history!;
+      final end = DateTime.now().add(const Duration(days: 3650));
+      _own = ReadingsPager(
+        pondId: '',
+        start: DateTime(1970),
+        end: end,
+        source: MemoryReadingsPageSource(history),
+      );
+    }
+    // The first page; the rest as the list is scrolled to its end.
+    _pager.loadMore();
+  }
+
+  @override
+  void dispose() {
+    _own?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      ListenableBuilder(listenable: _pager, builder: _build);
+
+  Widget _build(BuildContext context, Widget? _) {
     final theme = Theme.of(context);
     final muted = theme.colorScheme.onSurfaceVariant;
+    final pager = _pager;
+    final wanted = widget.types ?? MetricType.values;
 
-    // One row per reading time across every metric. A device's metrics can
-    // have gaps (a sensor that failed to read), so a cell may be empty.
+    // One row per reading time. A device's metrics can have gaps (a sensor
+    // that failed to read), so a cell may be empty.
     final byTime = <DateTime, Map<MetricType, double>>{};
-    for (final type in MetricType.values) {
-      for (final reading in widget.history[type] ?? const <SensorReading>[]) {
-        (byTime[reading.timestamp] ??= {})[type] = reading.value;
-      }
+    for (final row in pager.rows) {
+      final values = {
+        for (final e in row.values.entries)
+          if (wanted.contains(e.key)) e.key: e.value,
+      };
+      if (values.isNotEmpty) byTime[row.time] = values;
     }
-    // Leave out metrics the device never sent in this timeframe, rather than
-    // a column of dashes.
+    // Leave out metrics the device never sent, rather than a column of
+    // dashes.
     final types = [
-      for (final type in MetricType.values)
-        if (widget.history[type]?.isNotEmpty ?? false) type,
+      for (final type in wanted)
+        if (byTime.values.any((v) => v.containsKey(type))) type,
     ];
     final times = byTime.keys.toList()..sort((a, b) => b.compareTo(a));
 
     if (times.isEmpty) {
+      if (pager.loading || (pager.remaining > 0 && pager.error == null)) {
+        return const Padding(
+          padding: EdgeInsets.all(AppSpacing.xl),
+          child: Center(child: CircularProgressIndicator()),
+        );
+      }
       return Card(
         margin: EdgeInsets.zero,
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.xl),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.table_rows_outlined, color: muted),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: Text(
-                  'No readings in this timeframe'.tr,
-                  style: theme.textTheme.bodyMedium?.copyWith(color: muted),
-                ),
+              Row(
+                children: [
+                  Icon(Icons.table_rows_outlined, color: muted),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: Text(
+                      pager.error == null
+                          ? 'No readings in this timeframe'.tr
+                          : "Couldn't load the readings.".tr,
+                      style: theme.textTheme.bodyMedium?.copyWith(color: muted),
+                    ),
+                  ),
+                ],
               ),
+              // Below the message: on a narrow phone there's no room beside it.
+              if (pager.error != null)
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: pager.loadMore,
+                    icon: const Icon(Icons.refresh),
+                    label: Text('Retry'.tr),
+                  ),
+                ),
             ],
           ),
         ),
@@ -81,8 +148,7 @@ class _ReadingHistoryTableState extends State<ReadingHistoryTable> {
           ),
         )
         .length;
-    final shown = _shown.clamp(0, times.length);
-    final remaining = times.length - shown;
+    final remaining = pager.remaining;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -92,19 +158,17 @@ class _ReadingHistoryTableState extends State<ReadingHistoryTable> {
           runSpacing: AppSpacing.xs,
           children: [
             _SummaryChip(
-              icon: Icons.table_rows_outlined,
-              label: times.length == 1
-                  ? '1 reading'.tr
-                  : '{0} readings'.trf([times.length]),
-              color: muted,
-            ),
-            _SummaryChip(
               icon: outOfRange == 0
                   ? Icons.check_circle_outline
                   : Icons.warning_amber_outlined,
+              // Counted over the readings loaded so far.
               label: outOfRange == 0
-                  ? 'All within healthy range'.tr
-                  : '{0} outside healthy range'.trf([outOfRange]),
+                  ? (remaining > 0
+                        ? 'None outside healthy range so far'.tr
+                        : 'All within healthy range'.tr)
+                  : (remaining > 0
+                        ? '{0} outside healthy range so far'.trf([outOfRange])
+                        : '{0} outside healthy range'.trf([outOfRange])),
               color: outOfRange == 0
                   ? context.statusColors.good
                   : context.statusColors.warning,
@@ -118,26 +182,27 @@ class _ReadingHistoryTableState extends State<ReadingHistoryTable> {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final wide = constraints.maxWidth >= 640;
+              String label(DateTime t) => pager.step?.rowLabel(t) ?? _time(t);
               final rows = <Widget>[];
               if (wide) rows.add(_HeaderRow(types: types));
               DateTime? currentDay;
-              for (final time in times.take(shown)) {
+              for (final time in times) {
                 final day = DateUtils.dateOnly(time);
-                if (day != currentDay) {
+                if (day != currentDay && (pager.step?.withinDay ?? true)) {
                   currentDay = day;
                   rows.add(_DayHeader(label: _dayLabel(time)));
-                } else {
+                } else if (time != times.first) {
                   rows.add(const Divider(height: 1));
                 }
                 rows.add(
                   wide
                       ? _TableRow(
-                          time: _time(time),
+                          time: label(time),
                           types: types,
                           values: byTime[time]!,
                         )
                       : _CompactRow(
-                          time: _time(time),
+                          time: label(time),
                           types: types,
                           values: byTime[time]!,
                         ),
@@ -147,10 +212,26 @@ class _ReadingHistoryTableState extends State<ReadingHistoryTable> {
             },
           ),
         ),
-        LazyLoadFooter(
-          remaining: remaining,
-          onLoadMore: () => setState(() => _shown += _pageSize),
-        ),
+        if (pager.loading)
+          const Padding(
+            padding: EdgeInsets.all(AppSpacing.md),
+            child: Center(
+              child: SizedBox.square(
+                dimension: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          )
+        else if (pager.error != null)
+          Center(
+            child: TextButton.icon(
+              onPressed: pager.loadMore,
+              icon: const Icon(Icons.refresh),
+              label: Text("Couldn't load more readings. Retry".tr),
+            ),
+          )
+        else
+          LazyLoadFooter(remaining: remaining, onLoadMore: pager.loadMore),
       ],
     );
   }
@@ -171,7 +252,7 @@ class _ReadingHistoryTableState extends State<ReadingHistoryTable> {
   }
 }
 
-const _timeColumnWidth = 96.0;
+const _timeColumnWidth = 128.0;
 
 class _SummaryChip extends StatelessWidget {
   const _SummaryChip({

@@ -898,6 +898,9 @@ const Map<String, String> tagalogStrings = {
   'Texts to {0} when a pond reading needs attention. Alerts always appear in Notifications too.':
       'Magte-text sa {0} kapag may reading ng pond na kailangang asikasuhin. Lumalabas din palagi ang mga alert sa Notifications.',
   'Text alerts': 'Mga text alert',
+  'SMS alerts': 'Mga SMS alert',
+  'Texts {0} when a pond reading is in warning or danger.':
+      'Magte-text sa {0} kapag ang reading ng pond ay nasa babala o panganib.',
   'Warning and danger': 'Babala at panganib',
   'Danger only': 'Panganib lang',
   'Off': 'Naka-off',
@@ -920,7 +923,62 @@ const Map<String, String> tagalogStrings = {
   "Couldn't send the test notification. Check your connection and try again.":
       'Hindi maipadala ang test notification. Tingnan ang iyong koneksyon at subukan ulit.',
   'Send a test notification': 'Magpadala ng test notification',
+  'Checks that notifications show in this browser.':
+      'Tinitingnan kung lumalabas ang mga notification sa browser na ito.',
+  'Send a test SMS alert': 'Magpadala ng test SMS alert',
+  'Texts a sample water alert to {0} to check SMS alerts work.':
+      'Magte-text ng halimbawang water alert sa {0} para matiyak na gumagana ang mga SMS alert.',
+  'Test SMS sent to {0}. It should arrive within a minute.':
+      'Naipadala ang test SMS sa {0}. Darating ito sa loob ng isang minuto.',
+  'Semaphore rejected the SMS. Check your Semaphore credits and sender name.':
+      'Tinanggihan ng Semaphore ang SMS. Tingnan ang iyong Semaphore credits at sender name.',
+  'SMS is switched off on the server: set the SMS_ENABLED secret to true in Supabase.':
+      'Naka-off ang SMS sa server: itakda sa true ang SMS_ENABLED secret sa Supabase.',
+  "SMS isn't set up on the server yet: add the SEMAPHORE_API_KEY secret in Supabase.":
+      'Hindi pa naka-set up ang SMS sa server: idagdag ang SEMAPHORE_API_KEY secret sa Supabase.',
+  'Too many test texts. Try again in an hour.':
+      'Masyadong maraming test text. Subukan ulit pagkalipas ng isang oras.',
+  "Couldn't send the test SMS. Check your connection and try again.":
+      'Hindi maipadala ang test SMS. Tingnan ang iyong koneksyon at subukan ulit.',
   'Checks that push notifications reach this phone.':
       'Tinitingnan kung umaabot ang push notifications sa phone na ito.',
   'Load more': 'Mag-load pa',
+  "Couldn't load the readings.": 'Hindi ma-load ang mga reading.',
+  "Couldn't load more readings. Retry":
+      'Hindi ma-load ang iba pang reading. Subukan muli',
+  'Readings in this timeframe': 'Mga reading sa panahong ito',
+  'None outside healthy range so far':
+      'Wala pang labas sa malusog na saklaw sa ngayon',
+  '{0} outside healthy range so far':
+      '{0} ang labas sa malusog na saklaw sa ngayon',
+  'Daily': 'Araw-araw',
+  'Weekly': 'Lingguhan',
+  'Monthly': 'Buwanan',
+  'Yearly': 'Taunan',
+  'Hour': 'Oras',
+  'Day': 'Araw',
+  'every 15 minutes': 'bawat 15 minuto',
+  'by hour': 'kada oras',
+  'Averages {0}': 'Mga average {0}',
+  'by day': 'kada araw',
+  'by week': 'kada linggo',
+  'by month': 'kada buwan',
+  'by year': 'kada taon',
+  'Last 2 hours': 'Nakaraang 2 oras',
+  'Last 24 hours': 'Nakaraang 24 oras',
+  'Last 7 days': 'Nakaraang 7 araw',
+  'Last 8 weeks': 'Nakaraang 8 linggo',
+  'Last 12 months': 'Nakaraang 12 buwan',
+  'Last 5 years': 'Nakaraang 5 taon',
+  'Group by': 'Ipangkat ayon sa',
+  'Pick your own dates': 'Pumili ng sariling petsa',
+  'Change dates': 'Palitan ang petsa',
+  'Week of {0}': 'Linggo ng {0}',
+  'Line: average per step. Shaded: lowest to highest.':
+      'Linya: average bawat hakbang. May lilim: pinakamababa hanggang pinakamataas.',
+  'Line: average per step.': 'Linya: average bawat hakbang.',
+  'No readings in this timeframe. Try a longer one.':
+      'Walang reading sa panahong ito. Subukan ang mas mahabang panahon.',
+  'Only the latest readings could be loaded, so this may not cover the whole timeframe.':
+      'Ang mga pinakabagong reading lang ang na-load, kaya maaaring hindi nito sakop ang buong panahon.',
 };

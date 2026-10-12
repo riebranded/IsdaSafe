@@ -18,10 +18,19 @@ class IndividualTrendChart extends StatelessWidget {
     super.key,
     required this.type,
     required this.history,
-    required this.range,
+    this.range = TrendRange.hourly,
     this.timeFormat,
+    this.tooltipTimeFormat,
+    this.band,
+    this.latest,
+    this.emptyMessage,
+    this.showDetails = true,
     this.onTap,
   });
+
+  /// The name / current value / healthy range pane beside the chart. Off
+  /// where the page already shows them (a metric's detail view).
+  final bool showDetails;
 
   /// Makes the card tappable (e.g. to open a detailed view). The chart's own
   /// tap/drag scrubbing still takes precedence over it.
@@ -33,9 +42,21 @@ class IndividualTrendChart extends StatelessWidget {
   /// Overrides [range]'s x-axis labels, for a custom timeframe.
   final String Function(DateTime)? timeFormat;
 
-  /// Drives the bottom axis's date/time label granularity — must match
-  /// whatever range [history] was actually fetched for (see
-  /// `AnalyticsScreen`'s `_range`/`historyForRange`).
+  /// The tooltip's time, e.g. the whole step ("Mon, Oct 12"); defaults to
+  /// [timeFormat].
+  final String Function(DateTime)? tooltipTimeFormat;
+
+  /// Per point of [history], the lowest and highest reading it stands for
+  /// (when each point is a step's average): drawn as a shaded band.
+  final List<({double min, double max})>? band;
+
+  /// The value shown beside the chart; defaults to the last point.
+  final SensorReading? latest;
+
+  /// Shown instead of the chart when [history] is empty.
+  final String? emptyMessage;
+
+  /// Drives the bottom axis's labels when there's no [timeFormat].
   final TrendRange range;
 
   @override
@@ -49,11 +70,11 @@ class IndividualTrendChart extends StatelessWidget {
         child: ListTile(
           leading: Icon(type.icon, color: color),
           title: Text(type.label),
-          subtitle: Text('No readings in this timeframe'.tr),
+          subtitle: Text(emptyMessage ?? 'No readings in this timeframe'.tr),
         ),
       );
     }
-    final latest = history.last;
+    final latest = this.latest ?? history.last;
     final status = metricBands[type]!.statusFor(latest.value);
 
     final detailsContent = _Details(
@@ -66,13 +87,23 @@ class IndividualTrendChart extends StatelessWidget {
     final details = onTap == null
         ? detailsContent
         : InkWell(onTap: onTap, child: detailsContent);
+    final axisFormat = timeFormat ?? range.formatTimestamp;
     final chart = _Chart(
       type: type,
       history: history,
-      timeFormat: timeFormat ?? range.formatTimestamp,
+      band: band,
+      timeFormat: axisFormat,
+      tooltipTimeFormat: tooltipTimeFormat ?? axisFormat,
       color: color,
     );
 
+    if (!showDetails) {
+      return Card(
+        margin: EdgeInsets.zero,
+        clipBehavior: Clip.antiAlias,
+        child: SizedBox(height: 220, child: chart),
+      );
+    }
     return Card(
       margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
@@ -266,13 +297,17 @@ class _Chart extends StatefulWidget {
   const _Chart({
     required this.type,
     required this.history,
+    required this.band,
     required this.timeFormat,
+    required this.tooltipTimeFormat,
     required this.color,
   });
 
   final MetricType type;
   final List<SensorReading> history;
+  final List<({double min, double max})>? band;
   final String Function(DateTime) timeFormat;
+  final String Function(DateTime) tooltipTimeFormat;
   final Color color;
 
   @override
@@ -283,11 +318,21 @@ class _ChartState extends State<_Chart> {
   int? _selectedIndex;
 
   void _selectAt(double localX, double width, double leftMargin) {
-    final count = widget.history.length;
-    if (count < 2) return;
+    final history = widget.history;
+    if (history.length < 2) return;
     final plotWidth = width - leftMargin - _TrendPainter.rightInset;
     final fraction = ((localX - leftMargin) / plotWidth).clamp(0.0, 1.0);
-    final index = (fraction * (count - 1)).round().clamp(0, count - 1);
+    // Points sit at their time, so pick the one nearest the pointer's time.
+    final first = history.first.timestamp.millisecondsSinceEpoch;
+    final last = history.last.timestamp.millisecondsSinceEpoch;
+    final target = first + (last - first) * fraction;
+    var index = 0;
+    for (var i = 1; i < history.length; i++) {
+      final d = (history[i].timestamp.millisecondsSinceEpoch - target).abs();
+      final best = (history[index].timestamp.millisecondsSinceEpoch - target)
+          .abs();
+      if (d < best) index = i;
+    }
     if (index != _selectedIndex) setState(() => _selectedIndex = index);
   }
 
@@ -296,7 +341,12 @@ class _ChartState extends State<_Chart> {
     final theme = Theme.of(context);
     final history = widget.history;
 
-    final values = [for (final point in history) point.value];
+    final band = widget.band;
+    final values = [
+      for (final point in history) point.value,
+      if (band != null)
+        for (final b in band) ...[b.min, b.max],
+    ];
     var min = values.reduce((a, b) => a < b ? a : b);
     var max = values.reduce((a, b) => a > b ? a : b);
     if (min == max) {
@@ -308,10 +358,13 @@ class _ChartState extends State<_Chart> {
     min -= pad;
     max += pad;
 
-    final labelStyle = TextStyle(
-      fontSize: 10,
-      color: theme.colorScheme.onSurfaceVariant,
-    );
+    // The app's font, not the canvas default.
+    final labelStyle =
+        theme.textTheme.labelSmall?.copyWith(
+          fontSize: 10,
+          color: theme.colorScheme.onSurfaceVariant,
+        ) ??
+        TextStyle(fontSize: 10, color: theme.colorScheme.onSurfaceVariant);
     final leftMargin = _measureLeftMargin(
       [max, min],
       widget.type.formatValue,
@@ -341,6 +394,7 @@ class _ChartState extends State<_Chart> {
                 size: Size(constraints.maxWidth, constraints.maxHeight),
                 painter: _TrendPainter(
                   history: history,
+                  band: band,
                   min: min,
                   max: max,
                   color: widget.color,
@@ -353,6 +407,7 @@ class _ChartState extends State<_Chart> {
                   valueFormat: widget.type.format,
                   axisValueFormat: widget.type.formatValue,
                   timeFormat: widget.timeFormat,
+                  tooltipTimeFormat: widget.tooltipTimeFormat,
                   leftMargin: leftMargin,
                   labelStyle: labelStyle,
                   tooltipColor: theme.colorScheme.inverseSurface,
@@ -388,6 +443,7 @@ double _measureLeftMargin(
 class _TrendPainter extends CustomPainter {
   _TrendPainter({
     required this.history,
+    required this.band,
     required this.min,
     required this.max,
     required this.color,
@@ -398,6 +454,7 @@ class _TrendPainter extends CustomPainter {
     required this.valueFormat,
     required this.axisValueFormat,
     required this.timeFormat,
+    required this.tooltipTimeFormat,
     required this.leftMargin,
     required this.labelStyle,
     required this.tooltipColor,
@@ -405,6 +462,7 @@ class _TrendPainter extends CustomPainter {
   });
 
   final List<SensorReading> history;
+  final List<({double min, double max})>? band;
   final double min;
   final double max;
   final Color color;
@@ -423,6 +481,9 @@ class _TrendPainter extends CustomPainter {
 
   /// A point's timestamp at this chart's [TrendRange] granularity.
   final String Function(DateTime) timeFormat;
+
+  /// The selected point's time in the tooltip.
+  final String Function(DateTime) tooltipTimeFormat;
 
   final double leftMargin;
   final TextStyle labelStyle;
@@ -443,10 +504,15 @@ class _TrendPainter extends CustomPainter {
 
     double yOf(double value) =>
         plotTop + (1 - (value - min) / (max - min)) * plotHeight;
+    // At their time, so a step with no readings shows as a gap.
+    final t0 = history.first.timestamp.millisecondsSinceEpoch;
+    final tSpan = history.last.timestamp.millisecondsSinceEpoch - t0;
     double xOf(int i) =>
         leftMargin +
-        (history.length > 1
-            ? plotWidth / (history.length - 1) * i
+        (history.length > 1 && tSpan > 0
+            ? plotWidth *
+                  (history[i].timestamp.millisecondsSinceEpoch - t0) /
+                  tSpan
             : plotWidth / 2);
 
     // Light horizontal gridlines with y labels.
@@ -474,6 +540,20 @@ class _TrendPainter extends CustomPainter {
       for (var i = 0; i < history.length; i++)
         Offset(xOf(i), yOf(history[i].value)),
     ];
+
+    // Each step's lowest-to-highest spread, under the line.
+    final band = this.band;
+    if (band != null && band.length == history.length && history.length > 1) {
+      final spread = Path()..moveTo(xOf(0), yOf(band[0].max));
+      for (var i = 1; i < band.length; i++) {
+        spread.lineTo(xOf(i), yOf(band[i].max));
+      }
+      for (var i = band.length - 1; i >= 0; i--) {
+        spread.lineTo(xOf(i), yOf(band[i].min));
+      }
+      spread.close();
+      canvas.drawPath(spread, Paint()..color = color.withValues(alpha: 0.14));
+    }
 
     // A smooth curve through the points (horizontal control handles, so it
     // never overshoots the data).
@@ -513,21 +593,26 @@ class _TrendPainter extends CustomPainter {
         ..strokeJoin = StrokeJoin.round,
     );
 
-    // X-axis labels, thinned so they never crowd each other.
+    // X-axis labels, thinned so they never crowd each other: a label is
+    // skipped when it would touch the one before it, or repeat its text.
     final step = (points.length / _maxXLabels).ceil().clamp(1, points.length);
+    var lastRight = double.negativeInfinity;
+    String? lastText;
     for (var i = 0; i < points.length; i += step) {
+      final text = timeFormat(history[i].timestamp);
+      if (text == lastText) continue;
       final label = TextPainter(
-        text: TextSpan(
-          text: timeFormat(history[i].timestamp),
-          style: labelStyle,
-        ),
+        text: TextSpan(text: text, style: labelStyle),
         textDirection: TextDirection.ltr,
       )..layout();
       final x = (points[i].dx - label.width / 2).clamp(
         leftMargin,
         size.width - label.width,
       );
+      if (x < lastRight + 8) continue;
       label.paint(canvas, Offset(x, plotBottom + 6));
+      lastRight = x + label.width;
+      lastText = text;
     }
 
     final index = selectedIndex;
@@ -544,10 +629,11 @@ class _TrendPainter extends CustomPainter {
     canvas.drawCircle(p, 5, Paint()..color = surfaceColor);
     canvas.drawCircle(p, 3.5, Paint()..color = color);
 
-    // Dark tooltip card: time over value, kept inside the plot.
+    // Dark tooltip card: time over value (and the step's spread), kept
+    // inside the plot.
     final time = TextPainter(
       text: TextSpan(
-        text: timeFormat(history[index].timestamp),
+        text: tooltipTimeFormat(history[index].timestamp),
         style: TextStyle(
           fontSize: 10,
           color: tooltipTextColor.withValues(alpha: 0.75),
@@ -566,9 +652,29 @@ class _TrendPainter extends CustomPainter {
       ),
       textDirection: TextDirection.ltr,
     )..layout();
+    final b = band != null && band.length == history.length
+        ? band[index]
+        : null;
+    final spread = b == null || b.min == b.max
+        ? null
+        : (TextPainter(
+            text: TextSpan(
+              text: '${axisValueFormat(b.min)} – ${valueFormat(b.max)}',
+              style: TextStyle(
+                fontSize: 10,
+                color: tooltipTextColor.withValues(alpha: 0.75),
+              ),
+            ),
+            textDirection: TextDirection.ltr,
+          )..layout());
     const padX = 10.0, padY = 6.0;
-    final w = (time.width > value.width ? time.width : value.width) + padX * 2;
-    final h = time.height + value.height + padY * 2;
+    final widest = [
+      time.width,
+      value.width,
+      spread?.width ?? 0.0,
+    ].reduce((a, c) => a > c ? a : c);
+    final w = widest + padX * 2;
+    final h = time.height + value.height + (spread?.height ?? 0) + padY * 2;
     final left = (p.dx - w / 2).clamp(0.0, size.width - w);
     // Above the point when there's room, else below it.
     final top = p.dy - h - 12 >= 0 ? p.dy - h - 12 : p.dy + 12;
@@ -581,12 +687,17 @@ class _TrendPainter extends CustomPainter {
     );
     time.paint(canvas, Offset(left + padX, top + padY));
     value.paint(canvas, Offset(left + padX, top + padY + time.height));
+    spread?.paint(
+      canvas,
+      Offset(left + padX, top + padY + time.height + value.height),
+    );
   }
 
   @override
   bool shouldRepaint(covariant _TrendPainter oldDelegate) {
     return oldDelegate.selectedIndex != selectedIndex ||
         oldDelegate.history != history ||
+        oldDelegate.band != band ||
         oldDelegate.min != min ||
         oldDelegate.max != max ||
         oldDelegate.color != color ||

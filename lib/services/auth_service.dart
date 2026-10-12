@@ -527,9 +527,10 @@ abstract final class AuthService {
     }
   }
 
-  /// Which pond water alerts are texted to the verified phone
-  /// (`profiles.alert_sms`): [AlertSms.warning] (warning and danger),
-  /// [AlertSms.critical] (danger only) or [AlertSms.off]. Null if it can't be
+  /// Whether pond water alerts are texted to the verified phone
+  /// (`profiles.alert_sms`): [AlertSms.warning] (warning and danger, the
+  /// default), [AlertSms.critical] (danger only) or [AlertSms.off]. Settings
+  /// shows it as an on/off switch ([AlertSms.isOn]). Null if it can't be
   /// loaded.
   static Future<({AlertSms level, String? phone})?> fetchAlertSms() async {
     final uid = currentUser?.id;
@@ -570,6 +571,25 @@ abstract final class AuthService {
     }
   }
 
+  /// Texts a made-up water alert to the verified phone (the `send-test-sms`
+  /// edge function), worded like a real one, to check alert texts arrive.
+  static Future<TestSmsResult> sendTestSms() async {
+    if (currentUser == null) return TestSmsResult.failed;
+    try {
+      final response = await _client.functions.invoke('send-test-sms');
+      final data = response.data as Map?;
+      final status = data?['status'];
+      debugPrint('AuthService: test SMS -> $status ${data?['detail'] ?? ''}');
+      return TestSmsResult.values.firstWhere(
+        (v) => v.status == status,
+        orElse: () => TestSmsResult.failed,
+      );
+    } catch (e) {
+      debugPrint('AuthService: test SMS failed $e');
+      return TestSmsResult.unreachable;
+    }
+  }
+
   /// Used by the dashboard sidebar's account section to show the current
   /// user's name/email/photo. Unlike [hasVerifiedProfile], failures surface
   /// as null rather than being swallowed, since the caller has a clear
@@ -597,6 +617,35 @@ abstract final class AuthService {
   }
 }
 
+/// How "Send a test SMS alert" went ([AuthService.sendTestSms]).
+enum TestSmsResult {
+  /// Semaphore accepted it; it arrives in a minute or so.
+  sent('sent'),
+
+  /// Semaphore rejected it (credits, sender name, ...).
+  failed('failed'),
+
+  /// The server's SMS_ENABLED secret isn't "true".
+  disabled('disabled'),
+
+  /// The server has no SEMAPHORE_API_KEY secret.
+  notConfigured('not_configured'),
+
+  /// No verified phone on the account.
+  noPhone('no_phone'),
+
+  /// Too many tests this hour.
+  rateLimited('rate_limited'),
+
+  /// Couldn't reach the server.
+  unreachable('');
+
+  const TestSmsResult(this.status);
+
+  /// What the edge function answers.
+  final String status;
+}
+
 /// Which pond water alerts are texted (`profiles.alert_sms`).
 enum AlertSms {
   /// Warning and danger.
@@ -605,5 +654,8 @@ enum AlertSms {
   /// Danger only.
   critical,
 
-  off,
+  off;
+
+  /// Whether any alerts are texted.
+  bool get isOn => this != AlertSms.off;
 }

@@ -41,8 +41,8 @@ as $$
   end::smallint
 $$;
 
--- Total ammonia no longer alerts; forget where it stood.
-delete from public.pond_alert_state where metric = 'ammonia';
+-- Total ammonia no longer alerts. Its old pond_alert_state rows (metric
+-- 'ammonia') are left as they are: nothing reads them any more.
 
 create or replace function public.evaluate_water_alerts()
 returns trigger

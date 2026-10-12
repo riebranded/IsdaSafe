@@ -3,123 +3,139 @@ import 'package:flutter/material.dart';
 import '../l10n/tr.dart';
 import '../models/trend_range.dart';
 import '../theme/app_spacing.dart';
+import 'modal_date_range_picker.dart';
 
-/// The preset timeframes (15 min, Hourly, Week, Month, Year) and a "Custom"
-/// button for a picked date range, shared by the Analytics page and a
-/// reading's detail view. Picking a preset clears the custom range.
-///
-/// On wide screens they share one line (presets scrolling if needed, custom
-/// on the right). On phones the presets fill the width and the custom button
-/// gets its own line below, so they never overlap.
+/// Picks what a trend shows, shared by the Analytics page and a reading's
+/// detail view:
+///  * the presets (15 min, Hourly, Daily, Weekly, Monthly, Yearly) as chips
+///    that wrap onto a second line on a phone instead of scrolling out of
+///    view;
+///  * "Custom" after them, opening a date range picker; while a custom range
+///    is in use the dates show on their own line instead (tap to change, x to
+///    go back to [lastPreset]), with a "Group by" choice of the steps that
+///    suit it;
+///  * a line saying what's shown, e.g. "Last 24 hours · by hour".
 class TimeframePicker extends StatelessWidget {
   const TimeframePicker({
     super.key,
-    required this.range,
-    required this.custom,
-    required this.customLabel,
-    required this.onRange,
-    required this.onCustom,
-    this.onClearCustom,
+    required this.selection,
+    required this.onChanged,
+    this.lastPreset = TrendRange.hourly,
   });
 
-  final TrendRange range;
+  final TrendSelection selection;
+  final ValueChanged<TrendSelection> onChanged;
 
-  /// The custom range in use, or null for [range].
-  final DateTimeRange? custom;
+  /// Where clearing a custom range goes back to.
+  final TrendRange lastPreset;
 
-  /// How [custom] is shown on its button, e.g. "10/1/2026 – 10/11/2026".
-  final String? customLabel;
-  final ValueChanged<TrendRange> onRange;
-  final VoidCallback onCustom;
-
-  /// Adds a clear button next to the custom button while a custom range is
-  /// in use.
-  final VoidCallback? onClearCustom;
-
-  /// Below this width the presets and the custom button don't fit on one
-  /// line (five presets plus "Custom", or a date range, on a phone).
-  static const oneLineMinWidth = 560.0;
+  Future<void> _pickDates(BuildContext context) async {
+    final picked = await showModalDateRangePicker(
+      context,
+      initial: selection.custom,
+    );
+    if (picked == null) return;
+    onChanged(TrendSelection.dates(picked, customStep: selection.customStep));
+  }
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final narrow = constraints.maxWidth < oneLineMinWidth;
-        final presets = SegmentedButton<TrendRange>(
-          emptySelectionAllowed: true,
-          // The checkmark costs each segment width a phone doesn't have.
-          showSelectedIcon: !narrow,
-          expandedInsets: narrow ? EdgeInsets.zero : null,
-          segments: [
-            for (final r in TrendRange.values)
-              ButtonSegment(
-                value: r,
-                label: Text(r.label, maxLines: 1, softWrap: false),
-              ),
-          ],
-          selected: custom == null ? {range} : {},
-          onSelectionChanged: (ranges) {
-            if (ranges.isNotEmpty) onRange(ranges.first);
-          },
-        );
-        // A single-segment SegmentedButton so it matches the presets' height
-        // and shape (and looks selected while a custom range is in use).
-        final customButton = SegmentedButton<bool>(
-          emptySelectionAllowed: true,
-          showSelectedIcon: false,
-          expandedInsets: narrow ? EdgeInsets.zero : null,
-          segments: [
-            ButtonSegment(
-              value: true,
-              icon: const Icon(Icons.date_range, size: 18),
-              label: Text(
-                customLabel ?? 'Custom'.tr,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-          selected: custom == null ? {} : {true},
-          onSelectionChanged: (_) => onCustom(),
-        );
-        final clear = custom != null && onClearCustom != null
-            ? IconButton(
-                onPressed: onClearCustom,
-                icon: const Icon(Icons.close, size: 18),
-                tooltip: 'Clear custom timeframe'.tr,
-                visualDensity: VisualDensity.compact,
-              )
-            : null;
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
+    final custom = selection.custom;
 
-        if (narrow) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              presets,
-              const SizedBox(height: AppSpacing.sm),
-              Row(
-                children: [
-                  Expanded(child: customButton),
-                  ?clear,
-                ],
-              ),
-            ],
-          );
-        }
-        return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: AppSpacing.sm,
+          runSpacing: AppSpacing.sm,
           children: [
+            for (final r in TrendRange.values)
+              ChoiceChip(
+                label: Text(r.label, maxLines: 1, softWrap: false),
+                selected: selection.range == r,
+                showCheckmark: false,
+                onSelected: (_) => onChanged(TrendSelection.preset(r)),
+              ),
+            if (custom == null)
+              ActionChip(
+                avatar: const Icon(Icons.date_range, size: 18),
+                label: Text('Custom'.tr),
+                tooltip: 'Pick your own dates'.tr,
+                onPressed: () => _pickDates(context),
+              ),
+          ],
+        ),
+        if (custom != null) ...[
+          const SizedBox(height: AppSpacing.sm),
+          InputChip(
+            avatar: const Icon(Icons.date_range, size: 18),
+            label: Text(
+              selection.customLabel!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            selected: true,
+            showCheckmark: false,
+            tooltip: 'Change dates'.tr,
+            onPressed: () => _pickDates(context),
+            deleteButtonTooltipMessage: 'Clear custom timeframe'.tr,
+            onDeleted: () => onChanged(TrendSelection.preset(lastPreset)),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          _GroupBy(
+            selection: selection,
+            onChanged: (step) =>
+                onChanged(TrendSelection.dates(custom, customStep: step)),
+          ),
+        ],
+        const SizedBox(height: AppSpacing.sm),
+        Row(
+          children: [
+            Icon(Icons.schedule, size: 16, color: muted),
+            const SizedBox(width: AppSpacing.xs),
             Expanded(
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: presets,
+              child: Text(
+                selection.description,
+                style: theme.textTheme.bodySmall?.copyWith(color: muted),
               ),
             ),
-            const SizedBox(width: AppSpacing.sm),
-            customButton,
-            ?clear,
           ],
-        );
-      },
+        ),
+      ],
+    );
+  }
+}
+
+/// "Group by: Hour Day Week Month" for a custom range: only the steps that
+/// give it a readable number of points.
+class _GroupBy extends StatelessWidget {
+  const _GroupBy({required this.selection, required this.onChanged});
+
+  final TrendSelection selection;
+  final ValueChanged<TrendStep> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final steps = TrendSelection.stepsFor(selection.window().duration);
+    if (steps.length < 2) return const SizedBox.shrink();
+    return Wrap(
+      spacing: AppSpacing.sm,
+      runSpacing: AppSpacing.xs,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        Text('Group by'.tr, style: theme.textTheme.labelLarge),
+        for (final step in steps)
+          ChoiceChip(
+            label: Text(step.label),
+            selected: selection.step == step,
+            showCheckmark: false,
+            visualDensity: VisualDensity.compact,
+            onSelected: (_) => onChanged(step),
+          ),
+      ],
     );
   }
 }

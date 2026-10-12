@@ -4,7 +4,6 @@ import '../models/free_ammonia.dart';
 import '../models/metric_type.dart';
 import '../models/pond.dart';
 import '../models/sensor_reading.dart';
-import '../models/trend_range.dart';
 
 class _Band {
   const _Band(this.min, this.max);
@@ -92,20 +91,6 @@ class MockSensorService {
     timestamp: ammonia.timestamp,
   );
 
-  /// Free ammonia isn't generated directly: it's worked out point by point
-  /// from the ammonia, pH and water temperature series, like the real thing.
-  static List<SensorReading> _freeAmmoniaSeries(
-    List<SensorReading> Function(MetricType) series,
-  ) {
-    final ammonia = series(MetricType.ammonia);
-    final ph = series(MetricType.ph);
-    final temperature = series(MetricType.temperature);
-    return [
-      for (var i = 0; i < ammonia.length; i++)
-        _freeAmmonia(ammonia[i], ph[i], temperature[i]),
-    ];
-  }
-
   /// Synthesizes a short walk ending at [currentValue] — stands in for a
   /// real sensor's logged history until one exists. Seeded on `pond.seed`
   /// plus the metric, so the shape stays stable across refreshes; only the
@@ -134,78 +119,6 @@ class MockSensorService {
       );
     }
     points.add(SensorReading(type: type, value: currentValue, timestamp: now));
-    return points;
-  }
-
-  /// A self-contained synthetic series for the Analytics screen's day/week/
-  /// month/year filter — independent of [generateSnapshot]'s fixed recent
-  /// window. Seeded on the pond, metric, *and* range, so flipping between
-  /// ranges and back doesn't reshuffle a range's shape.
-  List<SensorReading> historyForRange(
-    Pond pond,
-    MetricType type,
-    TrendRange range,
-  ) {
-    if (type == MetricType.freeAmmonia) {
-      return _freeAmmoniaSeries((t) => historyForRange(pond, t, range));
-    }
-    final band = _bands[type]!;
-    final jitter = _jitter[type]!;
-    final walkRandom = Random(pond.seed ^ type.index ^ (range.index << 8));
-    final step = jitter * 2;
-    var value = band.min + walkRandom.nextDouble() * (band.max - band.min);
-
-    final now = DateTime.now();
-    final pointCount = range.pointCount;
-    final interval = range.interval;
-
-    final points = <SensorReading>[];
-    for (var i = 0; i < pointCount; i++) {
-      final timestamp = now.subtract(interval * (pointCount - 1 - i));
-      points.add(SensorReading(type: type, value: value, timestamp: timestamp));
-      value = (value + (walkRandom.nextDouble() - 0.5) * 2 * step).clamp(
-        band.min,
-        band.max,
-      );
-    }
-    return points;
-  }
-
-  /// A synthetic series between [start] and [end] for a user-picked custom
-  /// timeframe: about one point per day (8 to 12 points in all), seeded on
-  /// the pond, metric and dates so reopening the same period gives the same
-  /// shape.
-  List<SensorReading> historyForPeriod(
-    Pond pond,
-    MetricType type,
-    DateTime start,
-    DateTime end,
-  ) {
-    if (type == MetricType.freeAmmonia) {
-      return _freeAmmoniaSeries((t) => historyForPeriod(pond, t, start, end));
-    }
-    final band = _bands[type]!;
-    final jitter = _jitter[type]!;
-    final seed =
-        pond.seed ^
-        type.index ^
-        start.millisecondsSinceEpoch ^
-        end.millisecondsSinceEpoch;
-    final walkRandom = Random(seed);
-    final step = jitter * 2;
-    var value = band.min + walkRandom.nextDouble() * (band.max - band.min);
-
-    final span = end.difference(start);
-    final pointCount = (span.inDays + 1).clamp(8, 12);
-    final points = <SensorReading>[];
-    for (var i = 0; i < pointCount; i++) {
-      final timestamp = start.add(span * (i / (pointCount - 1)));
-      points.add(SensorReading(type: type, value: value, timestamp: timestamp));
-      value = (value + (walkRandom.nextDouble() - 0.5) * 2 * step).clamp(
-        band.min,
-        band.max,
-      );
-    }
     return points;
   }
 }

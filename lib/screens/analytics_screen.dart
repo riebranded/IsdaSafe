@@ -2,14 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/metric_type.dart';
+import '../models/pond.dart';
 import '../models/trend_range.dart';
 import '../providers/pond_provider.dart';
 import '../services/pond_snapshot_cache.dart';
+import '../services/readings_pager.dart';
+import '../services/trend_service.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/individual_trend_chart.dart';
 import '../widgets/pair_device_prompt.dart';
 import '../widgets/metric_detail_view.dart';
-import '../widgets/modal_date_range_picker.dart';
 import '../widgets/reading_history_table.dart';
 import '../widgets/timeframe_picker.dart';
 import '../l10n/tr.dart';
@@ -27,20 +29,33 @@ class AnalyticsScreen extends StatefulWidget {
 
 class _AnalyticsScreenState extends State<AnalyticsScreen> {
   String? _selectedId;
-  var _range = TrendRange.hourly;
+  var _selection = const TrendSelection.preset(TrendRange.hourly);
 
-  /// A user-picked timeframe; when set it replaces [_range].
-  DateTimeRange? _custom;
+  /// Where clearing a custom range goes back to.
+  var _lastPreset = TrendRange.hourly;
 
-  Future<void> _pickCustomRange() async {
-    final picked = await showModalDateRangePicker(context, initial: _custom);
-    if (picked == null || !mounted) return;
-    setState(() => _custom = picked);
+  /// The shown pond's trend (every metric at once) and "Individual readings"
+  /// (fetched a page at a time) for [_selection]; replaced when the pond or
+  /// the timeframe changes.
+  TrendController? _trend;
+  ReadingsPager? _pager;
+  Object? _key;
+
+  void _load(Pond pond) {
+    final key = (pond.id, _selection);
+    if (key == _key) return;
+    _key = key;
+    _trend?.dispose();
+    _pager?.dispose();
+    final trend = _trend = TrendController(pond, _selection);
+    _pager = ReadingsPager.forTrend(trend);
   }
 
-  String _customLabel(DateTimeRange range) {
-    String day(DateTime d) => '${d.month}/${d.day}/${d.year}';
-    return '${day(range.start)} – ${day(range.end)}';
+  @override
+  void dispose() {
+    _trend?.dispose();
+    _pager?.dispose();
+    super.dispose();
   }
 
   @override
@@ -61,37 +76,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
       (p) => p.id == _selectedId,
       orElse: () => ponds.first,
     );
-    final custom = _custom;
-    // The picked end date is inclusive: run to the end of that day, but never
-    // into the future.
-    final now = DateTime.now();
-    final customStart = custom?.start;
-    var effectiveEnd = now;
-    if (custom != null) {
-      final endOfDay = DateTime(
-        custom.end.year,
-        custom.end.month,
-        custom.end.day,
-        23,
-        59,
-        59,
-      );
-      effectiveEnd = endOfDay.isAfter(now) ? now : endOfDay;
-    }
-    final rangedHistory = {
-      for (final type in MetricType.values)
-        type: customStart != null
-            ? widget.cache.historyForPeriod(
-                selected,
-                type,
-                customStart,
-                effectiveEnd,
-              )
-            : widget.cache.historyForRange(selected, type, _range),
-    };
-    final String Function(DateTime) timeFormat = customStart != null
-        ? (t) => formatCustomTimestamp(t, effectiveEnd.difference(customStart))
-        : _range.formatTimestamp;
+    _load(selected);
+    final trend = _trend!;
+    final snapshot = widget.cache.snapshotFor(selected);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(AppSpacing.lg),
@@ -119,45 +106,76 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           ),
           const SizedBox(height: AppSpacing.md),
           TimeframePicker(
-            range: _range,
-            custom: custom,
-            customLabel: custom == null ? null : _customLabel(custom),
-            onRange: (range) => setState(() {
-              _custom = null;
-              _range = range;
+            selection: _selection,
+            lastPreset: _lastPreset,
+            onChanged: (selection) => setState(() {
+              _selection = selection;
+              if (selection.range case final range?) _lastPreset = range;
             }),
-            onCustom: _pickCustomRange,
-            onClearCustom: () => setState(() => _custom = null),
           ),
           const SizedBox(height: AppSpacing.lg),
-          if (widget.cache.snapshotFor(selected) == null)
+          if (snapshot == null)
             PairDevicePrompt(pond: selected)
           else ...[
             Text('Individual trends'.tr, style: theme.textTheme.titleMedium),
             const SizedBox(height: AppSpacing.md),
-            for (final type in MetricType.primary) ...[
-              IndividualTrendChart(
-                type: type,
-                history: rangedHistory[type]!,
-                range: _range,
-                timeFormat: custom == null ? null : timeFormat,
-                onTap: () => showMetricDetail(
-                  context,
-                  pond: selected,
-                  type: type,
-                  cache: widget.cache,
-                  initialRange: _range,
-                  initialCustom: custom,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-            ],
+            ListenableBuilder(
+              listenable: trend,
+              builder: (context, _) {
+                if (trend.loading) {
+                  return const Padding(
+                    padding: EdgeInsets.all(AppSpacing.xl),
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+                final step = trend.step;
+                final span = trend.window.duration;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (trend.partial) ...[
+                      Text(
+                        'Only the latest readings could be loaded, so this '
+                                'may not cover the whole timeframe.'
+                            .tr,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                    ],
+                    for (final type in MetricType.primary) ...[
+                      IndividualTrendChart(
+                        type: type,
+                        history: [
+                          for (final p in trend.pointsFor(type))
+                            p.asReading(type),
+                        ],
+                        band: [
+                          for (final p in trend.pointsFor(type))
+                            (min: p.min, max: p.max),
+                        ],
+                        latest: snapshot.reading(type),
+                        timeFormat: (t) => step.axisLabel(t, span),
+                        tooltipTimeFormat: step.fullLabel,
+                        onTap: () => showMetricDetail(
+                          context,
+                          pond: selected,
+                          type: type,
+                          cache: widget.cache,
+                          initialRange: _lastPreset,
+                          initialSelection: _selection,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                    ],
+                  ],
+                );
+              },
+            ),
             Text('Individual readings'.tr, style: theme.textTheme.titleMedium),
             const SizedBox(height: AppSpacing.md),
-            ReadingHistoryTable(
-              key: ValueKey((selected.id, _range, custom)),
-              history: rangedHistory,
-            ),
+            ReadingHistoryTable(key: ValueKey(_key), pager: _pager),
           ],
         ],
       ),

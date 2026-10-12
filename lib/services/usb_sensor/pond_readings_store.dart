@@ -29,7 +29,7 @@ class SupabasePondReadingsSource implements PondReadingsSource {
   /// temperature; `air_temperature` is shown alongside humidity. (Free
   /// ammonia isn't stored: it's worked out from these, see
   /// `withFreeAmmonia`.)
-  static const _columns = {
+  static const columns = {
     MetricType.dissolvedOxygen: 'dissolved_oxygen',
     MetricType.ph: 'ph',
     MetricType.ammonia: 'ammonia',
@@ -56,7 +56,7 @@ class SupabasePondReadingsSource implements PondReadingsSource {
   }) async {
     final rows = await _client
         .from('sensor_readings')
-        .select('created_at, ${_columns.values.join(', ')}')
+        .select('created_at, ${columns.values.join(', ')}')
         .eq('pond_id', pondId)
         .order('created_at', ascending: false)
         .limit(limit);
@@ -65,7 +65,7 @@ class SupabasePondReadingsSource implements PondReadingsSource {
         (
           time: DateTime.parse(row['created_at'] as String).toLocal(),
           values: {
-            for (final entry in _columns.entries)
+            for (final entry in columns.entries)
               if (row[entry.value] case final num value)
                 entry.key: value.toDouble(),
           },

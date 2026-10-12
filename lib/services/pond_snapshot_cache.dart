@@ -1,10 +1,5 @@
-import 'package:flutter/foundation.dart';
-
-import '../models/metric_type.dart';
 import '../models/pond.dart';
 import '../models/sensor_reading.dart';
-import '../models/trend_range.dart';
-import 'mock_sensor_service.dart';
 import 'usb_sensor/pond_readings_store.dart';
 import 'usb_sensor/usb_sensor_hub.dart';
 
@@ -22,18 +17,9 @@ import 'usb_sensor/usb_sensor_hub.dart';
 /// [refreshAll] from a setState-triggering event handler (pull-to-refresh,
 /// a refresh button, etc.).
 class PondSnapshotCache {
-  /// DEBUG ONLY: shows made-up readings (see [MockSensorService]) for every
-  /// pond instead of the device's, so the screens can be checked without a
-  /// device. Never on in a release build (e.g. the Vercel site). Set
-  /// [_mockReadings] back to false to see real readings again.
-  static const bool _mockReadings = true;
-  static bool get mockReadings => _mockReadings && !kReleaseMode;
-  static final _mock = MockSensorService();
-
   /// Combines the stored and live readings for [pond]; null when the pond has
   /// no device or no readings yet. Shared with `DashboardProvider`.
   static PondSnapshot? compose(Pond pond) {
-    if (mockReadings) return _mock.generateSnapshot(pond);
     final store = PondReadingsStore.instance;
     final state = store.stateFor(pond.id);
     if (state == PondDataState.loading || state == PondDataState.unpaired) {
@@ -51,39 +37,4 @@ class PondSnapshotCache {
   void refreshAll(List<Pond> ponds) => PondReadingsStore.instance.refresh();
 
   void discard(String pondId) {}
-
-  /// The Analytics screen's day/week/month/year trend data — a separate,
-  /// on-demand series from [snapshotFor]'s fixed recent-history window.
-  /// Empty when the pond has no readings of [type] to show.
-  List<SensorReading> historyForRange(
-    Pond pond,
-    MetricType type,
-    TrendRange range,
-  ) {
-    final now = DateTime.now();
-    return historyForPeriod(
-      pond,
-      type,
-      now.subtract(range.interval * range.pointCount),
-      now,
-    );
-  }
-
-  /// Trend data for a custom [start]..[end] timeframe.
-  List<SensorReading> historyForPeriod(
-    Pond pond,
-    MetricType type,
-    DateTime start,
-    DateTime end,
-  ) {
-    if (mockReadings) return _mock.historyForPeriod(pond, type, start, end);
-    final store = PondReadingsStore.instance;
-    if (store.stateFor(pond.id) != PondDataState.ready) return const [];
-    return [
-      for (final reading in store.historyFor(pond.id)[type]!)
-        if (!reading.timestamp.isBefore(start) &&
-            !reading.timestamp.isAfter(end))
-          reading,
-    ];
-  }
 }

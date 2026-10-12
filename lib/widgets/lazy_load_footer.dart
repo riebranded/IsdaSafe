@@ -4,9 +4,10 @@ import '../l10n/tr.dart';
 import '../theme/app_spacing.dart';
 
 /// The end of a list that shows its items a page at a time: while [remaining]
-/// items are hidden, it calls [onLoadMore] by itself once it's scrolled near
-/// the visible area (or is already on screen). A "Load more" button stays as
-/// a fallback, e.g. for screen readers. Nothing when everything is shown.
+/// items are hidden, it calls [onLoadMore] by itself once it's scrolled into
+/// view, i.e. the user has reached the end of what's loaded (or the first
+/// page didn't fill the screen). A "Load more" button stays as a fallback,
+/// e.g. for screen readers. Nothing when everything is shown.
 ///
 /// Works inside an outer scroll view (the list itself isn't one), so the
 /// readings can sit under the charts on the same page.
@@ -23,8 +24,9 @@ class LazyLoadFooter extends StatefulWidget {
   /// Shows the next page. Called at most once per frame.
   final VoidCallback onLoadMore;
 
-  /// How close to the bottom (in pixels) the next page starts loading.
-  static const loadAhead = 400.0;
+  /// How far into view (in pixels) the footer must come before the next
+  /// page loads: only once the end of the list is actually reached.
+  static const loadWhenVisible = 24.0;
 
   @override
   State<LazyLoadFooter> createState() => _LazyLoadFooterState();
@@ -79,7 +81,7 @@ class _LazyLoadFooterState extends State<LazyLoadFooter> {
     final viewport = position.context.notificationContext?.findRenderObject();
     if (box == null || !box.attached || viewport is! RenderBox) return;
     final top = box.localToGlobal(Offset.zero, ancestor: viewport).dy;
-    if (top <= viewport.size.height + LazyLoadFooter.loadAhead) {
+    if (top <= viewport.size.height - LazyLoadFooter.loadWhenVisible) {
       widget.onLoadMore();
     }
   }
