@@ -26,6 +26,7 @@ class MockSensorService {
     MetricType.ammonia: _Band(0, 0.3),
     MetricType.dissolvedOxygen: _Band(1, 9),
     MetricType.ph: _Band(5.5, 9.5),
+    MetricType.airTemperature: _Band(24, 36),
   };
 
   static const Map<MetricType, double> _jitter = {
@@ -34,6 +35,7 @@ class MockSensorService {
     MetricType.ammonia: 0.01,
     MetricType.dissolvedOxygen: 0.3,
     MetricType.ph: 0.15,
+    MetricType.airTemperature: 0.6,
   };
 
   static const int _historyPoints = 12;
@@ -90,6 +92,20 @@ class MockSensorService {
     timestamp: ammonia.timestamp,
   );
 
+  /// Free ammonia isn't generated directly: it's worked out point by point
+  /// from the ammonia, pH and water temperature series, like the real thing.
+  static List<SensorReading> _freeAmmoniaSeries(
+    List<SensorReading> Function(MetricType) series,
+  ) {
+    final ammonia = series(MetricType.ammonia);
+    final ph = series(MetricType.ph);
+    final temperature = series(MetricType.temperature);
+    return [
+      for (var i = 0; i < ammonia.length; i++)
+        _freeAmmonia(ammonia[i], ph[i], temperature[i]),
+    ];
+  }
+
   /// Synthesizes a short walk ending at [currentValue] — stands in for a
   /// real sensor's logged history until one exists. Seeded on `pond.seed`
   /// plus the metric, so the shape stays stable across refreshes; only the
@@ -130,6 +146,9 @@ class MockSensorService {
     MetricType type,
     TrendRange range,
   ) {
+    if (type == MetricType.freeAmmonia) {
+      return _freeAmmoniaSeries((t) => historyForRange(pond, t, range));
+    }
     final band = _bands[type]!;
     final jitter = _jitter[type]!;
     final walkRandom = Random(pond.seed ^ type.index ^ (range.index << 8));
@@ -162,6 +181,9 @@ class MockSensorService {
     DateTime start,
     DateTime end,
   ) {
+    if (type == MetricType.freeAmmonia) {
+      return _freeAmmoniaSeries((t) => historyForPeriod(pond, t, start, end));
+    }
     final band = _bands[type]!;
     final jitter = _jitter[type]!;
     final seed =
