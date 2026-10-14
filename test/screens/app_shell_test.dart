@@ -174,7 +174,7 @@ void main() {
   }
 
   testWidgets(
-    'mobile layout shows a greeting bar (avatar + bell) and a 4-item bottom nav without Notifications',
+    'mobile layout shows a greeting bar (avatar + bell) and a 5-item bottom nav without Notifications',
     (tester) async {
       await setNarrowSurface(tester);
       await tester.pumpWidget(buildApp());
@@ -187,9 +187,11 @@ void main() {
       // Notification bell lives in the top bar now (as an icon).
       expect(find.byIcon(Icons.notifications_outlined), findsOneWidget);
 
-      // Bottom nav has 4 destinations and no Notifications entry.
+      // Bottom nav has 5 destinations (Devices included) and no
+      // Notifications entry.
       final navBar = tester.widget<NavigationBar>(find.byType(NavigationBar));
-      expect(navBar.destinations.length, 4);
+      expect(navBar.destinations.length, 5);
+      expect(find.text('Devices'), findsOneWidget);
       expect(find.text('Notifications'), findsNothing);
     },
   );

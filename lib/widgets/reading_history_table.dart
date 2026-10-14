@@ -287,6 +287,10 @@ class _SummaryChip extends StatelessWidget {
   }
 }
 
+/// A column's full title: "Dissolved oxygen (mg/L)".
+String _headerLabel(MetricType type) =>
+    type.unit.isEmpty ? type.label : '${type.label} (${type.unit})';
+
 /// Column titles for the wide layout.
 class _HeaderRow extends StatelessWidget {
   const _HeaderRow({required this.types});
@@ -313,22 +317,26 @@ class _HeaderRow extends StatelessWidget {
           ),
           for (final type in types)
             Expanded(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Icon(type.icon, size: 14, color: palette.of(type)),
-                  const SizedBox(width: AppSpacing.xs),
-                  Flexible(
-                    child: Text(
-                      type.unit.isEmpty
-                          ? type.label
-                          : '${type.label} (${type.unit})',
-                      style: style,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.end,
+              // A narrow column cuts its title short; hovering (or
+              // long-pressing) shows it in full.
+              child: Tooltip(
+                message: _headerLabel(type),
+                waitDuration: const Duration(milliseconds: 300),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Icon(type.icon, size: 14, color: palette.of(type)),
+                    const SizedBox(width: AppSpacing.xs),
+                    Flexible(
+                      child: Text(
+                        _headerLabel(type),
+                        style: style,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.end,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
         ],

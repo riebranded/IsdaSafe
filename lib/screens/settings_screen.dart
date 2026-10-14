@@ -1,17 +1,16 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/theme_provider.dart';
 import '../services/auth_service.dart';
-import '../services/push_service.dart';
 import '../services/system_notification_service.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/account_dialogs.dart';
 import '../widgets/language_toggle.dart';
 import '../l10n/tr.dart';
+import 'legal/legal_screen.dart';
 
 /// Account info + sign-out — ported from the old sidebar's account row
 /// (`AppShell`'s former `_AccountSection`) into its own destination.
@@ -288,6 +287,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: AppSpacing.lg),
             const _NotificationsCard(),
             const SizedBox(height: AppSpacing.lg),
+            Padding(
+              padding: const EdgeInsets.only(
+                left: AppSpacing.xs,
+                bottom: AppSpacing.sm,
+              ),
+              child: Text(
+                'Legal'.tr,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            Card(
+              child: Column(
+                children: [
+                  for (final (i, document) in LegalDocument.values.indexed) ...[
+                    if (i > 0) const Divider(height: 1),
+                    ListTile(
+                      leading: Icon(document.icon),
+                      title: Text(document.title),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => openLegalDocument(context, document),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
             Card(
               child: ListTile(
                 leading: const Icon(Icons.logout),
@@ -295,6 +322,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onTap: AuthService.signOut,
               ),
             ),
+            const SizedBox(height: AppSpacing.lg),
+            const Card(child: _DeleteAccountTile()),
           ],
         );
       },
@@ -374,9 +403,6 @@ class _NotificationsCard extends StatelessWidget {
                       ? (value) => _toggle(context, value)
                       : null,
                 ),
-                // To check that push works on this phone (Android).
-                if (PushService.instance.canTest && service.isEnabled)
-                  const _TestPushTile(),
                 const _SmsAlertsTile(),
               ],
             ),
@@ -387,66 +413,172 @@ class _NotificationsCard extends StatelessWidget {
   }
 }
 
-/// Sends a test push through Firebase to this account's phones, after a few
-/// seconds so there's time to leave the app and see it arrive as a real one.
-class _TestPushTile extends StatefulWidget {
-  const _TestPushTile();
+/// Permanently deletes the account and all its data (Privacy Policy, "Your
+/// rights"). On success the auth listener in AuthGate takes the user back to
+/// Login, so there's nothing to navigate here.
+class _DeleteAccountTile extends StatefulWidget {
+  const _DeleteAccountTile();
 
   @override
-  State<_TestPushTile> createState() => _TestPushTileState();
+  State<_DeleteAccountTile> createState() => _DeleteAccountTileState();
 }
 
-class _TestPushTileState extends State<_TestPushTile> {
-  bool _sending = false;
+class _DeleteAccountTileState extends State<_DeleteAccountTile> {
+  bool _deleting = false;
 
-  Future<void> _send() async {
+  Future<void> _delete() async {
     final messenger = ScaffoldMessenger.of(context);
-    setState(() => _sending = true);
-    final result = await PushService.instance.sendTest();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => const _DeleteAccountDialog(),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _deleting = true);
+    final deleted = await AuthService.deleteAccount();
+    if (deleted) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Your account has been deleted.'.tr)),
+      );
+      return;
+    }
     if (!mounted) return;
-    setState(() => _sending = false);
-    final seconds = PushService.testDelay.inSeconds;
+    setState(() => _deleting = false);
     messenger.showSnackBar(
       SnackBar(
-        duration: const Duration(seconds: 6),
-        content: Text(switch (result) {
-          TestPushResult.scheduled =>
-            'Test notification sent. It arrives in about {0} seconds: leave the app now to see it like a real alert.'
-                .trf([seconds]),
-          TestPushResult.notConfigured =>
-            "Push isn't set up on the server yet: add the Firebase key (FCM_SERVICE_ACCOUNT) in Supabase."
-                .tr,
-          TestPushResult.notRegistered =>
-            "This phone couldn't register for push. Check that notifications are allowed for IsdaSafe, then try again."
-                .tr,
-          TestPushResult.unsupported =>
-            'Push notifications are only available in the Android app.'.tr,
-          TestPushResult.failed =>
-            "Couldn't send the test notification. Check your connection and try again."
-                .tr,
-        }),
+        content: Text(
+          "Couldn't delete your account. Check your connection and try again."
+              .tr,
+        ),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final error = Theme.of(context).colorScheme.error;
     return ListTile(
-      leading: const Icon(Icons.send_to_mobile_outlined),
-      title: Text('Send a test notification'.tr),
-      subtitle: Text(
-        kIsWeb
-            ? 'Checks that notifications show in this browser.'.tr
-            : 'Checks that push notifications reach this phone.'.tr,
-      ),
-      trailing: _sending
+      leading: Icon(Icons.delete_forever_outlined, color: error),
+      title: Text('Delete account'.tr, style: TextStyle(color: error)),
+      subtitle: Text('Permanently delete your account and all its data.'.tr),
+      trailing: _deleting
           ? const SizedBox(
               width: 20,
               height: 20,
               child: CircularProgressIndicator(strokeWidth: 2),
             )
-          : const Icon(Icons.chevron_right),
-      onTap: _sending ? null : _send,
+          : null,
+      onTap: _deleting ? null : _delete,
+    );
+  }
+}
+
+/// "Are you sure?" for [_DeleteAccountTile] that only enables the delete
+/// button once the user has typed [_phrase], so an account can't be deleted
+/// by a stray tap. Styled like `showConfirmDialog`'s destructive variant.
+/// Pops true when confirmed.
+class _DeleteAccountDialog extends StatefulWidget {
+  const _DeleteAccountDialog();
+
+  @override
+  State<_DeleteAccountDialog> createState() => _DeleteAccountDialogState();
+}
+
+class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
+  final _controller = TextEditingController();
+
+  /// Translated, so Tagalog users type the Tagalog phrase they're shown.
+  String get _phrase => 'DELETE MY ACCOUNT'.tr;
+
+  bool get _matches =>
+      _controller.text.trim().toUpperCase() == _phrase.toUpperCase();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return AlertDialog(
+      icon: Container(
+        width: 48,
+        height: 48,
+        decoration: BoxDecoration(
+          color: scheme.error.withValues(alpha: 0.12),
+          shape: BoxShape.circle,
+        ),
+        child: Icon(Icons.delete_forever_outlined, color: scheme.error),
+      ),
+      title: Text('Delete your account?'.tr, textAlign: TextAlign.center),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 360),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              "This permanently deletes your account, ponds, readings, photos and alerts. Your paired devices are released so they can be added again. This can't be undone."
+                  .tr,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(
+                    text: 'To confirm, type {0} below.'.tr.split('{0}').first,
+                  ),
+                  TextSpan(
+                    text: _phrase,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  TextSpan(
+                    text: 'To confirm, type {0} below.'.tr.split('{0}').last,
+                  ),
+                ],
+              ),
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            TextField(
+              controller: _controller,
+              autofocus: true,
+              autocorrect: false,
+              enableSuggestions: false,
+              textCapitalization: TextCapitalization.characters,
+              decoration: InputDecoration(hintText: _phrase),
+              onChanged: (_) => setState(() {}),
+              onSubmitted: (_) {
+                if (_matches) Navigator.of(context).pop(true);
+              },
+            ),
+          ],
+        ),
+      ),
+      actionsAlignment: MainAxisAlignment.end,
+      actionsPadding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        0,
+        AppSpacing.lg,
+        AppSpacing.lg,
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: Text('Cancel'.tr),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: scheme.error,
+            foregroundColor: scheme.onError,
+          ),
+          onPressed: _matches ? () => Navigator.of(context).pop(true) : null,
+          child: Text('Delete account'.tr),
+        ),
+      ],
     );
   }
 }
@@ -514,91 +646,15 @@ class _SmsAlertsTileState extends State<_SmsAlertsTile> {
           subtitle = 'Texts {0} when a pond reading is in warning or danger.'
               .trf([phone]);
         }
-        return Column(
-          children: [
-            SwitchListTile(
-              secondary: const Icon(Icons.sms_outlined),
-              title: Text('SMS alerts'.tr),
-              subtitle: Text(subtitle),
-              // Off until there's a verified phone to text.
-              value: phone != null && (on ?? false),
-              onChanged: phone != null && on != null && !_saving ? _set : null,
-            ),
-            if (phone != null) _TestSmsTile(phone: phone),
-          ],
+        return SwitchListTile(
+          secondary: const Icon(Icons.sms_outlined),
+          title: Text('SMS alerts'.tr),
+          subtitle: Text(subtitle),
+          // Off until there's a verified phone to text.
+          value: phone != null && (on ?? false),
+          onChanged: phone != null && on != null && !_saving ? _set : null,
         );
       },
-    );
-  }
-}
-
-/// Texts a made-up water alert to the verified phone, to check that alert
-/// texts really arrive (and say why not when they can't).
-class _TestSmsTile extends StatefulWidget {
-  const _TestSmsTile({required this.phone});
-
-  final String phone;
-
-  @override
-  State<_TestSmsTile> createState() => _TestSmsTileState();
-}
-
-class _TestSmsTileState extends State<_TestSmsTile> {
-  bool _sending = false;
-
-  Future<void> _send() async {
-    final messenger = ScaffoldMessenger.of(context);
-    setState(() => _sending = true);
-    final result = await AuthService.sendTestSms();
-    if (!mounted) return;
-    setState(() => _sending = false);
-    messenger.showSnackBar(
-      SnackBar(
-        duration: const Duration(seconds: 8),
-        content: Text(switch (result) {
-          TestSmsResult.sent =>
-            'Test SMS sent to {0}. It should arrive within a minute.'.trf([
-              widget.phone,
-            ]),
-          TestSmsResult.failed =>
-            'Semaphore rejected the SMS. Check your Semaphore credits and sender name.'
-                .tr,
-          TestSmsResult.disabled =>
-            'SMS is switched off on the server: set the SMS_ENABLED secret to true in Supabase.'
-                .tr,
-          TestSmsResult.notConfigured =>
-            "SMS isn't set up on the server yet: add the SEMAPHORE_API_KEY secret in Supabase."
-                .tr,
-          TestSmsResult.noPhone =>
-            'Verify a phone number to get text alerts.'.tr,
-          TestSmsResult.rateLimited =>
-            'Too many test texts. Try again in an hour.'.tr,
-          TestSmsResult.unreachable =>
-            "Couldn't send the test SMS. Check your connection and try again."
-                .tr,
-        }),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      leading: const Icon(Icons.outgoing_mail),
-      title: Text('Send a test SMS alert'.tr),
-      subtitle: Text(
-        'Texts a sample water alert to {0} to check SMS alerts work.'.trf([
-          widget.phone,
-        ]),
-      ),
-      trailing: _sending
-          ? const SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : const Icon(Icons.chevron_right),
-      onTap: _sending ? null : _send,
     );
   }
 }

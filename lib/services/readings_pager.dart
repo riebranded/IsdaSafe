@@ -58,6 +58,46 @@ class SupabaseReadingsPageSource implements ReadingsPageSource {
   }
 }
 
+/// The complete readings (every sensor reported a value) of one device
+/// stay ([DeviceStay]), whichever account it was under, so a past location's
+/// readings can be listed even after its pond was moved, deleted or belonged
+/// to someone else. The database checks the signed-in user owns or owned the
+/// device; the pond ID and window passed to [page] are ignored (the stay
+/// defines them).
+class StayReadingsPageSource implements ReadingsPageSource {
+  StayReadingsPageSource(this.stayId);
+
+  final int stayId;
+
+  SupabaseClient get _client => Supabase.instance.client;
+
+  @override
+  Future<List<StoredReading>> page(
+    String pondId,
+    DateTime start,
+    DateTime end, {
+    required int offset,
+    required int limit,
+  }) async {
+    final columns = SupabasePondReadingsSource.columns;
+    final rows = await _client.rpc(
+      'device_stay_readings',
+      params: {'p_stay_id': stayId, 'p_offset': offset, 'p_limit': limit},
+    );
+    return [
+      for (final row in rows as List)
+        (
+          time: DateTime.parse(row['created_at'] as String).toLocal(),
+          values: {
+            for (final entry in columns.entries)
+              if (row[entry.value] case final num value)
+                entry.key: value.toDouble(),
+          },
+        ),
+    ];
+  }
+}
+
 /// Readings already in memory (per metric, oldest first), paged the same way.
 class MemoryReadingsPageSource implements ReadingsPageSource {
   MemoryReadingsPageSource(Map<MetricType, List<SensorReading>> history)

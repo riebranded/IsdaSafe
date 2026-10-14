@@ -7,6 +7,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/auth_dialogs.dart';
 import '../../widgets/captcha_field.dart';
 import '../../widgets/language_toggle.dart';
+import '../legal/legal_screen.dart';
 import 'register_screen.dart';
 import '../../l10n/tr.dart';
 
@@ -316,6 +317,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ],
               ),
+              const SizedBox(height: AppSpacing.sm),
+              const LegalLinks(),
             ],
           ),
         ),

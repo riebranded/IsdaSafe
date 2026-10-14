@@ -154,7 +154,7 @@ void main() {
               Navigator.of(tester.element(find.byType(Dialog).last)).pop();
               await settle(tester);
             }
-            for (final tab in ['Map', 'Analytics', 'Settings']) {
+            for (final tab in ['Map', 'Analytics', 'Devices', 'Settings']) {
               step(tab);
               await tapIfPresent(tester, find.text(tab.tr));
             }

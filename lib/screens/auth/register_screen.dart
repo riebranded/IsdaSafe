@@ -9,6 +9,7 @@ import '../../widgets/captcha_field.dart';
 import '../../widgets/password_strength_checklist.dart';
 import '../../widgets/phone_input.dart';
 import '../../widgets/rate_limit_banner.dart';
+import '../legal/legal_screen.dart';
 import 'otp_verification_screen.dart';
 import '../../l10n/tr.dart';
 
@@ -44,6 +45,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
   var _obscurePassword = true;
   var _obscureConfirmPassword = true;
   String? _captchaToken;
+
+  /// "I agree to the Terms and Conditions and Privacy Policy" — required
+  /// before either path (email or Google finish-setup) can create the account.
+  var _acceptedTerms = false;
 
   /// Set only for a rate-limit rejection from the initial Semaphore OTP
   /// send — shown as a persistent inline banner rather than the transient
@@ -167,6 +172,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   Future<void> _submit() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
+    if (!_acceptedTerms) return;
     final captchaToken = _captchaToken;
     if (!_hasGoogleSession && captchaToken == null) return;
 
@@ -520,10 +526,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         onFieldSubmitted: (_) => _submit(),
                       ),
                     ],
-                    const SizedBox(height: AppSpacing.xl),
+                    const SizedBox(height: AppSpacing.md),
+                    LegalConsentCheckbox(
+                      value: _acceptedTerms,
+                      onChanged: busy
+                          ? null
+                          : (value) => setState(() => _acceptedTerms = value),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
                     FilledButton(
                       onPressed:
                           (busy ||
+                              !_acceptedTerms ||
                               (!_hasGoogleSession && _captchaToken == null))
                           ? null
                           : _submit,

@@ -981,4 +981,66 @@ const Map<String, String> tagalogStrings = {
       'Walang reading sa panahong ito. Subukan ang mas mahabang panahon.',
   'Only the latest readings could be loaded, so this may not cover the whole timeframe.':
       'Ang mga pinakabagong reading lang ang na-load, kaya maaaring hindi nito sakop ang buong panahon.',
+  'Privacy Policy': 'Patakaran sa Privacy',
+  'Terms and Conditions': 'Mga Tuntunin at Kundisyon',
+  'Legal': 'Legal',
+  'I agree to the': 'Sumasang-ayon ako sa',
+  'and': 'at',
+  'Delete account': 'Burahin ang account',
+  'Delete your account?': 'Burahin ang iyong account?',
+  "This permanently deletes your account, ponds, readings, photos and alerts. Your paired devices are released so they can be added again. This can't be undone.":
+      'Permanenteng buburahin nito ang iyong account, mga pond, reading, litrato at alerto. Mapapalaya ang mga naka-pair mong device para maidagdag muli. Hindi na ito maibabalik.',
+  'Your account has been deleted.': 'Nabura na ang iyong account.',
+  "Couldn't delete your account. Check your connection and try again.":
+      'Hindi mabura ang iyong account. Suriin ang iyong koneksyon at subukan muli.',
+  'Permanently delete your account and all its data.':
+      'Permanenteng burahin ang iyong account at lahat ng data nito.',
+  'DELETE MY ACCOUNT': 'BURAHIN ANG AKING ACCOUNT',
+  'To confirm, type {0} below.': 'Para kumpirmahin, i-type ang {0} sa ibaba.',
+  'Devices': 'Mga Device',
+  "Couldn't load the device history. Check your connection and try again.":
+      'Hindi ma-load ang kasaysayan ng device. Suriin ang iyong koneksyon at subukan ulit.',
+  'No device history yet. Locations appear here once a device sends a complete reading (every sensor) from a pond.':
+      'Wala pang kasaysayan ng device. Lalabas dito ang mga lokasyon kapag nagpadala na ang device ng kumpletong reading (lahat ng sensor) mula sa isang pond.',
+  'Device': 'Device',
+  'Device {0}': 'Device {0}',
+  'No complete readings from this device yet.':
+      'Wala pang kumpletong reading mula sa device na ito.',
+  '1 complete reading': '1 kumpletong reading',
+  '{0} complete readings': '{0} kumpletong reading',
+  '1 pond · tap it to see the complete readings taken there':
+      '1 pond · i-tap ito para makita ang mga kumpletong reading doon',
+  '{0} ponds · tap one to see the complete readings taken there':
+      '{0} pond · i-tap ang isa para makita ang mga kumpletong reading doon',
+  'Refresh': 'I-refresh',
+  '1 visit': '1 pagbisita',
+  '{0} visits': '{0} pagbisita',
+  'Current': 'Kasalukuyan',
+  'No location recorded': 'Walang naitalang lokasyon',
+  'Since {0}': 'Mula {0}',
+  'Choose a device': 'Pumili ng device',
+  'See every pond it has been in and the readings it took there.':
+      'Tingnan ang bawat pond na napuntahan nito at ang mga reading nito roon.',
+  'Last in {0}': 'Huling nasa {0}',
+  'Now in {0}': 'Nasa {0} ngayon',
+  '1 pond': '1 pond',
+  '{0} ponds at the same spot': '{0} pond sa iisang lugar',
+  'Showing readings below': 'Ipinapakita ang mga reading sa ibaba',
+  'View readings': 'Tingnan ang mga reading',
+  'All devices': 'Lahat ng device',
+  'Visit': 'Pagbisita',
+  'Visits': 'Mga pagbisita',
+  'Complete readings': 'Kumpletong reading',
+  'Time here': 'Tagal dito',
+  'Pick a visit to see its readings.':
+      'Pumili ng pagbisita para makita ang mga reading nito.',
+  'Complete readings · visit {0}': 'Kumpletong reading · pagbisita {0}',
+  'Visit {0}': 'Pagbisita {0}',
+  'Latest': 'Pinakabago',
+  'Under 1 min': 'Wala pang 1 min',
+  '{0} min': '{0} min',
+  '{0} h': '{0} oras',
+  '{0} h {1} min': '{0} oras {1} min',
+  '{0} d': '{0} araw',
+  '{0} d {1} h': '{0} araw {1} oras',
 };

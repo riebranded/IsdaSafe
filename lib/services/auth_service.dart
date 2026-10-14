@@ -449,6 +449,31 @@ abstract final class AuthService {
     await _auth.signOut();
   }
 
+  /// Permanently deletes the signed-in account and all its data through the
+  /// `delete-account` edge function, then clears the local session. Returns
+  /// false (and stays signed in) if the server couldn't delete it.
+  static Future<bool> deleteAccount() async {
+    if (currentUser == null) return false;
+    try {
+      final response = await _client.functions.invoke('delete-account');
+      if ((response.data as Map?)?['status'] != 'deleted') return false;
+    } catch (e) {
+      debugPrint('AuthService: delete account failed $e');
+      return false;
+    }
+    if (!kIsWeb) {
+      try {
+        await GoogleSignIn.instance.signOut();
+      } catch (e) {
+        debugPrint('AuthService: GoogleSignIn.signOut error $e');
+      }
+    }
+    // The user (and its push tokens) no longer exist on the server, so only
+    // the local session is left to clear.
+    await _auth.signOut(scope: SignOutScope.local);
+    return true;
+  }
+
   /// Uploads a user-picked profile photo to the public `avatars` Storage
   /// bucket and returns its public URL, ready to hand to [upsertProfile].
   /// Storage RLS restricts writes to a `<uid>/...` prefix matching the

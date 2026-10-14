@@ -23,6 +23,7 @@ import '../widgets/pond_chat_sheet.dart';
 import '../widgets/status_badge.dart';
 import 'analytics_screen.dart';
 import 'dashboard_screen.dart';
+import 'devices_screen.dart';
 import 'notifications_screen.dart';
 import 'pond_map_screen.dart';
 import 'settings_screen.dart';
@@ -39,6 +40,11 @@ enum _Destination {
     label: 'Analytics',
     icon: Icons.analytics_outlined,
     selectedIcon: Icons.analytics,
+  ),
+  devices(
+    label: 'Devices',
+    icon: Icons.sensors_outlined,
+    selectedIcon: Icons.sensors,
   ),
   notifications(
     label: 'Notifications',
@@ -66,13 +72,13 @@ enum _Destination {
 /// Width of the side panel (custom nav + its branding header) on wide layouts.
 const double _railWidth = 280;
 
-/// Root screen: a 5-destination shell (Dashboard/Map/Analytics/
+/// Root screen: a 6-destination shell (Dashboard/Map/Analytics/Devices/
 /// Notifications/Settings) — a custom side-panel nav beside the content on
 /// wide/web viewports, a bottom [NavigationBar] under it on narrow/phone
 /// widths. On wide layouts the Dashboard nav item expands into one
 /// sub-button per pond; tapping a pond (there or on a Dashboard card) shows
 /// that pond's dashboard in an inline detail pane, so the side panel always
-/// stays visible instead of a full-screen push covering it. All 5
+/// stays visible instead of a full-screen push covering it. All 6
 /// destinations stay mounted via [IndexedStack] so switching never loses a
 /// destination's own scroll position or in-progress selection.
 class AppShell extends StatefulWidget {
@@ -199,6 +205,7 @@ class _AppShellState extends State<AppShell> {
     _Destination.dashboard,
     _Destination.map,
     _Destination.analytics,
+    _Destination.devices,
     _Destination.settings,
   ];
 
@@ -331,6 +338,7 @@ class _AppShellState extends State<AppShell> {
             ),
             PondMapScreen(cache: _cache),
             AnalyticsScreen(cache: _cache),
+            DevicesScreen(active: _selectedIndex == _Destination.devices.index),
             NotificationsScreen(cache: _cache),
             const SettingsScreen(),
           ],
