@@ -35,7 +35,7 @@ class IsdaSafeApp extends StatelessWidget {
     final languageProvider = context.watch<LanguageProvider>();
 
     return MaterialApp(
-      title: 'IsdaSafe'.tr,
+      title: 'Isda Safe'.tr,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,

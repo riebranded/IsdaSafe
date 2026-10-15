@@ -213,6 +213,7 @@ const Map<String, String> tagalogStrings = {
   'Invalid login credentials': 'Maling email o password',
   'Is my pond healthy right now?': 'Malusog ba ang pond ko ngayon?',
   'IsdaSafe': 'IsdaSafe',
+  'Isda Safe': 'Isda Safe',
   'It will appear here once it\'s verified. We\'ll send you a notification when it is.':
       'Lalabas ito rito kapag na-verify na. Magpapadala kami ng notification kapag tapos na.',
   'Just need your mobile number to finish setting up your account.':
@@ -1014,6 +1015,8 @@ const Map<String, String> tagalogStrings = {
       '{0} pond · i-tap ang isa para makita ang mga kumpletong reading doon',
   'Refresh': 'I-refresh',
   'Hide map': 'Itago ang mapa',
+  'Swipe sideways to see every sensor':
+      'I-swipe pakaliwa o pakanan para makita ang bawat sensor',
   'Show map': 'Ipakita ang mapa',
   '1 visit': '1 pagbisita',
   '{0} visits': '{0} pagbisita',

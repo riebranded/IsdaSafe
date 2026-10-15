@@ -367,7 +367,7 @@ class _BrandingPanel extends StatelessWidget {
                 ),
                 const SizedBox(height: AppSpacing.lg),
                 Text(
-                  'IsdaSafe'.tr,
+                  'Isda Safe'.tr,
                   style: theme.textTheme.headlineMedium?.copyWith(
                     color: Colors.white,
                     fontWeight: FontWeight.w700,

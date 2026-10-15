@@ -181,13 +181,12 @@ class _ReadingHistoryTableState extends State<ReadingHistoryTable> {
           clipBehavior: Clip.antiAlias,
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final wide = constraints.maxWidth >= 640;
               String label(DateTime t) => pager.withDates
                   ? (pager.step?.fullLabel(t) ??
                         TrendStep.fifteenMinutes.fullLabel(t))
                   : pager.step?.rowLabel(t) ?? _time(t);
               final rows = <Widget>[];
-              if (wide) rows.add(_HeaderRow(types: types));
+              rows.add(_HeaderRow(types: types));
               DateTime? currentDay;
               for (final time in times) {
                 final day = DateUtils.dateOnly(time);
@@ -200,20 +199,22 @@ class _ReadingHistoryTableState extends State<ReadingHistoryTable> {
                   rows.add(const Divider(height: 1));
                 }
                 rows.add(
-                  wide
-                      ? _TableRow(
-                          time: label(time),
-                          types: types,
-                          values: byTime[time]!,
-                        )
-                      : _CompactRow(
-                          time: label(time),
-                          types: types,
-                          values: byTime[time]!,
-                        ),
+                  _TableRow(
+                    time: label(time),
+                    types: types,
+                    values: byTime[time]!,
+                  ),
                 );
               }
-              return Column(children: rows);
+              final table = Column(children: rows);
+              // The same table as on a wide screen; a phone scrolls it
+              // sideways instead of squeezing it.
+              final tableWidth =
+                  _timeColumnWidth +
+                  AppSpacing.lg * 2 +
+                  types.length * _metricColumnWidth;
+              if (constraints.maxWidth >= tableWidth) return table;
+              return _SidewaysScroll(width: tableWidth, child: table);
             },
           ),
         ),
@@ -258,6 +259,9 @@ class _ReadingHistoryTableState extends State<ReadingHistoryTable> {
 }
 
 const _timeColumnWidth = 128.0;
+
+/// The narrowest a metric's column gets before the table scrolls sideways.
+const _metricColumnWidth = 104.0;
 
 class _SummaryChip extends StatelessWidget {
   const _SummaryChip({
@@ -423,88 +427,135 @@ class _TableRow extends StatelessWidget {
 
 /// One reading time in the narrow layout: the time, then a grid with each
 /// metric's value under its name (two per line on a phone).
-class _CompactRow extends StatelessWidget {
-  const _CompactRow({
-    required this.time,
-    required this.types,
-    required this.values,
-  });
+/// The table scrolled sideways on a phone, with cues that it can be: a hint
+/// above while it's still at the start, a fading arrow on the right edge
+/// until the last column is reached, and a visible scrollbar.
+class _SidewaysScroll extends StatefulWidget {
+  const _SidewaysScroll({required this.width, required this.child});
 
-  final String time;
-  final List<MetricType> types;
-  final Map<MetricType, double> values;
+  final double width;
+  final Widget child;
+
+  @override
+  State<_SidewaysScroll> createState() => _SidewaysScrollState();
+}
+
+class _SidewaysScrollState extends State<_SidewaysScroll> {
+  final _controller = ScrollController();
+  var _atStart = true;
+  var _atEnd = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  bool _onNotification(Notification n) {
+    final metrics = switch (n) {
+      ScrollNotification() => n.metrics,
+      ScrollMetricsNotification() => n.metrics,
+      _ => null,
+    };
+    if (metrics == null || metrics.axis != Axis.horizontal) return false;
+    final atStart = metrics.pixels <= metrics.minScrollExtent + 4;
+    final atEnd = metrics.pixels >= metrics.maxScrollExtent - 4;
+    if (atStart != _atStart || atEnd != _atEnd) {
+      // Notifications can arrive mid-layout; update after the frame.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() {
+            _atStart = atStart;
+            _atEnd = atEnd;
+          });
+        }
+      });
+    }
+    return false;
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final palette = context.metricPalette;
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.lg,
-        vertical: AppSpacing.md,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            time,
-            style: theme.textTheme.titleSmall?.copyWith(
-              fontFeatures: const [FontFeature.tabularFigures()],
+    final scheme = theme.colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        AnimatedSize(
+          duration: const Duration(milliseconds: 200),
+          alignment: Alignment.topCenter,
+          child: _atStart
+              ? Container(
+                  color: scheme.secondaryContainer.withValues(alpha: 0.5),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.lg,
+                    vertical: AppSpacing.xs + 2,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.swipe,
+                        size: 16,
+                        color: scheme.onSecondaryContainer,
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: Text(
+                          'Swipe sideways to see every sensor'.tr,
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: scheme.onSecondaryContainer,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : const SizedBox(width: double.infinity),
+        ),
+        Stack(
+          children: [
+            NotificationListener<Notification>(
+              onNotification: _onNotification,
+              child: Scrollbar(
+                controller: _controller,
+                thumbVisibility: true,
+                child: SingleChildScrollView(
+                  controller: _controller,
+                  scrollDirection: Axis.horizontal,
+                  child: SizedBox(width: widget.width, child: widget.child),
+                ),
+              ),
             ),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              const gap = AppSpacing.md;
-              final columns = constraints.maxWidth >= 420 ? 3 : 2;
-              final cellWidth =
-                  (constraints.maxWidth - gap * (columns - 1)) / columns;
-              return Wrap(
-                spacing: gap,
-                runSpacing: AppSpacing.sm,
-                children: [
-                  for (final type in types)
-                    SizedBox(
-                      width: cellWidth,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // The sensor's name over its value.
-                          Row(
-                            children: [
-                              Icon(
-                                type.icon,
-                                size: 14,
-                                color: palette.of(type),
-                              ),
-                              const SizedBox(width: AppSpacing.xs),
-                              Expanded(
-                                child: Text(
-                                  type.label,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: theme.textTheme.labelSmall?.copyWith(
-                                    color: theme.colorScheme.onSurfaceVariant,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 2),
-                          _Value(
-                            type: type,
-                            value: values[type],
-                            showUnit: true,
-                          ),
+            Positioned(
+              top: 0,
+              bottom: 0,
+              right: 0,
+              child: IgnorePointer(
+                child: AnimatedOpacity(
+                  opacity: _atEnd ? 0 : 1,
+                  duration: const Duration(milliseconds: 150),
+                  child: Container(
+                    width: 36,
+                    alignment: Alignment.centerRight,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          scheme.surface.withValues(alpha: 0),
+                          scheme.surface.withValues(alpha: 0.95),
                         ],
                       ),
                     ),
-                ],
-              );
-            },
-          ),
-        ],
-      ),
+                    child: Icon(
+                      Icons.chevron_right,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

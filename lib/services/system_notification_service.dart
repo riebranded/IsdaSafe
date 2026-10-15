@@ -91,7 +91,7 @@ class SystemNotificationService extends ChangeNotifier {
           macOS: DarwinInitializationSettings(),
           linux: LinuxInitializationSettings(defaultActionName: 'Open'),
           windows: WindowsInitializationSettings(
-            appName: 'IsdaSafe',
+            appName: 'Isda Safe',
             appUserModelId: 'com.isdasafe.app',
             guid: '8f1d6c52-3b0e-4a7e-9a55-2c4d1f7b9e30',
           ),

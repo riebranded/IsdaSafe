@@ -7,7 +7,7 @@
     <!-- Scanning a device's QR label to pair it. -->
     <uses-permission android:name="android.permission.CAMERA"/>
     <application
-        android:label="isdasafev2"
+        android:label="Isda Safe"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

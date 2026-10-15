@@ -1006,6 +1006,9 @@ class _PlaceDetailState extends State<_PlaceDetail> {
           start: DateUtils.dateOnly(start),
           end: DateUtils.dateOnly(end ?? DateTime.now()),
         ),
+        // Every reading the device sent (about one a minute), not averages.
+        single: true,
+        anyStep: true,
       );
 
   TrendSelection get _allVisits =>

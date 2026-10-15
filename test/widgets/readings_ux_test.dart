@@ -135,7 +135,7 @@ void main() {
       ),
     );
 
-    testWidgets('on a phone each value has its sensor name over it', (
+    testWidgets('on a phone it is the same table, scrolled sideways', (
       tester,
     ) async {
       setScreen(tester, 360);
@@ -143,11 +143,22 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
 
-      final label = tester.getRect(find.text('Dissolved Oxygen').first);
-      final value = tester.getRect(find.text('6.0mg/L').first);
-      expect(label.bottom, lessThanOrEqualTo(value.top));
-      expect(find.text('Water Temperature'), findsWidgets);
-      expect(find.text('pH Level'), findsWidgets);
+      // The wide layout: a header row naming each sensor above its column.
+      expect(find.text('Time'), findsOneWidget);
+      expect(find.textContaining('Dissolved Oxygen'), findsWidgets);
+      expect(find.textContaining('Water Temperature'), findsWidgets);
+      expect(find.textContaining('pH Level'), findsWidgets);
+
+      // Wider than the screen, so it scrolls sideways.
+      final sideways = find.byWidgetPredicate(
+        (w) =>
+            w is SingleChildScrollView && w.scrollDirection == Axis.horizontal,
+      );
+      expect(sideways, findsOneWidget);
+      final table = tester.getSize(
+        find.descendant(of: sideways, matching: find.byType(SizedBox)).first,
+      );
+      expect(table.width, greaterThan(360));
     });
 
     testWidgets('shows 20 readings, then more as you scroll down', (
@@ -164,7 +175,10 @@ void main() {
 
       // Scroll to the end: the next page appears by itself.
       await tester.drag(
-        find.byType(SingleChildScrollView),
+        find.byWidgetPredicate(
+          (w) =>
+              w is SingleChildScrollView && w.scrollDirection == Axis.vertical,
+        ),
         const Offset(0, -6000),
       );
       await tester.pumpAndSettle();
@@ -173,7 +187,11 @@ void main() {
       // Keep going until every reading is shown.
       for (var i = 0; i < 5; i++) {
         await tester.drag(
-          find.byType(SingleChildScrollView),
+          find.byWidgetPredicate(
+            (w) =>
+                w is SingleChildScrollView &&
+                w.scrollDirection == Axis.vertical,
+          ),
           const Offset(0, -10000),
         );
         await tester.pumpAndSettle();
