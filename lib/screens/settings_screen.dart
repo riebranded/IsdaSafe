@@ -15,7 +15,13 @@ import 'legal/legal_screen.dart';
 /// Account info + sign-out — ported from the old sidebar's account row
 /// (`AppShell`'s former `_AccountSection`) into its own destination.
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
+  const SettingsScreen({super.key, this.onStartTour, this.tutorialKey});
+
+  /// Replays the guided app tour; the Help section is hidden when null.
+  final VoidCallback? onStartTour;
+
+  /// Marks the Help → Tutorial row for the tour's last step.
+  final GlobalKey? tutorialKey;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -141,190 +147,226 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ? displayName[0].toUpperCase()
             : '?';
 
-        return ListView(
+        // Built all at once (not lazily like a ListView) so the guided tour
+        // can find and scroll to the Help row at the bottom.
+        return SingleChildScrollView(
           padding: const EdgeInsets.all(AppSpacing.lg),
-          children: [
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(AppSpacing.lg),
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 28,
-                      backgroundColor: theme.colorScheme.primary,
-                      backgroundImage: photoUrl != null
-                          ? NetworkImage(photoUrl)
-                          : null,
-                      child: photoUrl == null
-                          ? Text(
-                              initial,
-                              style: TextStyle(
-                                color: theme.colorScheme.onPrimary,
-                                fontSize: 20,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(AppSpacing.lg),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 28,
+                        backgroundColor: theme.colorScheme.primary,
+                        backgroundImage: photoUrl != null
+                            ? NetworkImage(photoUrl)
+                            : null,
+                        child: photoUrl == null
+                            ? Text(
+                                initial,
+                                style: TextStyle(
+                                  color: theme.colorScheme.onPrimary,
+                                  fontSize: 20,
+                                ),
+                              )
+                            : null,
+                      ),
+                      const SizedBox(width: AppSpacing.md),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              displayName,
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
                               ),
-                            )
-                          : null,
+                            ),
+                            if (email.isNotEmpty && email != displayName)
+                              Text(
+                                email,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.edit_outlined),
+                        tooltip: 'Edit name'.tr,
+                        onPressed: () => _editName(fullName),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              Padding(
+                padding: const EdgeInsets.only(
+                  left: AppSpacing.xs,
+                  bottom: AppSpacing.sm,
+                ),
+                child: Text(
+                  'Credentials'.tr,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Card(
+                child: Column(
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.phone_outlined),
+                      title: Text('Phone number'.tr),
+                      subtitle: Text(
+                        phone == null || phone.isEmpty
+                            ? 'Not set'.tr
+                            : (phone.startsWith('+') ? phone : '+$phone'),
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => _runAccountDialog(
+                        () => showChangePhoneDialog(context),
+                      ),
                     ),
-                    const SizedBox(width: AppSpacing.md),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
+                    const Divider(height: 1),
+                    ListTile(
+                      leading: const Icon(Icons.email_outlined),
+                      title: Text('Email'.tr),
+                      subtitle: Text(email.isEmpty ? 'Not set'.tr : email),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => _runAccountDialog(
+                        () =>
+                            showChangeEmailDialog(context, currentEmail: email),
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    ListTile(
+                      leading: const Icon(Icons.lock_outline),
+                      title: Text('Password'.tr),
+                      subtitle: Text('Change your password'.tr),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => _runAccountDialog(
+                        () => showChangePasswordDialog(context),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(AppSpacing.lg),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
                         children: [
-                          Text(
-                            displayName,
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
+                          const Icon(Icons.translate),
+                          const SizedBox(width: AppSpacing.md),
+                          Expanded(
+                            child: Text(
+                              'Language'.tr,
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
-                          if (email.isNotEmpty && email != displayName)
-                            Text(
-                              email,
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
                         ],
                       ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.edit_outlined),
-                      tooltip: 'Edit name'.tr,
-                      onPressed: () => _editName(fullName),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            Padding(
-              padding: const EdgeInsets.only(
-                left: AppSpacing.xs,
-                bottom: AppSpacing.sm,
-              ),
-              child: Text(
-                'Credentials'.tr,
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            Card(
-              child: Column(
-                children: [
-                  ListTile(
-                    leading: const Icon(Icons.phone_outlined),
-                    title: Text('Phone number'.tr),
-                    subtitle: Text(
-                      phone == null || phone.isEmpty
-                          ? 'Not set'.tr
-                          : (phone.startsWith('+') ? phone : '+$phone'),
-                    ),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () =>
-                        _runAccountDialog(() => showChangePhoneDialog(context)),
-                  ),
-                  const Divider(height: 1),
-                  ListTile(
-                    leading: const Icon(Icons.email_outlined),
-                    title: Text('Email'.tr),
-                    subtitle: Text(email.isEmpty ? 'Not set'.tr : email),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => _runAccountDialog(
-                      () => showChangeEmailDialog(context, currentEmail: email),
-                    ),
-                  ),
-                  const Divider(height: 1),
-                  ListTile(
-                    leading: const Icon(Icons.lock_outline),
-                    title: Text('Password'.tr),
-                    subtitle: Text('Change your password'.tr),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => _runAccountDialog(
-                      () => showChangePasswordDialog(context),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(AppSpacing.lg),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.translate),
-                        const SizedBox(width: AppSpacing.md),
-                        Expanded(
-                          child: Text(
-                            'Language'.tr,
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        'Choose the app language. The AI assistant replies in it too.'
+                            .tr,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: AppSpacing.xs),
-                    Text(
-                      'Choose the app language. The AI assistant replies in it too.'
-                          .tr,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
                       ),
+                      const SizedBox(height: AppSpacing.md),
+                      const LanguageToggle(),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              const _AppearanceCard(),
+              const SizedBox(height: AppSpacing.lg),
+              const _NotificationsCard(),
+              const SizedBox(height: AppSpacing.lg),
+              if (widget.onStartTour case final startTour?) ...[
+                Padding(
+                  padding: const EdgeInsets.only(
+                    left: AppSpacing.xs,
+                    bottom: AppSpacing.sm,
+                  ),
+                  child: Text(
+                    'Help'.tr,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
                     ),
-                    const SizedBox(height: AppSpacing.md),
-                    const LanguageToggle(),
+                  ),
+                ),
+                Card(
+                  key: widget.tutorialKey,
+                  child: ListTile(
+                    key: const ValueKey('settings-app-tour'),
+                    leading: const Icon(Icons.help_outline),
+                    title: Text('Tutorial'.tr),
+                    subtitle: Text(
+                      'See how the app works and what each part does.'.tr,
+                    ),
+                    trailing: const Icon(Icons.play_circle_outline),
+                    onTap: startTour,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.lg),
+              ],
+              Padding(
+                padding: const EdgeInsets.only(
+                  left: AppSpacing.xs,
+                  bottom: AppSpacing.sm,
+                ),
+                child: Text(
+                  'Legal'.tr,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Card(
+                child: Column(
+                  children: [
+                    for (final (i, document)
+                        in LegalDocument.values.indexed) ...[
+                      if (i > 0) const Divider(height: 1),
+                      ListTile(
+                        leading: Icon(document.icon),
+                        title: Text(document.title),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => openLegalDocument(context, document),
+                      ),
+                    ],
                   ],
                 ),
               ),
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            const _AppearanceCard(),
-            const SizedBox(height: AppSpacing.lg),
-            const _NotificationsCard(),
-            const SizedBox(height: AppSpacing.lg),
-            Padding(
-              padding: const EdgeInsets.only(
-                left: AppSpacing.xs,
-                bottom: AppSpacing.sm,
-              ),
-              child: Text(
-                'Legal'.tr,
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
+              const SizedBox(height: AppSpacing.lg),
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.logout),
+                  title: Text('Sign out'.tr),
+                  onTap: AuthService.signOut,
                 ),
               ),
-            ),
-            Card(
-              child: Column(
-                children: [
-                  for (final (i, document) in LegalDocument.values.indexed) ...[
-                    if (i > 0) const Divider(height: 1),
-                    ListTile(
-                      leading: Icon(document.icon),
-                      title: Text(document.title),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => openLegalDocument(context, document),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            Card(
-              child: ListTile(
-                leading: const Icon(Icons.logout),
-                title: Text('Sign out'.tr),
-                onTap: AuthService.signOut,
-              ),
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            const Card(child: _DeleteAccountTile()),
-          ],
+              const SizedBox(height: AppSpacing.lg),
+              const Card(child: _DeleteAccountTile()),
+            ],
+          ),
         );
       },
     );

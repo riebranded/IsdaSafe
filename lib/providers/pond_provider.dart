@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import '../models/pond.dart';
 import '../models/pond_verification.dart';
@@ -33,24 +32,8 @@ class PondProvider extends ChangeNotifier {
   /// side panel, alerts) shows. Ponds still being checked, rejected, or whose
   /// check failed are kept out until they're verified; see [pendingPonds] and
   /// [failedPonds] for the ones the dashboard banner reports on.
-  ///
-  /// Testing aid: in debug builds, `SKIP_POND_VERIFICATION=true` in `.env`
-  /// also lists ponds still being checked (anything not rejected), so
-  /// species/biomass and pairing can be tried without waiting on
-  /// `verify-pond`. Only the display changes; the stored status doesn't.
-  List<Pond> get ponds => List.unmodifiable(
-    _ponds.where(
-      (p) =>
-          p.isVerified ||
-          (_skipVerification &&
-              p.verificationStatus != VerificationStatus.rejected),
-    ),
-  );
-
-  static bool get _skipVerification =>
-      kDebugMode &&
-      dotenv.isInitialized &&
-      dotenv.maybeGet('SKIP_POND_VERIFICATION') == 'true';
+  List<Pond> get ponds =>
+      List.unmodifiable(_ponds.where((p) => p.isVerified));
 
   /// Any of the user's ponds by id, whatever its verification status (e.g. to
   /// show a review's result). Null if there's no such pond.

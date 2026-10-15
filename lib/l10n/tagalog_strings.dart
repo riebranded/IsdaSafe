@@ -1050,4 +1050,80 @@ const Map<String, String> tagalogStrings = {
   '{0} h {1} min': '{0} oras {1} min',
   '{0} d': '{0} araw',
   '{0} d {1} h': '{0} araw {1} oras',
+  // Guided app tour.
+  'Welcome to Isda Safe': 'Maligayang pagdating sa Isda Safe',
+  'Isda Safe watches your fish ponds\' water around the clock with an IsdaSafe sensor device, warns you when something drifts out of range and tells you what to do about it. This short tour shows where everything is.':
+      'Binabantayan ng Isda Safe ang tubig ng iyong mga palaisdaan buong araw at gabi gamit ang IsdaSafe sensor device, binabalaan ka kapag may lumalampas sa ligtas na saklaw, at sinasabi kung ano ang dapat gawin. Ipapakita ng maikling tour na ito kung nasaan ang lahat.',
+  'Getting around': 'Paglibot sa app',
+  'This side panel takes you to every part of the app. Your ponds are listed under Dashboard with a colored status dot, and your account is at the bottom.':
+      'Dadalhin ka ng side panel na ito sa bawat bahagi ng app. Nakalista ang iyong mga pond sa ilalim ng Dashboard na may kulay na status dot, at nasa ibaba ang iyong account.',
+  'The bar at the bottom takes you to every part of the app. Notifications and your profile are at the top.':
+      'Dadalhin ka ng bar sa ibaba sa bawat bahagi ng app. Nasa itaas ang mga notification at ang iyong profile.',
+  'All your ponds at a glance. Each card shows the latest readings and a Normal, Warning or Critical status.':
+      'Lahat ng iyong pond sa isang tingin. Ipinapakita ng bawat card ang pinakabagong reading at ang status na Normal, Babala o Kritikal.',
+  'Tap a pond to open its own dashboard: latest readings, trends, water quality recommendations and possible risks.':
+      'I-tap ang isang pond para buksan ang sarili nitong dashboard: pinakabagong reading, mga trend, rekomendasyon sa kalidad ng tubig at mga posibleng panganib.',
+  'Plan feeding with an AI feeding schedule for the fish species you raise, and see which species suit the pond.':
+      'Magplano ng pagpapakain gamit ang AI feeding schedule para sa mga species ng isdang inaalagaan mo, at alamin kung aling mga species ang angkop sa pond.',
+  'Use a pond\'s three-dot menu to rename it, edit its location or remove it.':
+      'Gamitin ang three-dot menu ng pond para palitan ang pangalan, baguhin ang lokasyon o alisin ito.',
+  'Start here to register a new pond.':
+      'Magsimula rito para magrehistro ng bagong pond.',
+  'Name it and pin where it is on the map.':
+      'Pangalanan ito at i-pin kung nasaan ito sa mapa.',
+  'We verify the pond from satellite imagery (or your photos for in-house tanks) and notify you.':
+      'Bine-verify namin ang pond gamit ang satellite imagery (o ang iyong mga litrato para sa in-house na tangke) at aabisuhan ka namin.',
+  'Once verified, pair an IsdaSafe device by scanning its QR label, then add your fish species.':
+      'Kapag na-verify na, i-pair ang isang IsdaSafe device sa pag-scan ng QR label nito, saka idagdag ang mga species ng isda mo.',
+  'Chat with the pond assistant about a pond. It reads the pond\'s latest readings and feeding plan, and answers in your chosen language.':
+      'Makipag-chat sa pond assistant tungkol sa isang pond. Binabasa nito ang pinakabagong reading at plano sa pagpapakain ng pond, at sumasagot sa wikang pinili mo.',
+  'Every pond pinned on one map, colored by its status. Tap a marker to see that pond\'s readings.':
+      'Lahat ng pond ay naka-pin sa iisang mapa, may kulay ayon sa status nito. I-tap ang isang marker para makita ang mga reading ng pond na iyon.',
+  'Dig into a pond\'s history.': 'Suriin ang kasaysayan ng isang pond.',
+  'Switch between ponds with the pond selector.':
+      'Lumipat sa ibang pond gamit ang pond selector.',
+  'Individual trends: a chart per metric over the timeframe you pick.':
+      'Mga indibidwal na trend: isang chart bawat sukatan sa panahong pipiliin mo.',
+  'Individual readings: every reading the device sent, in a table.':
+      'Mga indibidwal na reading: bawat reading na ipinadala ng device, sa isang talahanayan.',
+  'Your IsdaSafe sensor devices.': 'Ang iyong mga IsdaSafe sensor device.',
+  'Choose a device to see where it is now and how much it has measured.':
+      'Pumili ng device para makita kung nasaan ito ngayon at gaano karami na ang nasukat nito.',
+  'Its map shows a numbered pin for every pond it has been in, with each visit\'s complete readings.':
+      'Ipinapakita ng mapa nito ang may-numerong pin para sa bawat pond na napuntahan nito, kasama ang kumpletong reading ng bawat pagbisita.',
+  'Connect a device to WiFi and refresh to see its latest location.':
+      'Ikonekta ang device sa WiFi at i-refresh para makita ang pinakabago nitong lokasyon.',
+  'Alerts and updates about your ponds and devices.':
+      'Mga alerto at update tungkol sa iyong mga pond at device.',
+  'Warnings when a reading drifts outside the healthy range.':
+      'Mga babala kapag lumalampas ang isang reading sa malusog na saklaw.',
+  'Pond verification results, photo requests and device transfer requests, with a button to act on them.':
+      'Mga resulta ng pag-verify ng pond, hiling para sa litrato at hiling sa paglipat ng device, na may button para tugunan ang mga ito.',
+  'The badge counts unread alerts; mark them all as read in one tap.':
+      'Binibilang ng badge ang mga hindi pa nababasang alerto; markahan silang lahat bilang nabasa sa isang tap.',
+  'Make the app yours.': 'Iangkop ang app sa iyo.',
+  'Edit your name, phone number, email and password.':
+      'Baguhin ang iyong pangalan, numero ng telepono, email at password.',
+  'Switch the language between English and Tagalog, and pick a light or dark look.':
+      'Palitan ang wika sa English o Tagalog, at pumili ng maliwanag o madilim na itsura.',
+  'Turn push notifications and SMS alerts on or off.':
+      'I-on o i-off ang mga push notification at SMS alert.',
+  'Read the legal documents, sign out or delete your account.':
+      'Basahin ang mga legal na dokumento, mag-sign out o burahin ang iyong account.',
+  'Your account': 'Ang iyong account',
+  'Your name and email. Tap here to sign out.':
+      'Ang iyong pangalan at email. I-tap dito para mag-sign out.',
+  'Tap your picture to open Settings.':
+      'I-tap ang iyong larawan para buksan ang Settings.',
+  'You\'re all set!': 'Handa ka na!',
+  'Start by adding your first pond. You can replay this tour any time from Settings → Help → Tutorial.':
+      'Magsimula sa pagdagdag ng iyong unang pond. Maaari mong ulitin ang tour na ito anumang oras sa Settings → Tulong → Tutorial.',
+  'Help': 'Tulong',
+  'Tutorial': 'Tutorial',
+  'See how the app works and what each part does.':
+      'Tingnan kung paano gumagana ang app at kung ano ang ginagawa ng bawat bahagi.',
+  'Skip tour': 'Laktawan ang tour',
+  '{0} of {1}': '{0} sa {1}',
+  'Next': 'Susunod',
+  'Finish': 'Tapusin',
 };

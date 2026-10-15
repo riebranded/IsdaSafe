@@ -18,6 +18,7 @@ import '../services/usb_sensor/pond_readings_store.dart';
 import '../services/recommendation_cache.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/add_pond_flow.dart';
+import '../widgets/app_tour.dart';
 import '../widgets/notification_toast.dart';
 import '../widgets/pond_chat_sheet.dart';
 import '../widgets/status_badge.dart';
@@ -93,6 +94,19 @@ class _AppShellState extends State<AppShell> {
   var _selectedIndex = 0;
   StreamSubscription? _incomingSub;
 
+  /// What the guided tour spotlights. Each key sits on whichever variant
+  /// (side panel or bottom bar / top bar) the current layout shows.
+  final _tourNavKeys = {
+    for (final d in _Destination.values) d: GlobalKey(debugLabel: 'tour-$d'),
+  };
+  final _tourNavBarKey = GlobalKey(debugLabel: 'tour-nav');
+  final _tourAddPondKey = GlobalKey(debugLabel: 'tour-add-pond');
+  final _tourAskAiKey = GlobalKey(debugLabel: 'tour-ask-ai');
+  final _tourBellKey = GlobalKey(debugLabel: 'tour-bell');
+  final _tourAccountKey = GlobalKey(debugLabel: 'tour-account');
+  final _tourBrandKey = GlobalKey(debugLabel: 'tour-brand');
+  final _tourTutorialKey = GlobalKey(debugLabel: 'tour-tutorial');
+
   @override
   void initState() {
     super.initState();
@@ -114,7 +128,174 @@ class _AppShellState extends State<AppShell> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) openClaimLink(context, claim);
       });
+    } else {
+      // First sign-in on this device: walk the user through the app once.
+      // It can be replayed any time from Settings.
+      _autoStartTour();
     }
+  }
+
+  Future<void> _autoStartTour() async {
+    if (!await AppTour.shouldAutoStart()) return;
+    // Give the ponds a moment to load so the shell is in its final layout.
+    await Future<void>.delayed(const Duration(milliseconds: 800));
+    if (mounted) _startTour();
+  }
+
+  void _goTo(_Destination d) {
+    if (mounted) setState(() => _selectedIndex = d.index);
+  }
+
+  /// The guided tour of every destination and what can be done there.
+  void _startTour() {
+    if (AppTour.isShowing) return;
+    final isWide = MediaQuery.sizeOf(context).width >= kWideLayoutBreakpoint;
+    AppTour.start(context, [
+      TourStep(
+        target: _tourBrandKey,
+        icon: Icons.waving_hand_outlined,
+        title: 'Welcome to Isda Safe'.tr,
+        body:
+            'Isda Safe watches your fish ponds\' water around the clock with an IsdaSafe sensor device, warns you when something drifts out of range and tells you what to do about it. This short tour shows where everything is.'
+                .tr,
+        onEnter: () => _goTo(_Destination.dashboard),
+      ),
+      TourStep(
+        target: _tourNavBarKey,
+        icon: Icons.explore_outlined,
+        title: 'Getting around'.tr,
+        body: isWide
+            ? 'This side panel takes you to every part of the app. Your ponds are listed under Dashboard with a colored status dot, and your account is at the bottom.'
+                  .tr
+            : 'The bar at the bottom takes you to every part of the app. Notifications and your profile are at the top.'
+                  .tr,
+      ),
+      TourStep(
+        target: _tourNavKeys[_Destination.dashboard],
+        icon: Icons.dashboard_outlined,
+        title: 'Dashboard'.tr,
+        body:
+            'All your ponds at a glance. Each card shows the latest readings and a Normal, Warning or Critical status.'
+                .tr,
+        points: [
+          'Tap a pond to open its own dashboard: latest readings, trends, water quality recommendations and possible risks.'
+              .tr,
+          'Plan feeding with an AI feeding schedule for the fish species you raise, and see which species suit the pond.'
+              .tr,
+          'Use a pond\'s three-dot menu to rename it, edit its location or remove it.'
+              .tr,
+        ],
+        onEnter: () => _goTo(_Destination.dashboard),
+      ),
+      TourStep(
+        target: _tourAddPondKey,
+        icon: Icons.add,
+        title: 'Add a pond'.tr,
+        body: 'Start here to register a new pond.'.tr,
+        points: [
+          'Name it and pin where it is on the map.'.tr,
+          'We verify the pond from satellite imagery (or your photos for in-house tanks) and notify you.'
+              .tr,
+          'Once verified, pair an IsdaSafe device by scanning its QR label, then add your fish species.'
+              .tr,
+        ],
+        onEnter: () => _goTo(_Destination.dashboard),
+      ),
+      TourStep(
+        target: _tourAskAiKey,
+        icon: Icons.auto_awesome,
+        title: 'Ask AI'.tr,
+        body:
+            'Chat with the pond assistant about a pond. It reads the pond\'s latest readings and feeding plan, and answers in your chosen language.'
+                .tr,
+        onEnter: () => _goTo(_Destination.dashboard),
+      ),
+      TourStep(
+        target: _tourNavKeys[_Destination.map],
+        icon: Icons.map_outlined,
+        title: 'Map'.tr,
+        body:
+            'Every pond pinned on one map, colored by its status. Tap a marker to see that pond\'s readings.'
+                .tr,
+        onEnter: () => _goTo(_Destination.map),
+      ),
+      TourStep(
+        target: _tourNavKeys[_Destination.analytics],
+        icon: Icons.analytics_outlined,
+        title: 'Analytics'.tr,
+        body: 'Dig into a pond\'s history.'.tr,
+        points: [
+          'Switch between ponds with the pond selector.'.tr,
+          'Individual trends: a chart per metric over the timeframe you pick.'
+              .tr,
+          'Individual readings: every reading the device sent, in a table.'.tr,
+        ],
+        onEnter: () => _goTo(_Destination.analytics),
+      ),
+      TourStep(
+        target: _tourNavKeys[_Destination.devices],
+        icon: Icons.sensors_outlined,
+        title: 'Devices'.tr,
+        body: 'Your IsdaSafe sensor devices.'.tr,
+        points: [
+          'Choose a device to see where it is now and how much it has measured.'
+              .tr,
+          'Its map shows a numbered pin for every pond it has been in, with each visit\'s complete readings.'
+              .tr,
+          'Connect a device to WiFi and refresh to see its latest location.'.tr,
+        ],
+        onEnter: () => _goTo(_Destination.devices),
+      ),
+      TourStep(
+        target: isWide
+            ? _tourNavKeys[_Destination.notifications]
+            : _tourBellKey,
+        icon: Icons.notifications_outlined,
+        title: 'Notifications'.tr,
+        body: 'Alerts and updates about your ponds and devices.'.tr,
+        points: [
+          'Warnings when a reading drifts outside the healthy range.'.tr,
+          'Pond verification results, photo requests and device transfer requests, with a button to act on them.'
+              .tr,
+          'The badge counts unread alerts; mark them all as read in one tap.'
+              .tr,
+        ],
+        onEnter: () =>
+            _goTo(isWide ? _Destination.notifications : _Destination.dashboard),
+      ),
+      TourStep(
+        target: _tourNavKeys[_Destination.settings],
+        icon: Icons.settings_outlined,
+        title: 'Settings'.tr,
+        body: 'Make the app yours.'.tr,
+        points: [
+          'Edit your name, phone number, email and password.'.tr,
+          'Switch the language between English and Tagalog, and pick a light or dark look.'
+              .tr,
+          'Turn push notifications and SMS alerts on or off.'.tr,
+          'Read the legal documents, sign out or delete your account.'.tr,
+        ],
+        onEnter: () => _goTo(_Destination.settings),
+      ),
+      TourStep(
+        target: _tourAccountKey,
+        icon: Icons.account_circle_outlined,
+        title: 'Your account'.tr,
+        body: isWide
+            ? 'Your name and email. Tap here to sign out.'.tr
+            : 'Tap your picture to open Settings.'.tr,
+        onEnter: () => _goTo(_Destination.settings),
+      ),
+      TourStep(
+        target: _tourTutorialKey,
+        icon: Icons.celebration_outlined,
+        title: 'You\'re all set!'.tr,
+        body:
+            'Start by adding your first pond. You can replay this tour any time from Settings → Help → Tutorial.'
+                .tr,
+        onEnter: () => _goTo(_Destination.settings),
+      ),
+    ], onFinish: () => _goTo(_Destination.dashboard));
   }
 
   void _onLiveReading() {
@@ -340,7 +521,10 @@ class _AppShellState extends State<AppShell> {
             AnalyticsScreen(cache: _cache),
             DevicesScreen(active: _selectedIndex == _Destination.devices.index),
             NotificationsScreen(cache: _cache),
-            const SettingsScreen(),
+            SettingsScreen(
+              onStartTour: _startTour,
+              tutorialKey: _tourTutorialKey,
+            ),
           ],
         );
 
@@ -351,6 +535,10 @@ class _AppShellState extends State<AppShell> {
           appBar: isWide
               ? null
               : _MobileTopBar(
+                  key: _tourBrandKey,
+                  addPondKey: _tourAddPondKey,
+                  bellKey: _tourBellKey,
+                  avatarKey: _tourAccountKey,
                   onOpenProfile: () => setState(
                     () => _selectedIndex = _Destination.settings.index,
                   ),
@@ -361,6 +549,7 @@ class _AppShellState extends State<AppShell> {
                 ),
           floatingActionButton: _selectedIndex == 0
               ? FloatingActionButton.extended(
+                  key: _tourAskAiKey,
                   onPressed: () => _openChat(context, ponds, selectedPondId),
                   icon: const Icon(Icons.auto_awesome),
                   label: Text('Ask AI'.tr),
@@ -372,6 +561,10 @@ class _AppShellState extends State<AppShell> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     _SidePanel(
+                      key: _tourNavBarKey,
+                      navKeys: _tourNavKeys,
+                      brandKey: _tourBrandKey,
+                      accountKey: _tourAccountKey,
                       ponds: ponds,
                       selectedIndex: _selectedIndex,
                       selectedPondId: selectedPondId,
@@ -407,6 +600,7 @@ class _AppShellState extends State<AppShell> {
                                     PondsHeader(count: ponds.length),
                                   const Spacer(),
                                   FilledButton.icon(
+                                    key: _tourAddPondKey,
                                     onPressed: () => _addPond(context),
                                     icon: const Icon(Icons.add),
                                     label: Text('Add pond'.tr),
@@ -424,16 +618,20 @@ class _AppShellState extends State<AppShell> {
           bottomNavigationBar: isWide
               ? null
               : NavigationBar(
+                  key: _tourNavBarKey,
                   selectedIndex: _bottomNavIndex,
                   onDestinationSelected: (index) => setState(
                     () => _selectedIndex = _bottomDestinations[index].index,
                   ),
                   destinations: [
                     for (final d in _bottomDestinations)
-                      NavigationDestination(
-                        icon: Icon(d.icon),
-                        selectedIcon: Icon(d.selectedIcon),
-                        label: d.label,
+                      KeyedSubtree(
+                        key: _tourNavKeys[d],
+                        child: NavigationDestination(
+                          icon: Icon(d.icon),
+                          selectedIcon: Icon(d.selectedIcon),
+                          label: d.label,
+                        ),
                       ),
                   ],
                 ),
@@ -447,10 +645,19 @@ class _AppShellState extends State<AppShell> {
 /// notification bell (top-right). Replaces the plain per-screen AppBar title.
 class _MobileTopBar extends StatefulWidget implements PreferredSizeWidget {
   const _MobileTopBar({
+    super.key,
+    required this.addPondKey,
+    required this.bellKey,
+    required this.avatarKey,
     required this.onOpenProfile,
     required this.onOpenNotifications,
     this.onAddPond,
   });
+
+  /// Spotlighted by the guided tour.
+  final GlobalKey addPondKey;
+  final GlobalKey bellKey;
+  final GlobalKey avatarKey;
 
   final VoidCallback onOpenProfile;
   final VoidCallback onOpenNotifications;
@@ -529,6 +736,7 @@ class _MobileTopBarState extends State<_MobileTopBar> {
           leading: Padding(
             padding: const EdgeInsets.only(left: AppSpacing.md),
             child: GestureDetector(
+              key: widget.avatarKey,
               onTap: widget.onOpenProfile,
               child: CircleAvatar(
                 radius: 20,
@@ -568,11 +776,13 @@ class _MobileTopBarState extends State<_MobileTopBar> {
           actions: [
             if (widget.onAddPond != null)
               IconButton.filledTonal(
+                key: widget.addPondKey,
                 onPressed: widget.onAddPond,
                 icon: const Icon(Icons.add),
                 tooltip: 'Add pond'.tr,
               ),
             IconButton(
+              key: widget.bellKey,
               onPressed: widget.onOpenNotifications,
               icon: _UnreadBadge(
                 count: context.watch<NotificationProvider>().unreadCount,
@@ -593,6 +803,10 @@ class _MobileTopBarState extends State<_MobileTopBar> {
 /// bottom.
 class _SidePanel extends StatelessWidget {
   const _SidePanel({
+    super.key,
+    required this.navKeys,
+    required this.brandKey,
+    required this.accountKey,
     required this.ponds,
     required this.selectedIndex,
     required this.selectedPondId,
@@ -600,6 +814,11 @@ class _SidePanel extends StatelessWidget {
     required this.onSelectDestination,
     required this.onSelectPond,
   });
+
+  /// Spotlighted by the guided tour.
+  final Map<_Destination, GlobalKey> navKeys;
+  final GlobalKey brandKey;
+  final GlobalKey accountKey;
 
   final List<Pond> ponds;
   final int selectedIndex;
@@ -625,33 +844,49 @@ class _SidePanel extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
+              key: brandKey,
+              // The inner padding keeps the branding where it was while
+              // giving the tap target some room around it.
               padding: const EdgeInsets.fromLTRB(
-                AppSpacing.xl,
-                AppSpacing.lg,
+                AppSpacing.xl - AppSpacing.xs,
+                AppSpacing.lg - AppSpacing.xs,
                 AppSpacing.md,
-                AppSpacing.sm,
+                AppSpacing.sm - AppSpacing.xs,
               ),
-              child: Row(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(AppRadius.sm),
-                    child: Image.asset(
-                      'assets/branding/logo.png',
-                      width: 28,
-                      height: 28,
-                      fit: BoxFit.cover,
+              // Tapping the logo or name goes home to the pond overview.
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: InkWell(
+                  key: const ValueKey('brand-home'),
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                  onTap: () => onSelectDestination(0),
+                  child: Padding(
+                    padding: const EdgeInsets.all(AppSpacing.xs),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(AppRadius.sm),
+                          child: Image.asset(
+                            'assets/branding/logo.png',
+                            width: 28,
+                            height: 28,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        Flexible(
+                          child: Text(
+                            'Isda Safe'.tr,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.headlineSmall,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(width: AppSpacing.sm),
-                  Flexible(
-                    child: Text(
-                      'Isda Safe'.tr,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.headlineSmall,
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
             Expanded(
@@ -661,16 +896,19 @@ class _SidePanel extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     for (final (index, d) in _Destination.values.indexed) ...[
-                      _NavItem(
-                        key: ValueKey('nav-${d.name}'),
-                        icon: d.icon,
-                        selectedIcon: d.selectedIcon,
-                        label: d.label,
-                        badgeCount: d == _Destination.notifications
-                            ? unreadNotifications
-                            : 0,
-                        selected: selectedIndex == index,
-                        onTap: () => onSelectDestination(index),
+                      KeyedSubtree(
+                        key: navKeys[d],
+                        child: _NavItem(
+                          key: ValueKey('nav-${d.name}'),
+                          icon: d.icon,
+                          selectedIcon: d.selectedIcon,
+                          label: d.label,
+                          badgeCount: d == _Destination.notifications
+                              ? unreadNotifications
+                              : 0,
+                          selected: selectedIndex == index,
+                          onTap: () => onSelectDestination(index),
+                        ),
                       ),
                       // Pond sub-buttons only appear while Dashboard is the
                       // active destination.
@@ -690,7 +928,7 @@ class _SidePanel extends StatelessWidget {
               ),
             ),
             const Divider(height: 1),
-            const _AccountSection(),
+            KeyedSubtree(key: accountKey, child: const _AccountSection()),
           ],
         ),
       ),

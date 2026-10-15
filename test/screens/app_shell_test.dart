@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:isdasafev2/models/pond.dart';
@@ -11,6 +12,7 @@ import 'package:isdasafev2/providers/pond_provider.dart';
 import 'package:isdasafev2/l10n/language_provider.dart';
 import 'package:isdasafev2/providers/theme_provider.dart';
 import 'package:isdasafev2/screens/app_shell.dart';
+import 'package:isdasafev2/widgets/app_tour.dart';
 import 'package:isdasafev2/theme/app_theme.dart';
 
 import '../support/fake_notification_repository.dart';
@@ -105,6 +107,23 @@ void main() {
       expect(find.text('AI Recommended Species'), findsNothing);
     },
   );
+
+  testWidgets('tapping the logo and name goes back to the Dashboard', (
+    tester,
+  ) async {
+    await setWideSurface(tester);
+    await tester.pumpWidget(buildApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('nav-settings')));
+    await tester.pumpAndSettle();
+    expect(find.text('Add pond'), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('brand-home')));
+    await tester.pumpAndSettle();
+    expect(find.text('Add pond'), findsOneWidget);
+    expect(find.byKey(const ValueKey('pond-nav-pond-a')), findsOneWidget);
+  });
 
   testWidgets('the Ask AI button asks which pond, then opens the chat', (
     tester,
@@ -328,4 +347,96 @@ void main() {
       expect(find.byType(SnackBar), findsNothing);
     },
   );
+
+  group('app tour', () {
+    setUp(() => SharedPreferences.setMockInitialValues({}));
+    tearDown(() => AppTour.autoStartEnabled = false);
+
+    /// Presses Next (Finish on the last step) until the tour closes,
+    /// returning how many steps were shown.
+    Future<int> runThrough(WidgetTester tester) async {
+      var steps = 0;
+      while (find.byKey(const ValueKey('tour-next')).evaluate().isNotEmpty) {
+        steps++;
+        await tester.tap(find.byKey(const ValueKey('tour-next')));
+        await tester.pumpAndSettle();
+      }
+      return steps;
+    }
+
+    testWidgets(
+      'starts on first launch, walks every destination, and is not shown again',
+      (tester) async {
+        AppTour.autoStartEnabled = true;
+        await setWideSurface(tester);
+        await tester.pumpWidget(buildApp());
+        await tester.pump(const Duration(seconds: 1));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Welcome to Isda Safe'), findsOneWidget);
+        expect(find.text('1 of 12'), findsOneWidget);
+
+        // Each feature step switches to its destination behind the overlay.
+        for (var i = 0; i < 5; i++) {
+          await tester.tap(find.byKey(const ValueKey('tour-next')));
+          await tester.pumpAndSettle();
+        }
+        expect(find.text('6 of 12'), findsOneWidget);
+        expect(
+          find.textContaining('Every pond pinned on one map'),
+          findsOneWidget,
+        );
+
+        await tester.tap(find.byKey(const ValueKey('tour-back')));
+        await tester.pumpAndSettle();
+        expect(find.text('5 of 12'), findsOneWidget);
+
+        for (var i = 0; i < 7; i++) {
+          await tester.tap(find.byKey(const ValueKey('tour-next')));
+          await tester.pumpAndSettle();
+        }
+        expect(find.text("You're all set!"), findsOneWidget);
+        expect(find.text('Finish'), findsOneWidget);
+        await tester.tap(find.byKey(const ValueKey('tour-next')));
+        await tester.pumpAndSettle();
+
+        expect(AppTour.isShowing, isFalse);
+        expect(find.text("You're all set!"), findsNothing);
+        final prefs = await SharedPreferences.getInstance();
+        expect(prefs.getBool('app_tour_seen_v1'), isTrue);
+        expect(await AppTour.shouldAutoStart(), isFalse);
+      },
+    );
+
+    testWidgets('can be skipped, and replayed from Settings on mobile', (
+      tester,
+    ) async {
+      AppTour.autoStartEnabled = true;
+      await setNarrowSurface(tester);
+      await tester.pumpWidget(buildApp());
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('tour-skip')));
+      await tester.pumpAndSettle();
+      expect(AppTour.isShowing, isFalse);
+
+      await tester.tap(find.text('Settings').last);
+      await tester.pumpAndSettle();
+      final tile = find.byKey(const ValueKey('settings-app-tour'));
+      await tester.scrollUntilVisible(tile, 200);
+      // Bring it clear of the bottom nav bar before tapping.
+      await tester.ensureVisible(tile);
+      await tester.pumpAndSettle();
+      expect(find.text('Help'), findsOneWidget);
+      expect(find.text('Tutorial'), findsOneWidget);
+      await tester.tap(tile);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Welcome to Isda Safe'), findsOneWidget);
+      expect(await runThrough(tester), 12);
+      expect(AppTour.isShowing, isFalse);
+      expect(tester.takeException(), isNull);
+    });
+  });
 }
