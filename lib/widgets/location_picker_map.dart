@@ -1,6 +1,8 @@
 import 'dart:io' show Platform;
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show Factory, kIsWeb;
+import 'package:flutter/gestures.dart'
+    show EagerGestureRecognizer, OneSequenceGestureRecognizer;
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
@@ -169,6 +171,17 @@ class _LocationPickerMapState extends State<LocationPickerMap> {
             onCameraMove: _handleCameraMove,
             onCameraIdle: _handleCameraIdle,
             myLocationButtonEnabled: false,
+            // The map sits inside scrolling dialogs: claim every touch so
+            // pinching and dragging move the map instead of the page.
+            gestureRecognizers: {
+              Factory<OneSequenceGestureRecognizer>(
+                () => EagerGestureRecognizer(),
+              ),
+            },
+            zoomGesturesEnabled: true,
+            scrollGesturesEnabled: true,
+            // Our own + / - buttons below (the built-in ones are small and
+            // hide behind the dialog on some phones).
             zoomControlsEnabled: false,
             mapToolbarEnabled: false,
           ),
@@ -221,6 +234,32 @@ class _LocationPickerMapState extends State<LocationPickerMap> {
                 ),
               ),
             ),
+          Positioned(
+            right: 8,
+            bottom: 8,
+            child: PointerInterceptor(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  FloatingActionButton.small(
+                    heroTag: null,
+                    tooltip: 'Zoom in'.tr,
+                    onPressed: () =>
+                        _mapController?.animateCamera(CameraUpdate.zoomIn()),
+                    child: const Icon(Icons.add),
+                  ),
+                  const SizedBox(height: 8),
+                  FloatingActionButton.small(
+                    heroTag: null,
+                    tooltip: 'Zoom out'.tr,
+                    onPressed: () =>
+                        _mapController?.animateCamera(CameraUpdate.zoomOut()),
+                    child: const Icon(Icons.remove),
+                  ),
+                ],
+              ),
+            ),
+          ),
           if (widget.onLocateMe != null)
             // Positioned top-right so it can't overlap the center pin, the
             // "You're here" label (which floats below-center), or the

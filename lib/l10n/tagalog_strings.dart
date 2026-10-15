@@ -1015,6 +1015,8 @@ const Map<String, String> tagalogStrings = {
       '{0} pond · i-tap ang isa para makita ang mga kumpletong reading doon',
   'Refresh': 'I-refresh',
   'Hide map': 'Itago ang mapa',
+  'Zoom in': 'I-zoom in',
+  'Zoom out': 'I-zoom out',
   'Swipe sideways to see every sensor':
       'I-swipe pakaliwa o pakanan para makita ang bawat sensor',
   'Show map': 'Ipakita ang mapa',
