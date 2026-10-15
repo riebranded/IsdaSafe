@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/auth_service.dart';
 import '../../theme/app_spacing.dart';
 import '../../widgets/captcha_field.dart';
+import '../../widgets/google_logo.dart';
 import '../../widgets/password_strength_checklist.dart';
 import '../../widgets/phone_input.dart';
 import '../../widgets/rate_limit_banner.dart';
@@ -367,7 +368,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       const SizedBox(height: AppSpacing.lg),
                     ] else ...[
                       OutlinedButton.icon(
-                        onPressed: busy ? null : _continueWithGoogle,
+                        // Needs the CAPTCHA passed first, like Create account.
+                        onPressed: (busy || _captchaToken == null)
+                            ? null
+                            : _continueWithGoogle,
                         icon: _isGoogleSubmitting
                             ? const SizedBox(
                                 width: 18,
@@ -376,7 +380,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                   strokeWidth: 2,
                                 ),
                               )
-                            : const Icon(Icons.g_mobiledata, size: 28),
+                            : const GoogleLogo(),
                         label: Text('Continue with Google'.tr),
                       ),
                       const SizedBox(height: AppSpacing.xs),

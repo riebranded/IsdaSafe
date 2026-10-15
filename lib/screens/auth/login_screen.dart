@@ -6,6 +6,7 @@ import '../../theme/app_spacing.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/auth_dialogs.dart';
 import '../../widgets/captcha_field.dart';
+import '../../widgets/google_logo.dart';
 import '../../widgets/language_toggle.dart';
 import '../legal/legal_screen.dart';
 import 'register_screen.dart';
@@ -292,14 +293,17 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: AppSpacing.md),
               OutlinedButton.icon(
-                onPressed: busy ? null : _submitWithGoogle,
+                // Needs the CAPTCHA passed first, like the Log in button.
+                onPressed: (busy || _captchaToken == null)
+                    ? null
+                    : _submitWithGoogle,
                 icon: _isGoogleSubmitting
                     ? const SizedBox(
                         width: 18,
                         height: 18,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Icon(Icons.g_mobiledata, size: 28),
+                    : const GoogleLogo(),
                 label: Text('Continue with Google'.tr),
               ),
               const SizedBox(height: AppSpacing.sm),
