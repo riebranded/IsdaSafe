@@ -18,6 +18,9 @@ import 'modal_date_range_picker.dart';
 ///
 /// With [grouped] false (single readings rather than a trend's steps) there's
 /// no "Group by" and the line only says the timeframe.
+///
+/// For a device's visits it can lead with an [allLabel] chip (e.g. "Whole
+/// visit") and describe itself ([description]).
 class TimeframePicker extends StatelessWidget {
   const TimeframePicker({
     super.key,
@@ -25,8 +28,12 @@ class TimeframePicker extends StatelessWidget {
     required this.onChanged,
     this.lastPreset = TrendRange.hourly,
     this.grouped = true,
+    this.allLabel,
+    this.allSelected = false,
+    this.onAll,
     this.singleLabel,
     this.readingDays,
+    this.description,
   });
 
   final TrendSelection selection;
@@ -34,6 +41,15 @@ class TimeframePicker extends StatelessWidget {
 
   /// Where clearing a custom range goes back to.
   final TrendRange lastPreset;
+
+  /// A chip before the presets for "no timeframe" (everything); selected
+  /// instead of [selection] while [allSelected].
+  final String? allLabel;
+  final bool allSelected;
+  final VoidCallback? onAll;
+
+  /// Replaces the "Last 24 hours · by hour" line.
+  final String? description;
 
   /// Whether what's shown is grouped into the selection's steps.
   final bool grouped;
@@ -172,7 +188,8 @@ class TimeframePicker extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final muted = theme.colorScheme.onSurfaceVariant;
-    final custom = selection.custom;
+    // While [allSelected], the timeframe underneath isn't in use.
+    final custom = allSelected ? null : selection.custom;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -181,10 +198,17 @@ class TimeframePicker extends StatelessWidget {
           spacing: AppSpacing.sm,
           runSpacing: AppSpacing.sm,
           children: [
+            if (allLabel != null)
+              ChoiceChip(
+                label: Text(allLabel!, maxLines: 1, softWrap: false),
+                selected: allSelected,
+                showCheckmark: false,
+                onSelected: (_) => onAll?.call(),
+              ),
             for (final r in TrendRange.values)
               ChoiceChip(
                 label: Text(r.label, maxLines: 1, softWrap: false),
-                selected: selection.range == r,
+                selected: !allSelected && selection.range == r,
                 showCheckmark: false,
                 onSelected: (_) => onChanged(TrendSelection.preset(r)),
               ),
@@ -213,7 +237,9 @@ class TimeframePicker extends StatelessWidget {
             deleteButtonTooltipMessage: 'Clear custom timeframe'.tr,
             onDeleted: () => onChanged(TrendSelection.preset(lastPreset)),
           ),
-          if (grouped && !selection.single) ...[
+          // With [singleLabel], "Group by" leads with that chip for the
+          // readings themselves, so it stays while they're shown.
+          if (grouped && (singleLabel != null || !selection.single)) ...[
             const SizedBox(height: AppSpacing.sm),
             _GroupBy(
               selection: selection,
@@ -242,7 +268,8 @@ class TimeframePicker extends StatelessWidget {
             const SizedBox(width: AppSpacing.xs),
             Expanded(
               child: Text(
-                grouped ? selection.description : selection.windowLabel,
+                description ??
+                    (grouped ? selection.description : selection.windowLabel),
                 style: theme.textTheme.bodySmall?.copyWith(color: muted),
               ),
             ),

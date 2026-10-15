@@ -877,7 +877,7 @@ class _SidePanel extends StatelessWidget {
                         const SizedBox(width: AppSpacing.sm),
                         Flexible(
                           child: Text(
-                            'Isda Safe'.tr,
+                            'IsdaSafe'.tr,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.headlineSmall,

@@ -991,43 +991,95 @@ class _PlaceDetail extends StatefulWidget {
 }
 
 class _PlaceDetailState extends State<_PlaceDetail> {
-  /// The readings' timeframe: every visit at first, one visit when its card
-  /// is tapped, or a preset / custom dates from the picker.
-  late TrendSelection _selection = _allVisits;
+  /// The visit whose readings are shown; null for all of them together.
+  DeviceStay? _visit;
+
+  /// The timeframe the readings are limited to; ignored while [_whole].
+  var _selection = const TrendSelection.preset(TrendRange.daily);
 
   /// Where clearing a custom timeframe goes back to.
   var _lastPreset = TrendRange.daily;
-  late ReadingsPager _pager = _pagerFor(_selection);
 
-  /// The days from [start] to [end] (or today while still there).
-  static TrendSelection _days(DateTime start, DateTime? end) =>
-      TrendSelection.dates(
-        DateTimeRange(
-          start: DateUtils.dateOnly(start),
-          end: DateUtils.dateOnly(end ?? DateTime.now()),
-        ),
-        // Every reading the device sent (about one a minute), not averages.
-        single: true,
-        anyStep: true,
-      );
+  /// The whole visit (or all visits), not a timeframe — the default: every
+  /// reading the device sent (about one a minute), each row dated.
+  var _whole = true;
 
-  TrendSelection get _allVisits =>
-      _days(widget.place.stays.last.startedAt, widget.place.latest.endedAt);
+  late ReadingsPager _pager = _pagerFor();
 
-  TrendSelection _visitDays(DeviceStay stay) =>
-      _days(stay.startedAt, stay.endedAt);
+  /// When the newest complete reading of each visit (keyed by its id; null
+  /// for all visits together) was taken, once loaded. Null: it has none.
+  final _lastReadings = <int?, DateTime?>{};
 
-  ReadingsPager _pagerFor(TrendSelection selection) {
-    final window = selection.window();
-    // Every row is the average of its 15 minutes, hour, day, week, month or
-    // year; the first view (all visits, as days) averages per day too.
-    final step = selection.single ? null : selection.step;
+  @override
+  void initState() {
+    super.initState();
+    _loadLastReading();
+  }
+
+  /// Looks up the shown visit's newest complete reading, for the presets to
+  /// count back from.
+  Future<void> _loadLastReading() async {
+    final key = _visit?.id;
+    if (_lastReadings.containsKey(key)) return;
+    final place = widget.place;
+    DateTime? last;
+    try {
+      final rows = await DevicePondReadingsPageSource(place.latest.deviceId)
+          .page(
+            place.latest.pondId ?? '',
+            _spanStart,
+            _spanEnd,
+            offset: 0,
+            limit: 1,
+          );
+      last = rows.isEmpty ? null : rows.first.time;
+    } catch (e) {
+      debugPrint('Devices: last reading of the visit failed $e');
+      return;
+    }
+    if (!mounted) return;
+    _lastReadings[key] = last;
+    // A timeframe in use for this visit now counts back from that reading.
+    if (key == _visit?.id && !_whole) _reload(() {});
+  }
+
+  /// When the shown visit (or the first of all visits) began.
+  DateTime get _spanStart => (_visit ?? widget.place.stays.last).startedAt;
+
+  /// When the shown visit (or the latest) ended, or now while the device is
+  /// still there.
+  DateTime get _spanEnd =>
+      (_visit ?? widget.place.latest).endedAt ?? DateTime.now();
+
+  /// The readings' times: the whole visit, or the timeframe within it.
+  ///
+  /// The presets count back from the visit's newest reading (until that's
+  /// loaded, from the visit's end), not from today: a visit that finished last
+  /// week — or a device that stopped sending hours ago — is otherwise outside
+  /// the short presets, so "15 min" would show nothing.
+  DateTimeRange get _window {
+    final spanStart = _spanStart, spanEnd = _spanEnd;
+    if (_whole) return DateTimeRange(start: spanStart, end: spanEnd);
+    final w = _selection.window(_lastReadings[_visit?.id] ?? spanEnd);
+    final start = w.start.isAfter(spanStart) ? w.start : spanStart;
+    final end = w.end.isBefore(spanEnd) ? w.end : spanEnd;
+    // No overlap: an empty window, so the table says there's nothing.
+    return DateTimeRange(start: start, end: end.isBefore(start) ? start : end);
+  }
+
+  /// Each row is one reading, or the average of its 15 minutes, hour, day,
+  /// week, month or year.
+  TrendStep? get _step => _whole || _selection.single ? null : _selection.step;
+
+  ReadingsPager _pagerFor() {
+    final window = _window;
+    final step = _step;
     return ReadingsPager(
       pondId: widget.place.latest.pondId ?? '',
       start: window.start,
       end: window.end,
       step: step,
-      withDates: selection.single,
+      withDates: step == null,
       source: DevicePondReadingsPageSource(
         widget.place.latest.deviceId,
         averageBy: step,
@@ -1035,14 +1087,65 @@ class _PlaceDetailState extends State<_PlaceDetail> {
     );
   }
 
-  void _select(TrendSelection selection) {
-    if (selection == _selection) return;
+  void _reload(VoidCallback change) {
     setState(() {
+      change();
       _pager.dispose();
-      _selection = selection;
-      if (selection.range case final range?) _lastPreset = range;
-      _pager = _pagerFor(selection);
+      _pager = _pagerFor();
     });
+  }
+
+  /// Shows [stay]'s readings, or every visit's for null.
+  void _show(DeviceStay? stay) {
+    if (stay?.id == _visit?.id) return;
+    _reload(() {
+      _visit = stay;
+      // Custom dates belong to the visit they were picked in; the presets
+      // count back from whichever visit is shown, so they carry over.
+      if (_selection.isCustom) {
+        _whole = true;
+        _selection = TrendSelection.preset(_lastPreset);
+      }
+    });
+    _loadLastReading();
+  }
+
+  void _setSelection(TrendSelection selection) => _reload(() {
+    _whole = false;
+    _selection = selection;
+    if (selection.range case final range?) _lastPreset = range;
+  });
+
+  /// The days of [days] within the shown visit(s): only those can be picked
+  /// as custom dates, so they never fall outside it.
+  Set<DateTime> _withinSpan(Set<DateTime> days) {
+    final first = DateUtils.dateOnly(_spanStart);
+    final last = DateUtils.dateOnly(_spanEnd);
+    return {
+      for (final day in days)
+        if (!day.isBefore(first) && !day.isAfter(last)) day,
+    };
+  }
+
+  /// "Whole visit · every reading", or the timeframe and how it meets the
+  /// visit.
+  String get _timeframeNote {
+    final everyReading = 'every reading'.tr;
+    if (_whole) {
+      return _visit == null
+          ? '${'All visits'.tr} · $everyReading'
+          : '${'Whole visit'.tr} · ${_rangeLabel(_visit!)} · $everyReading';
+    }
+    final span = _selection.custom == null
+        ? _selection.range!.span
+        : _selection.customLabel!;
+    final window = _window;
+    if (!window.end.isAfter(window.start)) {
+      return '$span · ${'outside this visit'.tr}';
+    }
+    final step = _step;
+    return '$span · ${'of this visit'.tr} · '
+        '${step == null ? everyReading : step.phrase}';
   }
 
   @override
@@ -1174,9 +1277,9 @@ class _PlaceDetailState extends State<_PlaceDetail> {
                       ],
                     ),
                   ),
-                  if (place.stays.length > 1 && _selection != _allVisits)
+                  if (place.stays.length > 1 && _visit != null)
                     TextButton(
-                      onPressed: () => _select(_allVisits),
+                      onPressed: () => _show(null),
                       child: Text('Show all visits'.tr),
                     ),
                 ],
@@ -1199,8 +1302,8 @@ class _PlaceDetailState extends State<_PlaceDetail> {
                 stay: stay,
                 number: visitNumber(stay),
                 latest: i == 0,
-                selected: _selection == _visitDays(stay),
-                onTap: () => _select(_visitDays(stay)),
+                selected: stay.id == _visit?.id,
+                onTap: () => _show(stay),
               );
             },
           ),
@@ -1216,18 +1319,24 @@ class _PlaceDetailState extends State<_PlaceDetail> {
               TimeframePicker(
                 selection: _selection,
                 lastPreset: _lastPreset,
-                onChanged: _select,
-                singleLabel: 'Whole visit'.tr,
+                onChanged: _setSelection,
+                allLabel: _visit == null ? 'All visits'.tr : 'Whole visit'.tr,
+                allSelected: _whole,
+                onAll: () => _reload(() => _whole = true),
+                singleLabel: 'Every reading'.tr,
                 readingDays: widget.place.latest.pondId == null
                     ? null
-                    : () => ReadingDays.load(
-                        widget.place.latest.pondId!,
-                        deviceId: widget.place.latest.deviceId,
-                        completeOnly: true,
+                    : () async => _withinSpan(
+                        await ReadingDays.load(
+                          widget.place.latest.pondId!,
+                          deviceId: widget.place.latest.deviceId,
+                          completeOnly: true,
+                        ),
                       ),
+                description: _timeframeNote,
               ),
               const SizedBox(height: AppSpacing.md),
-              ReadingHistoryTable(key: ValueKey(_selection), pager: _pager),
+              ReadingHistoryTable(key: ObjectKey(_pager), pager: _pager),
             ],
           ),
         ),

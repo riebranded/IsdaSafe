@@ -109,29 +109,40 @@ void main() {
     await tester.tap(find.text('Ivory Pond'));
     await tester.pumpAndSettle();
 
-    // Its three visits; the readings start on every visit's days.
+    // Its three visits; at first every reading of all of them.
     for (final visit in ['Visit 1', 'Visit 2', 'Visit 3']) {
       expect(find.text(visit), findsOneWidget);
     }
     expect(find.text('2,417'), findsOneWidget);
-    expect(find.text('Oct 8 – Oct 12, 2026'), findsOneWidget);
+    expect(find.text('All visits · every reading'), findsOneWidget);
     expect(find.text('Show all visits'), findsNothing);
 
-    // A visit card narrows the timeframe to that visit's days.
+    // A visit card shows that whole visit.
     await tester.tap(find.text('Visit 1'));
     await tester.pumpAndSettle();
-    expect(find.text('Oct 8 – Oct 8, 2026'), findsOneWidget);
+    expect(find.textContaining('Whole visit · Oct 8'), findsOneWidget);
     expect(find.text('Show all visits'), findsOneWidget);
 
-    // A preset, like on the Analytics page.
+    // A timeframe then applies within the visit (counted back from its end,
+    // not from today), and the visit stays chosen.
     await tester.tap(find.text('Weekly'));
     await tester.pumpAndSettle();
-    expect(find.text('Oct 8 – Oct 8, 2026'), findsNothing);
-    expect(find.text('Custom'), findsOneWidget);
+    expect(find.textContaining('of this visit'), findsOneWidget);
+    expect(find.text('Show all visits'), findsOneWidget);
+
+    // Another visit keeps the timeframe.
+    await tester.tap(find.text('Visit 2'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('of this visit'), findsOneWidget);
+
+    // Back to every reading of the visit.
+    await tester.tap(find.text('Whole visit'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Whole visit · Oct 10'), findsOneWidget);
 
     await tester.tap(find.text('Show all visits'));
     await tester.pumpAndSettle();
-    expect(find.text('Oct 8 – Oct 12, 2026'), findsOneWidget);
+    expect(find.text('All visits · every reading'), findsOneWidget);
     expect(find.byTooltip('Close'), findsOneWidget);
 
     await tester.tap(find.byTooltip('Close'));

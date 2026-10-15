@@ -1126,4 +1126,11 @@ const Map<String, String> tagalogStrings = {
   '{0} of {1}': '{0} sa {1}',
   'Next': 'Susunod',
   'Finish': 'Tapusin',
+  // Devices tab: a visit's timeframe.
+  'All visits': 'Lahat ng pagbisita',
+  'Whole visit': 'Buong pagbisita',
+  'Every reading': 'Bawat reading',
+  'every reading': 'bawat reading',
+  'outside this visit': 'labas sa pagbisitang ito',
+  'of this visit': 'sa pagbisitang ito',
 };
