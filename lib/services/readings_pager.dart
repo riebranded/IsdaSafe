@@ -58,16 +58,18 @@ class SupabaseReadingsPageSource implements ReadingsPageSource {
   }
 }
 
-/// The complete readings (every sensor reported a value) of one device
-/// stay ([DeviceStay]), whichever account it was under, so a past location's
-/// readings can be listed even after its pond was moved, deleted or belonged
-/// to someone else. The database checks the signed-in user owns or owned the
-/// device; the pond ID and window passed to [page] are ignored (the stay
-/// defines them).
-class StayReadingsPageSource implements ReadingsPageSource {
-  StayReadingsPageSource(this.stayId);
+/// One device's complete readings (every sensor reported a value) at one of
+/// this account's ponds — the pond ID passed to [page] — from start to end,
+/// across all the device's visits there. Row-level security keeps them to
+/// the signed-in account's own readings.
+///
+/// With a day, week, month or year [averageBy], each row is that period's
+/// average (dated by its start) instead of a single reading.
+class DevicePondReadingsPageSource implements ReadingsPageSource {
+  DevicePondReadingsPageSource(this.deviceId, {this.averageBy});
 
-  final int stayId;
+  final String deviceId;
+  final TrendStep? averageBy;
 
   SupabaseClient get _client => Supabase.instance.client;
 
@@ -80,12 +82,47 @@ class StayReadingsPageSource implements ReadingsPageSource {
     required int limit,
   }) async {
     final columns = SupabasePondReadingsSource.columns;
-    final rows = await _client.rpc(
-      'device_stay_readings',
-      params: {'p_stay_id': stayId, 'p_offset': offset, 'p_limit': limit},
-    );
+    if (averageBy case final step?) {
+      final rows = await _client.rpc(
+        'device_pond_readings_average',
+        params: {
+          'p_device_id': deviceId,
+          'p_pond_id': pondId,
+          'p_step': step.rpcName,
+          'p_from': start.toUtc().toIso8601String(),
+          'p_to': end.toUtc().toIso8601String(),
+          'p_offset': offset,
+          'p_limit': limit,
+          'p_utc_offset_minutes': DateTime.now().timeZoneOffset.inMinutes,
+        },
+      );
+      return [
+        for (final row in rows as List)
+          (
+            time: DateTime.parse(row['created_at'] as String).toLocal(),
+            values: {
+              for (final entry in columns.entries)
+                if (row[entry.value] case final num value)
+                  entry.key: value.toDouble(),
+            },
+          ),
+      ];
+    }
+    var query = _client
+        .from('sensor_readings')
+        .select('created_at, ${columns.values.join(', ')}')
+        .eq('device_id', deviceId)
+        .eq('pond_id', pondId);
+    for (final column in columns.values) {
+      query = query.not(column, 'is', null);
+    }
+    final rows = await query
+        .gte('created_at', start.toUtc().toIso8601String())
+        .lte('created_at', end.toUtc().toIso8601String())
+        .order('created_at', ascending: false)
+        .range(offset, offset + limit - 1);
     return [
-      for (final row in rows as List)
+      for (final row in rows)
         (
           time: DateTime.parse(row['created_at'] as String).toLocal(),
           values: {
@@ -178,6 +215,7 @@ class ReadingsPager extends ChangeNotifier {
     required this.end,
     required this._source,
     this.step,
+    this.withDates = false,
     this.pageSize = 20,
   });
 
@@ -197,6 +235,10 @@ class ReadingsPager extends ChangeNotifier {
 
   /// What each row covers (its average); null when rows are single readings.
   final TrendStep? step;
+
+  /// Whether every row carries its own date ("Oct 12, 3 PM", "Mon, Oct 12")
+  /// instead of sitting under a day header, for lists spanning many days.
+  final bool withDates;
   final int pageSize;
   final ReadingsPageSource _source;
 

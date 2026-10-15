@@ -1013,6 +1013,8 @@ const Map<String, String> tagalogStrings = {
   '{0} ponds · tap one to see the complete readings taken there':
       '{0} pond · i-tap ang isa para makita ang mga kumpletong reading doon',
   'Refresh': 'I-refresh',
+  'Hide map': 'Itago ang mapa',
+  'Show map': 'Ipakita ang mapa',
   '1 visit': '1 pagbisita',
   '{0} visits': '{0} pagbisita',
   'Current': 'Kasalukuyan',
@@ -1032,9 +1034,9 @@ const Map<String, String> tagalogStrings = {
   'Visits': 'Mga pagbisita',
   'Complete readings': 'Kumpletong reading',
   'Time here': 'Tagal dito',
-  'Pick a visit to see its readings.':
-      'Pumili ng pagbisita para makita ang mga reading nito.',
-  'Complete readings · visit {0}': 'Kumpletong reading · pagbisita {0}',
+  'Tap a visit to see just its readings.':
+      'I-tap ang isang pagbisita para makita lang ang mga reading nito.',
+  'Show all visits': 'Ipakita lahat ng pagbisita',
   'Visit {0}': 'Pagbisita {0}',
   'Latest': 'Pinakabago',
   'Under 1 min': 'Wala pang 1 min',

@@ -1,3 +1,4 @@
+import '../services/reading_days.dart';
 import 'package:flutter/material.dart';
 
 import '../models/metric_guidance.dart';
@@ -215,6 +216,7 @@ class _MetricDetailViewState extends State<MetricDetailView> {
             selection: _selection,
             lastPreset: _lastPreset,
             onChanged: _select,
+            readingDays: () => ReadingDays.load(widget.pond.id),
           ),
           if (series.length > 1) ...[
             const SizedBox(height: AppSpacing.md),

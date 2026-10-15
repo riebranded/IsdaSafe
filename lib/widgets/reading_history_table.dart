@@ -182,13 +182,18 @@ class _ReadingHistoryTableState extends State<ReadingHistoryTable> {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final wide = constraints.maxWidth >= 640;
-              String label(DateTime t) => pager.step?.rowLabel(t) ?? _time(t);
+              String label(DateTime t) => pager.withDates
+                  ? (pager.step?.fullLabel(t) ??
+                        TrendStep.fifteenMinutes.fullLabel(t))
+                  : pager.step?.rowLabel(t) ?? _time(t);
               final rows = <Widget>[];
               if (wide) rows.add(_HeaderRow(types: types));
               DateTime? currentDay;
               for (final time in times) {
                 final day = DateUtils.dateOnly(time);
-                if (day != currentDay && (pager.step?.withinDay ?? true)) {
+                if (!pager.withDates &&
+                    day != currentDay &&
+                    (pager.step?.withinDay ?? true)) {
                   currentDay = day;
                   rows.add(_DayHeader(label: _dayLabel(time)));
                 } else if (time != times.first) {

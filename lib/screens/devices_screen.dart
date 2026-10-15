@@ -4,10 +4,12 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../l10n/tr.dart';
 import '../models/trend_range.dart';
 import '../services/device_location_history.dart';
+import '../services/reading_days.dart';
 import '../services/readings_pager.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/location_picker_map.dart';
 import '../widgets/reading_history_table.dart';
+import '../widgets/timeframe_picker.dart';
 
 /// The Devices tab. It opens on a device chooser: one card per device the
 /// account has (or had) with where it is now and how much it measured. Once
@@ -48,6 +50,9 @@ class _DevicesScreenState extends State<DevicesScreen> {
 
   /// The chosen device; null shows the chooser.
   String? _deviceId;
+
+  /// On a phone the map can be folded away to leave the room to the ponds.
+  var _mapShown = true;
 
   /// The pond whose readings are shown under the map.
   String? _selectedKey;
@@ -161,19 +166,24 @@ class _DevicesScreenState extends State<DevicesScreen> {
           place: place,
           onClose: _closePlace,
         );
-        Widget panel({required bool showSelected}) => _Panel(
-          deviceId: device.id,
-          onBack: () => _chooseDevice(null),
-          onRefresh: _reload,
-          child: showSelected && selected != null
-              ? detail(selected)
-              : _PlaceList(
-                  places: places,
-                  selectedKey: selected?.key,
-                  onRefresh: _reload,
-                  onOpen: _openPlace,
-                ),
-        );
+        Widget panel({required bool showSelected, bool mapToggle = false}) =>
+            _Panel(
+              deviceId: device.id,
+              onBack: () => _chooseDevice(null),
+              onRefresh: _reload,
+              mapShown: mapToggle ? _mapShown : null,
+              onToggleMap: mapToggle
+                  ? () => setState(() => _mapShown = !_mapShown)
+                  : null,
+              child: showSelected && selected != null
+                  ? detail(selected)
+                  : _PlaceList(
+                      places: places,
+                      selectedKey: selected?.key,
+                      onRefresh: _reload,
+                      onOpen: _openPlace,
+                    ),
+            );
 
         final located = [
           for (final p in places)
@@ -220,15 +230,32 @@ class _DevicesScreenState extends State<DevicesScreen> {
         }
         // Narrow: map on top; under it the list, or the chosen pond's
         // readings.
+        // A short map (that can be folded away) so the ponds below get most
+        // of the screen.
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            SizedBox(height: constraints.maxHeight * 0.4, child: map),
-            const Divider(height: 1),
+            if (_mapShown) ...[
+              SizedBox(
+                height: (constraints.maxHeight * 0.3).clamp(150.0, 240.0),
+                child: map,
+              ),
+              const Divider(height: 1),
+            ],
             Expanded(
               child: selected != null
-                  ? detail(selected)
-                  : panel(showSelected: false),
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _MapToggleBar(
+                          shown: _mapShown,
+                          onToggle: () =>
+                              setState(() => _mapShown = !_mapShown),
+                        ),
+                        Expanded(child: detail(selected)),
+                      ],
+                    )
+                  : panel(showSelected: false, mapToggle: true),
             ),
           ],
         );
@@ -764,12 +791,18 @@ class _Panel extends StatelessWidget {
     required this.onBack,
     required this.onRefresh,
     required this.child,
+    this.mapShown,
+    this.onToggleMap,
   });
 
   final String deviceId;
   final VoidCallback onBack;
   final Future<void> Function() onRefresh;
   final Widget child;
+
+  /// Whether the map is showing, and a way to fold it away (phones only).
+  final bool? mapShown;
+  final VoidCallback? onToggleMap;
 
   @override
   Widget build(BuildContext context) {
@@ -798,6 +831,14 @@ class _Panel extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
+              if (onToggleMap != null)
+                IconButton(
+                  tooltip: mapShown == true ? 'Hide map'.tr : 'Show map'.tr,
+                  isSelected: mapShown == true,
+                  onPressed: onToggleMap,
+                  icon: const Icon(Icons.map_outlined),
+                  selectedIcon: const Icon(Icons.map),
+                ),
               IconButton(
                 tooltip: 'Refresh'.tr,
                 onPressed: onRefresh,
@@ -810,6 +851,25 @@ class _Panel extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Above the readings of a chosen pond on a phone: folds the map away or
+/// brings it back.
+class _MapToggleBar extends StatelessWidget {
+  const _MapToggleBar({required this.shown, required this.onToggle});
+
+  final bool shown;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) => Align(
+    alignment: Alignment.centerRight,
+    child: TextButton.icon(
+      onPressed: onToggle,
+      icon: Icon(shown ? Icons.expand_less : Icons.map_outlined, size: 18),
+      label: Text(shown ? 'Hide map'.tr : 'Show map'.tr),
+    ),
+  );
 }
 
 class _PlaceList extends StatelessWidget {
@@ -931,22 +991,54 @@ class _PlaceDetail extends StatefulWidget {
 }
 
 class _PlaceDetailState extends State<_PlaceDetail> {
-  late DeviceStay _visit = widget.place.latest;
-  late ReadingsPager _pager = _pagerFor(_visit);
+  /// The readings' timeframe: every visit at first, one visit when its card
+  /// is tapped, or a preset / custom dates from the picker.
+  late TrendSelection _selection = _allVisits;
 
-  ReadingsPager _pagerFor(DeviceStay stay) => ReadingsPager(
-    pondId: stay.pondId ?? '',
-    start: stay.startedAt,
-    end: stay.endedAt ?? DateTime.now(),
-    source: StayReadingsPageSource(stay.id),
-  );
+  /// Where clearing a custom timeframe goes back to.
+  var _lastPreset = TrendRange.daily;
+  late ReadingsPager _pager = _pagerFor(_selection);
 
-  void _show(DeviceStay stay) {
-    if (stay.id == _visit.id) return;
+  /// The days from [start] to [end] (or today while still there).
+  static TrendSelection _days(DateTime start, DateTime? end) =>
+      TrendSelection.dates(
+        DateTimeRange(
+          start: DateUtils.dateOnly(start),
+          end: DateUtils.dateOnly(end ?? DateTime.now()),
+        ),
+      );
+
+  TrendSelection get _allVisits =>
+      _days(widget.place.stays.last.startedAt, widget.place.latest.endedAt);
+
+  TrendSelection _visitDays(DeviceStay stay) =>
+      _days(stay.startedAt, stay.endedAt);
+
+  ReadingsPager _pagerFor(TrendSelection selection) {
+    final window = selection.window();
+    // Every row is the average of its 15 minutes, hour, day, week, month or
+    // year; the first view (all visits, as days) averages per day too.
+    final step = selection.single ? null : selection.step;
+    return ReadingsPager(
+      pondId: widget.place.latest.pondId ?? '',
+      start: window.start,
+      end: window.end,
+      step: step,
+      withDates: selection.single,
+      source: DevicePondReadingsPageSource(
+        widget.place.latest.deviceId,
+        averageBy: step,
+      ),
+    );
+  }
+
+  void _select(TrendSelection selection) {
+    if (selection == _selection) return;
     setState(() {
       _pager.dispose();
-      _visit = stay;
-      _pager = _pagerFor(stay);
+      _selection = selection;
+      if (selection.range case final range?) _lastPreset = range;
+      _pager = _pagerFor(selection);
     });
   }
 
@@ -1064,11 +1156,29 @@ class _PlaceDetailState extends State<_PlaceDetail> {
                 ],
               ),
               const SizedBox(height: AppSpacing.lg),
-              if (place.stays.length > 1) ...[
-                Text('Visits'.tr, style: theme.textTheme.titleSmall),
-                Text('Pick a visit to see its readings.'.tr, style: muted),
-                const SizedBox(height: AppSpacing.sm),
-              ],
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Visits'.tr, style: theme.textTheme.titleSmall),
+                        Text(
+                          'Tap a visit to see just its readings.'.tr,
+                          style: muted,
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (place.stays.length > 1 && _selection != _allVisits)
+                    TextButton(
+                      onPressed: () => _select(_allVisits),
+                      child: Text('Show all visits'.tr),
+                    ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.sm),
             ],
           ),
         ),
@@ -1086,8 +1196,8 @@ class _PlaceDetailState extends State<_PlaceDetail> {
                 stay: stay,
                 number: visitNumber(stay),
                 latest: i == 0,
-                selected: stay.id == _visit.id,
-                onTap: () => _show(stay),
+                selected: _selection == _visitDays(stay),
+                onTap: () => _select(_visitDays(stay)),
               );
             },
           ),
@@ -1098,16 +1208,23 @@ class _PlaceDetailState extends State<_PlaceDetail> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                place.stays.length == 1
-                    ? 'Complete readings'.tr
-                    : 'Complete readings · visit {0}'.trf([
-                        visitNumber(_visit),
-                      ]),
-                style: theme.textTheme.titleSmall,
-              ),
+              Text('Complete readings'.tr, style: theme.textTheme.titleSmall),
               const SizedBox(height: AppSpacing.sm),
-              ReadingHistoryTable(key: ValueKey(_visit.id), pager: _pager),
+              TimeframePicker(
+                selection: _selection,
+                lastPreset: _lastPreset,
+                onChanged: _select,
+                singleLabel: 'Whole visit'.tr,
+                readingDays: widget.place.latest.pondId == null
+                    ? null
+                    : () => ReadingDays.load(
+                        widget.place.latest.pondId!,
+                        deviceId: widget.place.latest.deviceId,
+                        completeOnly: true,
+                      ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              ReadingHistoryTable(key: ValueKey(_selection), pager: _pager),
             ],
           ),
         ),

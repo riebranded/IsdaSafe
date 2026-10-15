@@ -100,24 +100,38 @@ void main() {
     }
   });
 
-  testWidgets('opening a pond shows its visits and readings', (tester) async {
+  testWidgets('opening a pond shows its visits and readings by timeframe', (
+    tester,
+  ) async {
     await pumpWide(tester);
     await chooseDevice(tester);
 
     await tester.tap(find.text('Ivory Pond'));
     await tester.pumpAndSettle();
 
-    // Its three visits, newest first, each with its own readings; the
-    // newest is shown.
+    // Its three visits; the readings start on every visit's days.
     for (final visit in ['Visit 1', 'Visit 2', 'Visit 3']) {
       expect(find.text(visit), findsOneWidget);
     }
-    expect(find.text('Complete readings · visit 3'), findsOneWidget);
     expect(find.text('2,417'), findsOneWidget);
+    expect(find.text('Oct 8 – Oct 12, 2026'), findsOneWidget);
+    expect(find.text('Show all visits'), findsNothing);
 
+    // A visit card narrows the timeframe to that visit's days.
     await tester.tap(find.text('Visit 1'));
     await tester.pumpAndSettle();
-    expect(find.text('Complete readings · visit 1'), findsOneWidget);
+    expect(find.text('Oct 8 – Oct 8, 2026'), findsOneWidget);
+    expect(find.text('Show all visits'), findsOneWidget);
+
+    // A preset, like on the Analytics page.
+    await tester.tap(find.text('Weekly'));
+    await tester.pumpAndSettle();
+    expect(find.text('Oct 8 – Oct 8, 2026'), findsNothing);
+    expect(find.text('Custom'), findsOneWidget);
+
+    await tester.tap(find.text('Show all visits'));
+    await tester.pumpAndSettle();
+    expect(find.text('Oct 8 – Oct 12, 2026'), findsOneWidget);
     expect(find.byTooltip('Close'), findsOneWidget);
 
     await tester.tap(find.byTooltip('Close'));

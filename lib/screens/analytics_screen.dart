@@ -6,6 +6,7 @@ import '../models/pond.dart';
 import '../models/trend_range.dart';
 import '../providers/pond_provider.dart';
 import '../services/pond_snapshot_cache.dart';
+import '../services/reading_days.dart';
 import '../services/readings_pager.dart';
 import '../services/trend_service.dart';
 import '../theme/app_spacing.dart';
@@ -112,6 +113,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
               _selection = selection;
               if (selection.range case final range?) _lastPreset = range;
             }),
+            readingDays: () => ReadingDays.load(selected.id),
           ),
           const SizedBox(height: AppSpacing.lg),
           if (snapshot == null)
